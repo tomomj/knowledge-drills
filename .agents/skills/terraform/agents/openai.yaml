@@ -1,0 +1,4 @@
+interface:
+  display_name: "Terraform"
+  short_description: "AWS Terraform の環境別 IaC 規約"
+  default_prompt: "$terraform を使って AWS Terraform の実装またはレビューを行う。"

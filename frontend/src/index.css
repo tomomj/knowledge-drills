@@ -1,0 +1,86 @@
+:root {
+  /* Design tokens — light */
+  --bg: #f3f5f4;
+  --surface: #ffffff;
+  --surface-2: #eef1f0;
+  --ink: #1a2420;
+  --ink-2: #5c6a64;
+  --ink-3: #8a968f;
+  --line: #dde3e0;
+  --line-strong: #c6cfcb;
+  --accent: #0b7a67;
+  --accent-hover: #096555;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2f0ec;
+  --accent-soft-ink: #095e50;
+  --success: #2b7a46;
+  --success-soft: #e4f2e8;
+  --warning: #9a6412;
+  --warning-soft: #faf0da;
+  --error: #b23a42;
+  --error-soft: #f9e8e9;
+  --diff-bg: #14201c;
+  --diff-ink: #dbe7e2;
+  --diff-add: #7fd6a8;
+  --diff-add-bg: rgba(72, 187, 120, 0.14);
+  --diff-del: #f0a2a2;
+  --diff-del-bg: rgba(229, 115, 115, 0.13);
+  --shadow: 0 1px 2px rgba(20, 32, 28, 0.05), 0 4px 16px rgba(20, 32, 28, 0.05);
+  --radius: 10px;
+  --radius-sm: 7px;
+
+  font-family:
+    'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', 'Yu Gothic',
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.65;
+  color: var(--ink);
+  background: var(--bg);
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111614;
+    --surface: #1a211e;
+    --surface-2: #222b27;
+    --ink: #e6edea;
+    --ink-2: #9fada6;
+    --ink-3: #6f7d76;
+    --line: #2b3531;
+    --line-strong: #3b4742;
+    --accent: #3cb59c;
+    --accent-hover: #55c5ad;
+    --accent-ink: #0a2620;
+    --accent-soft: #1d3a33;
+    --accent-soft-ink: #8ed7c5;
+    --success: #6cc389;
+    --success-soft: #1e3326;
+    --warning: #d9a94e;
+    --warning-soft: #38301c;
+    --error: #e58b91;
+    --error-soft: #3c2426;
+    --diff-bg: #0d1512;
+    --diff-ink: #cfdcd6;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+}
+
+#root {
+  min-height: 100svh;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}

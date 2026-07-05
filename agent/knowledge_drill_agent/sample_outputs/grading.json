@@ -1,0 +1,15 @@
+{
+  "questionId": "q1",
+  "score": 2,
+  "maxScore": 4,
+  "correctPoints": [
+    "判断の方向性は講座内容と一致している"
+  ],
+  "missingPoints": [
+    "講座内の根拠が明示されていない"
+  ],
+  "feedback": "判断理由に講座内の根拠を添えると、より明確な回答になります。",
+  "failureTags": [
+    "missing_evidence"
+  ]
+}

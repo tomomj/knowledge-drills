@@ -1,0 +1,1 @@
+"""Knowledge Drills backend application."""
