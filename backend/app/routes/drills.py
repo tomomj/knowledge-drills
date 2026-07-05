@@ -1,0 +1,27 @@
+from typing import cast
+
+from fastapi import APIRouter, Request
+
+from app.schemas import DocumentPatch, DrillAdminResponse
+from app.services.analysis_service import AnalysisService
+from app.services.drill_service import DrillService
+
+router = APIRouter(prefix="/api/drill-runs", tags=["drills"])
+
+
+def get_drill_service(request: Request) -> DrillService:
+    return cast(DrillService, request.app.state.drill_service)
+
+
+def get_analysis_service(request: Request) -> AnalysisService:
+    return cast(AnalysisService, request.app.state.analysis_service)
+
+
+@router.get("/{drill_run_id}", response_model=DrillAdminResponse)
+async def get_drill_admin(request: Request, drill_run_id: str) -> DrillAdminResponse:
+    return get_drill_service(request).get_admin_drill(drill_run_id)
+
+
+@router.post("/{drill_run_id}/analysis", response_model=DocumentPatch)
+async def analyze_drill(request: Request, drill_run_id: str) -> DocumentPatch:
+    return get_analysis_service(request).run_analysis(drill_run_id)
