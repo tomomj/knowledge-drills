@@ -1,0 +1,79 @@
+{
+  "questions": [
+    {
+      "id": "q1",
+      "question": "顧客対応で例外条件に直面したとき、どの方針を根拠に判断するか説明してください。",
+      "intent": "講座内の方針を実務判断に使えるかを確認する。",
+      "rubric": [
+        {
+          "criterion": "講座内の根拠を示している",
+          "points": 2,
+          "required": true
+        },
+        {
+          "criterion": "判断理由を具体的に説明している",
+          "points": 2,
+          "required": true
+        }
+      ],
+      "idealAnswer": "講座内の対応方針を根拠に、条件と影響を確認して判断する。",
+      "sourceEvidence": [
+        {
+          "sectionHeading": "対応方針",
+          "excerpt": "## 対応方針"
+        }
+      ],
+      "maxScore": 4
+    },
+    {
+      "id": "q2",
+      "question": "手順どおりに進められない場合、どの確認を優先するか理由付きで説明してください。",
+      "intent": "手順の背景を理解しているかを確認する。",
+      "rubric": [
+        {
+          "criterion": "優先すべき確認を挙げている",
+          "points": 2,
+          "required": true
+        },
+        {
+          "criterion": "理由を講座内容に結びつけている",
+          "points": 2,
+          "required": true
+        }
+      ],
+      "idealAnswer": "講座の対応方針に沿って、影響範囲と例外条件を先に確認する。",
+      "sourceEvidence": [
+        {
+          "sectionHeading": "対応方針",
+          "excerpt": "## 対応方針"
+        }
+      ],
+      "maxScore": 4
+    },
+    {
+      "id": "q3",
+      "question": "判断に迷う受講者へ、どの情報を確認するよう案内するか説明してください。",
+      "intent": "講座内容を他者に説明できるかを確認する。",
+      "rubric": [
+        {
+          "criterion": "確認すべき情報を示している",
+          "points": 2,
+          "required": true
+        },
+        {
+          "criterion": "案内理由を説明している",
+          "points": 2,
+          "required": true
+        }
+      ],
+      "idealAnswer": "講座の根拠箇所と判断条件を確認するよう案内する。",
+      "sourceEvidence": [
+        {
+          "sectionHeading": "対応方針",
+          "excerpt": "## 対応方針"
+        }
+      ],
+      "maxScore": 4
+    }
+  ]
+}

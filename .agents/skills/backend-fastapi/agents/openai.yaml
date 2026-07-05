@@ -1,0 +1,4 @@
+interface:
+  display_name: "Backend FastAPI"
+  short_description: "MVP 向け FastAPI backend 規約"
+  default_prompt: "$backend-fastapi を使って FastAPI backend の実装またはレビューを行う。"
