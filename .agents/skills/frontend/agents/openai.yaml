@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend"
+  short_description: "MVP向けReactフロントエンドの構成とテスト容易性ルール"
+  default_prompt: "frontend skillを使って、React/Vite/TypeScriptのMVPフロントエンドを、浅い構成、明確な依存方向、APIとUIの分離、明示的なページ状態、実用的な依存関係チェック方針で実装またはレビューしてください。"

@@ -1,0 +1,25 @@
+# OS / editor
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# Python（agent/ など。backend/ は自前の .gitignore でも管理）
+__pycache__/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# 環境変数（example のみコミット可）
+.env
+.env.*
+!.env.example
+
+# Claude Code の個人ローカル設定
+.claude/settings.local.json
+
+# ログ
+logs/
+*.log
