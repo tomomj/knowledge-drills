@@ -27,7 +27,7 @@
   - _Boundary: AdkAgentInvoker, agent package_
   - _Depends: 1.1_
 
-- [ ] 2.2 タスク名からリーフエージェントへの決定的マッピングと1回実行を実装する
+- [x] 2.2 タスク名からリーフエージェントへの決定的マッピングと1回実行を実装する
   - 4つのリーフエージェントそれぞれに Runner を起動時構築し再利用する（共有 InMemorySessionService、root_agent 経由の転送は使わない）
   - テスト注入点として Runner 群のファクトリを差し替え可能にする
   - ペイロードを JSON 文字列のユーザーメッセージとして渡し、最終応答テキストを dict にして返す（スキーマ検証は行わず AgentRuntimeClient に委ねる）
@@ -99,3 +99,4 @@
 - 1.1: この環境では `uv lock` / `uv sync` に `--native-tls` が必要（社内プロキシの TLS 証明書のため）。`uv run --frozen` は影響なし。google-adk 2.3.0 + google-cloud-aiplatform 1.159.0 で解決済み。
 - 2.1: 単一親制約は Runner 構築ではなく実行経路汚染（AutoFlow の transfer_to_agent 注入）として衝突 → agent パッケージに create_*_agent ファクトリ4つを追加（プロンプト・スキーマ逐語不変）。2.2 はこのファクトリを使うこと。
 - 2.1: ADK 2.3.0 では input_schema がユーザーメッセージに強制される（research.md の「強制されない」は古い）→ 2.2 のペイロードはスキーマ準拠 JSON 文字列必須。backend/pyproject.toml に mypy_path="../agent" 追加済み。
+- 2.2: AdkAgentInvoker 実装済み。timeout_seconds は保持のみ（wait_for 適用は 2.3）。JSON パース失敗は生の JSONDecodeError のまま伝播（2.3 で AgentInvocationError に正規化する）。最終応答欠落の最小ガードは実装済み（2.3 で仕上げ）。
