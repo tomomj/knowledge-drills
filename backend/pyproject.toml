@@ -40,6 +40,9 @@ quote-style = "double"
 python_version = "3.11"
 strict = true
 plugins = []
+# Resolve the editable knowledge-drill-agent path dependency as source
+# (the __editable__ finder install is not followable by mypy).
+mypy_path = "../agent"
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
