@@ -16,7 +16,7 @@
   - _Boundary: Settings_
 
 - [ ] 2. Core: ADK 実接続アダプタの実装
-- [ ] 2.1 リーフエージェントを個別実行するための前提を検証・整備する
+- [x] 2.1 リーフエージェントを個別実行するための前提を検証・整備する
   - リーフエージェント4つが root_agent の sub_agents 登録（単一親制約）のままで個別 Runner 実行できるかを検証する
   - 衝突する場合のみ agent パッケージにスタンドアロンのリーフエージェント生成ファクトリを追加する（プロンプト・入出力スキーマの内容は変更しない。境界を越える変更はこのタスクに限定する）
   - agent パッケージ側の既存契約テストが引き続き成功する
@@ -97,3 +97,5 @@
 ## Implementation Notes
 
 - 1.1: この環境では `uv lock` / `uv sync` に `--native-tls` が必要（社内プロキシの TLS 証明書のため）。`uv run --frozen` は影響なし。google-adk 2.3.0 + google-cloud-aiplatform 1.159.0 で解決済み。
+- 2.1: 単一親制約は Runner 構築ではなく実行経路汚染（AutoFlow の transfer_to_agent 注入）として衝突 → agent パッケージに create_*_agent ファクトリ4つを追加（プロンプト・スキーマ逐語不変）。2.2 はこのファクトリを使うこと。
+- 2.1: ADK 2.3.0 では input_schema がユーザーメッセージに強制される（research.md の「強制されない」は古い）→ 2.2 のペイロードはスキーマ準拠 JSON 文字列必須。backend/pyproject.toml に mypy_path="../agent" 追加済み。
