@@ -1,0 +1,136 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: cd-cloud-run-main
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
+  BACKEND_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE }}
+  FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE }}
+  KNOWLEDGE_DRILLS_ENVIRONMENT: ${{ vars.KNOWLEDGE_DRILLS_ENVIRONMENT || 'prd' }}
+  GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+  GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main'
+      )
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          required_vars=(
+            PROJECT_ID
+            REGION
+            ARTIFACT_REPOSITORY
+            BACKEND_SERVICE
+            FRONTEND_SERVICE
+            GCP_WORKLOAD_IDENTITY_PROVIDER
+            GCP_SERVICE_ACCOUNT
+          )
+
+          for var_name in "${required_vars[@]}"; do
+            if [[ -z "${!var_name}" ]]; then
+              echo "::error::Repository variable ${var_name} is required."
+              exit 1
+            fi
+          done
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Define image tags
+        shell: bash
+        run: |
+          registry="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}"
+          echo "BACKEND_IMAGE=${registry}/backend:${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "FRONTEND_IMAGE=${registry}/frontend:${GITHUB_SHA}" >> "$GITHUB_ENV"
+
+      - name: Build backend image
+        run: docker build --file backend/Dockerfile --tag "$BACKEND_IMAGE" .
+
+      - name: Push backend image
+        run: docker push "$BACKEND_IMAGE"
+
+      - name: Read frontend URL
+        shell: bash
+        run: |
+          frontend_url="$(gcloud run services describe "$FRONTEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')"
+          echo "FRONTEND_URL=${frontend_url}" >> "$GITHUB_ENV"
+
+      - name: Deploy backend
+        run: |
+          gcloud run deploy "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$BACKEND_IMAGE" \
+            --update-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},KNOWLEDGE_DRILLS_ENVIRONMENT=${KNOWLEDGE_DRILLS_ENVIRONMENT},KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS=${FRONTEND_URL}" \
+            --quiet
+
+      - name: Read backend URL
+        shell: bash
+        run: |
+          backend_url="$(gcloud run services describe "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)')"
+          echo "VITE_API_BASE_URL=${backend_url}" >> "$GITHUB_ENV"
+
+      - name: Build frontend image
+        run: >-
+          docker build
+          --file frontend/Dockerfile
+          --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL"
+          --tag "$FRONTEND_IMAGE"
+          .
+
+      - name: Push frontend image
+        run: docker push "$FRONTEND_IMAGE"
+
+      - name: Deploy frontend
+        run: |
+          gcloud run deploy "$FRONTEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$FRONTEND_IMAGE" \
+            --quiet
