@@ -8,7 +8,7 @@
   - 完了条件: backend の実行環境で knowledge_drill_agent と google.adk が import でき、既存テストが成功する
   - _Requirements: 5.2_
 
-- [ ] 1.2 (P) 実行モードとタイムアウトの運用設定を追加する
+- [x] 1.2 (P) 実行モードとタイムアウトの運用設定を追加する
   - Settings に実行モード（local / adk、既定 local）とエージェント呼び出しタイムアウト秒（既定 60）を追加する
   - 既存の KNOWLEDGE_DRILLS_ prefix の環境変数で上書きできること
   - 完了条件: 既定値と環境変数上書きを検証するユニットテストが成功する
@@ -93,3 +93,7 @@
   - 完了条件: スクリプトと手動実行手順が存在し、実キー環境での4操作1周の成功結果（実行ログまたは記録）が残っている
   - _Depends: 4.1_
   - _Requirements: 1.1, 2.1, 3.1, 3.2_
+
+## Implementation Notes
+
+- 1.1: この環境では `uv lock` / `uv sync` に `--native-tls` が必要（社内プロキシの TLS 証明書のため）。`uv run --frozen` は影響なし。google-adk 2.3.0 + google-cloud-aiplatform 1.159.0 で解決済み。
