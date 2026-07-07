@@ -3,7 +3,7 @@ import {
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithRedirect,
+  signInWithPopup,
   signOut,
   type Auth,
 } from 'firebase/auth'
@@ -42,7 +42,7 @@ export async function signInWithGoogle(): Promise<void> {
   if (auth === null) {
     throw new Error('Firebase Authentication is not configured.')
   }
-  await signInWithRedirect(auth, new GoogleAuthProvider())
+  await signInWithPopup(auth, new GoogleAuthProvider())
 }
 
 export async function signOutCurrentUser(): Promise<void> {
