@@ -33,7 +33,7 @@
   - 完了条件: ログイン済み user で `/api/me` を呼ぶと profile が upsert され、response で現在ユーザーを確認できる。
   - _Requirements: 3.1, 3.2, 3.3_
 
-- [ ] 2.3 管理 route に認証を配線し、learner route を公開のまま維持する
+- [x] 2.3 管理 route に認証を配線し、learner route を公開のまま維持する
   - Course、admin drill run、analysis、Patch の管理 route に current user dependency を追加する。
   - `/api/drills/{shareToken}`、`/api/drills/{shareToken}/answers`、`/api/learn/{shareToken}`、`/api/learn/{shareToken}/answers`、`/health` は認証不要のまま残す。
   - 完了条件: `auth_mode=firebase` では token なしの管理 API は 401 になり、`auth_mode=none` では token なしでも local user として管理 API を呼び出せる。
