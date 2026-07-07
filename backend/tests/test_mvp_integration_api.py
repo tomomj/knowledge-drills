@@ -87,6 +87,7 @@ def _configure_agent_backed_services(
         share_token_repository=app.state.share_token_repository,
     )
     app.state.answer_service = AnswerService(
+        course_repository=app.state.course_repository,
         drill_repository=app.state.drill_repository,
         answer_repository=app.state.answer_repository,
         share_token_repository=app.state.share_token_repository,

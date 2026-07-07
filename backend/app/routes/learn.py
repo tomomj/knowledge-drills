@@ -18,7 +18,7 @@ def get_answer_service(request: Request) -> AnswerService:
 
 
 @router.get("/api/drills/{share_token}", response_model=LearnerDrillResponse)
-async def get_learner_drill(request: Request, share_token: str) -> LearnerDrillResponse:
+def get_learner_drill(request: Request, share_token: str) -> LearnerDrillResponse:
     return get_drill_service(request).get_learner_drill(share_token)
 
 
@@ -27,11 +27,11 @@ async def get_learner_drill(request: Request, share_token: str) -> LearnerDrillR
     response_model=LearnerDrillResponse,
     include_in_schema=False,
 )
-async def get_learner_drill_legacy(
+def get_learner_drill_legacy(
     request: Request,
     share_token: str,
 ) -> LearnerDrillResponse:
-    return await get_learner_drill(request, share_token)
+    return get_learner_drill(request, share_token)
 
 
 @router.post(

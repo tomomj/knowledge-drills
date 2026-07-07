@@ -5,9 +5,15 @@ import pytest
 from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.errors import AppError
 from app.repositories.firestore_client import InMemoryFirestoreClient
-from app.repositories.repositories import AnswerRepository, DrillRepository, ShareTokenRepository
+from app.repositories.repositories import (
+    AnswerRepository,
+    CourseRepository,
+    DrillRepository,
+    ShareTokenRepository,
+)
 from app.schemas import (
     AnswerInput,
+    Course,
     DrillQuestion,
     DrillRun,
     DrillRunStatus,
@@ -174,6 +180,51 @@ def test_submit_answer_grades_and_persists_results() -> None:
     assert saved.total_score == 12
     assert saved.max_score == 12
     assert len(saved.grading_results) == 3
+
+
+def test_submit_answer_increments_course_answer_count() -> None:
+    client = InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    token_repository = ShareTokenRepository(client)
+    course_repository.create(
+        Course(
+            id="course-1",
+            title="講座",
+            markdown="# Body",
+            latest_drill_run_id="drill-1",
+            latest_drill_status=DrillRunStatus.READY,
+        )
+    )
+    drill_repository.create(_drill_run())
+    token_repository.reserve("share-token", drill_run_id="drill-1")
+    service = AnswerService(
+        course_repository=course_repository,
+        drill_repository=drill_repository,
+        answer_repository=answer_repository,
+        share_token_repository=token_repository,
+        agent_client=AgentRuntimeClient(
+            invoker=lambda _task_name, payload: _agent_response_for_question(
+                {
+                    "questionId": "q1",
+                    "score": 4,
+                    "maxScore": 4,
+                    "correctPoints": ["根拠がある"],
+                    "missingPoints": [],
+                    "feedback": "よい回答です。",
+                    "failureTags": [],
+                },
+                payload,
+            )
+        ),
+    )
+
+    service.submit_answer("share-token", _request())
+
+    course = course_repository.get("course-1")
+    assert course is not None
+    assert course.answer_count == 1
 
 
 def test_submit_answer_marks_failed_when_grading_fails() -> None:
