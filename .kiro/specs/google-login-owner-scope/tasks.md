@@ -69,7 +69,7 @@
   - 完了条件: API client test で token ありは Bearer header 付き、token なしは header なしになる。
   - _Requirements: 1.3, 2.1_
 
-- [ ] 4.2 Google ログイン画面と AuthProvider を実装する
+- [x] 4.2 Google ログイン画面と AuthProvider を実装する
   - Firebase auth state を `checking`、`signedOut`、`signedIn`、`failed` の明示状態として扱う。
   - 未ログインの管理画面では Google ログイン導線だけを表示し、ログイン成功後に `/api/me` を呼ぶ。
   - `/api/me` 失敗時は管理画面を表示せず、再試行または再ログイン可能な状態を表示する。
