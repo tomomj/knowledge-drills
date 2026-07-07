@@ -23,7 +23,7 @@ def get_analysis_service(request: Request) -> AnalysisService:
 
 
 @router.get("/{drill_run_id}", response_model=DrillAdminResponse)
-async def get_drill_admin(
+def get_drill_admin(
     request: Request,
     drill_run_id: str,
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],

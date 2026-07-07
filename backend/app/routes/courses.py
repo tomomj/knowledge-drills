@@ -40,7 +40,7 @@ def get_analysis_service(request: Request) -> AnalysisService:
 
 
 @router.post("", response_model=CourseCreateResponse, status_code=status.HTTP_201_CREATED)
-async def create_course(
+def create_course(
     request: Request,
     payload: CourseCreateRequest,
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
@@ -50,7 +50,7 @@ async def create_course(
 
 
 @router.get("", response_model=CourseListResponse)
-async def list_courses(
+def list_courses(
     request: Request,
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
 ) -> CourseListResponse:
@@ -58,7 +58,7 @@ async def list_courses(
 
 
 @router.get("/{course_id}", response_model=CourseDetailResponse)
-async def get_course(
+def get_course(
     request: Request,
     course_id: str,
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
@@ -67,7 +67,7 @@ async def get_course(
 
 
 @router.put("/{course_id}", response_model=CourseDetailResponse)
-async def update_course(
+def update_course(
     request: Request,
     course_id: str,
     payload: CourseUpdateRequest,
@@ -77,7 +77,7 @@ async def update_course(
 
 
 @router.get("/{course_id}/revisions", response_model=CourseRevisionListResponse)
-async def list_course_revisions(
+def list_course_revisions(
     request: Request,
     course_id: str,
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
@@ -86,7 +86,7 @@ async def list_course_revisions(
 
 
 @router.get("/{course_id}/revisions/diff", response_model=CourseRevisionDiffResponse)
-async def diff_course_revisions(
+def diff_course_revisions(
     request: Request,
     course_id: str,
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
@@ -119,7 +119,7 @@ def generate_drill(
 
 
 @router.get("/{course_id}/drill-runs/{drill_run_id}", response_model=DrillAdminResponse)
-async def get_course_drill_admin(
+def get_course_drill_admin(
     request: Request,
     course_id: str,
     drill_run_id: str,
@@ -133,7 +133,7 @@ async def get_course_drill_admin(
 
 
 @router.get("/{course_id}/drill-runs/{drill_run_id}/answers", response_model=DrillAnswersResponse)
-async def list_course_drill_answers(
+def list_course_drill_answers(
     request: Request,
     course_id: str,
     drill_run_id: str,

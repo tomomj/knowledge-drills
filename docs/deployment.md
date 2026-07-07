@@ -78,3 +78,13 @@ demo Course を残す場合は、最初に Google ログインした owner の F
 `courses/{courseId}` document に `ownerUserId` を設定します。子リソースの Drill / Patch は Course を辿って
 owner 判定されるため、まず Course の owner を移行します。demo データを維持しない場合は、ログイン後に UI から
 Course を作り直し、Drill と share URL を再生成します。
+
+## ADK trace
+
+backend Cloud Run は `KNOWLEDGE_DRILLS_AGENT_TRACE_EXPORTER=gcp` で ADK trace を Cloud Trace に送ります。
+確認先は Google Cloud Console の Trace Explorer です。`service.name` は
+`knowledge-drills-prd-backend`、resource attribute には `deployment.environment=prd` と
+`service.namespace=knowledge-drills` が入ります。
+
+OTLP collector に送る場合は `KNOWLEDGE_DRILLS_AGENT_TRACE_EXPORTER=otlp` に変更し、
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` または `OTEL_EXPORTER_OTLP_ENDPOINT` を Cloud Run env に追加します。

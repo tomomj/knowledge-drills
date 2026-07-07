@@ -56,6 +56,12 @@ class DrillService:
         saved_drill_run = self._drill_repository.get(drill_run.id)
         if saved_drill_run is None:
             raise RuntimeError("drill run was not created")
+        self._course_repository.update_summary(
+            course.id,
+            latest_drill_run_id=saved_drill_run.id,
+            latest_drill_status=saved_drill_run.status,
+            answer_count=0,
+        )
 
         try:
             agent_response = self._agent_client.generate_drill(
@@ -73,6 +79,12 @@ class DrillService:
                 }
             )
             self._drill_repository.update(failed)
+            self._course_repository.update_summary(
+                course.id,
+                latest_drill_run_id=failed.id,
+                latest_drill_status=failed.status,
+                answer_count=0,
+            )
             raise
 
         ready = saved_drill_run.model_copy(
@@ -83,8 +95,11 @@ class DrillService:
             }
         )
         self._drill_repository.update(ready)
-        self._course_repository.update(
-            course.model_copy(update={"latest_drill_run_id": ready.id})
+        self._course_repository.update_summary(
+            course.id,
+            latest_drill_run_id=ready.id,
+            latest_drill_status=ready.status,
+            answer_count=0,
         )
         return ready
 
@@ -101,9 +116,13 @@ class DrillService:
             course_id=course_id,
         )
 
-        answer_count = 0
-        if self._answer_repository is not None:
-            answer_count = len(self._answer_repository.list_by_drill_run(drill_run.id))
+        answer_count = self._stored_answer_count(drill_run)
+        if answer_count is None:
+            answer_count = (
+                len(self._answer_repository.list_by_drill_run(drill_run.id))
+                if self._answer_repository is not None
+                else 0
+            )
 
         return DrillAdminResponse(
             id=drill_run.id,
@@ -217,3 +236,9 @@ class DrillService:
             f"{question.id}: {', '.join(item.criterion for item in question.rubric)}"
             for question in questions
         ]
+
+    def _stored_answer_count(self, drill_run: DrillRun) -> int | None:
+        course = self._course_repository.get(drill_run.course_id)
+        if course is None or course.latest_drill_run_id != drill_run.id:
+            return None
+        return course.answer_count

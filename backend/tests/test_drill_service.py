@@ -20,7 +20,9 @@ def _question_payload(question_id: str = "q1", points: int = 4) -> dict[str, obj
     }
 
 
-def _service(agent_response: dict[str, object]) -> tuple[DrillService, DrillRepository]:
+def _service(
+    agent_response: dict[str, object],
+) -> tuple[DrillService, CourseRepository, DrillRepository]:
     client = InMemoryFirestoreClient()
     course_repository = CourseRepository(client)
     drill_repository = DrillRepository(client)
@@ -38,11 +40,11 @@ def _service(agent_response: dict[str, object]) -> tuple[DrillService, DrillRepo
         ),
         agent_client=AgentRuntimeClient(invoker=lambda _task_name, _payload: agent_response),
     )
-    return service, drill_repository
+    return service, course_repository, drill_repository
 
 
 def test_generate_drill_marks_run_ready_with_three_valid_questions() -> None:
-    service, drill_repository = _service(
+    service, course_repository, drill_repository = _service(
         {
             "questions": [
                 _question_payload("q1"),
@@ -59,10 +61,15 @@ def test_generate_drill_marks_run_ready_with_three_valid_questions() -> None:
     assert saved.status == "ready"
     assert saved.share_token == "share-token"
     assert len(saved.questions) == 3
+    course = course_repository.get("course-1")
+    assert course is not None
+    assert course.latest_drill_run_id == drill_run.id
+    assert course.latest_drill_status == "ready"
+    assert course.answer_count == 0
 
 
 def test_generate_drill_marks_run_failed_when_agent_output_is_invalid() -> None:
-    service, drill_repository = _service(
+    service, course_repository, drill_repository = _service(
         {
             "questions": [
                 _question_payload("q1", points=3),
@@ -78,10 +85,14 @@ def test_generate_drill_marks_run_failed_when_agent_output_is_invalid() -> None:
     saved_runs = drill_repository.list_by_course("course-1")
     assert saved_runs[0].status == "failed"
     assert saved_runs[0].error_message == "drill generation failed"
+    course = course_repository.get("course-1")
+    assert course is not None
+    assert course.latest_drill_run_id == saved_runs[0].id
+    assert course.latest_drill_status == "failed"
 
 
 def test_generate_drill_rejects_missing_course() -> None:
-    service, _drill_repository = _service(
+    service, _course_repository, _drill_repository = _service(
         {
             "questions": [
                 _question_payload("q1"),

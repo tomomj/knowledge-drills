@@ -29,6 +29,9 @@ def test_document_patch_agent_declares_schema_and_constraints() -> None:
     assert isinstance(instruction, str)
     assert "riskNotes" in instruction
     assert "最小限で有用な Markdown" in instruction
+    assert "targetSections" in instruction
+    assert "申請フォーム" in instruction
+    assert "confidenceNote" in instruction
 
 
 def test_failure_signal_requires_core_fields_and_sample_size() -> None:

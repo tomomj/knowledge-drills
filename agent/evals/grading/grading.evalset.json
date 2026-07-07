@@ -72,6 +72,30 @@
           }
         }
       ]
+    },
+    {
+      "eval_id": "grading_security_partial_score",
+      "conversation": [
+        {
+          "invocation_id": "grading_security_partial_inv",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "{\"question\":{\"id\":\"q1\",\"question\":\"心当たりのない差出人からのメールに添付されていたファイルを、誤って開いてしまいました。あなたはこの後どう対応すべきですか。判断理由も書いてください。\",\"intent\":\"誤って添付ファイルを開いた場合に、ネットワーク切断と情報システム部への連絡という初動対応ができるかを確認する。\",\"rubric\":[{\"criterion\":\"直ちにPCをネットワークから切断することを示している\",\"points\":2,\"required\":true},{\"criterion\":\"情報システム部に連絡することを示している\",\"points\":2,\"required\":true}],\"idealAnswer\":\"マルウェア感染の可能性があるため、直ちにPCをネットワークから切断し、情報システム部に連絡する。\",\"sourceEvidence\":[{\"sectionHeading\":\"不審メール\",\"excerpt\":\"誤って添付ファイルを開いてしまった場合は、直ちにPCをネットワークから切断し、情報システム部に連絡します。\"}],\"maxScore\":4},\"learnerAnswer\":\"ウイルスに感染しているかもしれないので、すぐに情報システム部に連絡して指示を仰ぎます。\"}"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"情報システム部に連絡することを示している\"],\"missingPoints\":[\"直ちにPCをネットワークから切断するという対応が書かれていない\"],\"feedback\":\"情報システム部への連絡は書けています。まず直ちにPCをネットワークから切断するという初動まで書けると満点になります。\",\"failureTags\":[\"missing_network_isolation_step\"]}"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
