@@ -54,7 +54,7 @@ resource "google_service_account" "deploy" {
 resource "google_iam_workload_identity_pool" "github" {
   project                   = local.project_id
   workload_identity_pool_id = local.github_wif_pool_id
-  display_name              = "Knowledge Drills GitHub Actions ${local.environment}"
+  display_name              = "KD GitHub Actions ${local.environment}"
   description               = "OIDC pool for GitHub Actions deployments."
   disabled                  = false
 
