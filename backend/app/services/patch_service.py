@@ -27,6 +27,11 @@ class PatchService:
         if patch.status == PatchStatus.PROPOSED and course.markdown != patch.base_markdown:
             stale = patch.model_copy(update={"status": PatchStatus.STALE})
             self._patch_repository.update(stale)
+            self._course_repository.update_summary(
+                course.id,
+                latest_patch_id=stale.id,
+                latest_patch_status=stale.status,
+            )
             return stale
         return patch
 
@@ -38,6 +43,11 @@ class PatchService:
             if course.markdown != patch.base_markdown:
                 stale = patch.model_copy(update={"status": PatchStatus.STALE})
                 self._patch_repository.update(stale)
+                self._course_repository.update_summary(
+                    course.id,
+                    latest_patch_id=stale.id,
+                    latest_patch_status=stale.status,
+                )
                 raise AppError(
                     "patch_not_proposed",
                     "Patch is no longer proposed.",
@@ -50,6 +60,8 @@ class PatchService:
                     "markdown": patch.patched_markdown,
                     "version": course.version + 1,
                     "updated_at": datetime.now(UTC).isoformat(),
+                    "latest_patch_id": patch.id,
+                    "latest_patch_status": PatchStatus.APPLIED,
                 }
             )
             applied = patch.model_copy(
@@ -72,6 +84,11 @@ class PatchService:
             if course.markdown != patch.base_markdown:
                 stale = patch.model_copy(update={"status": PatchStatus.STALE})
                 self._patch_repository.update(stale)
+                self._course_repository.update_summary(
+                    course.id,
+                    latest_patch_id=stale.id,
+                    latest_patch_status=stale.status,
+                )
                 raise AppError(
                     "patch_not_proposed",
                     "Patch is no longer proposed.",
@@ -86,6 +103,11 @@ class PatchService:
                 }
             )
             self._patch_repository.update(rejected)
+            self._course_repository.update_summary(
+                course.id,
+                latest_patch_id=rejected.id,
+                latest_patch_status=rejected.status,
+            )
             return rejected
 
         return self._run_transaction(reject)

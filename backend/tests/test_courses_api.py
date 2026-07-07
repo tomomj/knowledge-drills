@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.schemas import (
@@ -45,42 +46,29 @@ def test_list_courses_returns_summaries_sorted_by_updated_at(client: TestClient)
     assert "markdown" not in summary
 
 
-def test_list_courses_resolves_drill_and_patch_status(client: TestClient) -> None:
+def test_list_courses_uses_stored_summary_without_related_collection_reads(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     create = client.post("/api/courses", json={"title": "状態あり", "markdown": "# Body"})
     course_id = create.json()["courseId"]
 
     app_state = client.app.state  # type: ignore[attr-defined]
-    drill_run = DrillRun(
-        id="drill-1",
-        course_id=course_id,
-        status=DrillRunStatus.READY,
-        share_token="token-1",
+    app_state.course_repository.update_summary(
+        course_id,
+        latest_drill_run_id="drill-1",
+        latest_drill_status=DrillRunStatus.READY,
+        answer_count=1,
+        latest_patch_id="patch-1",
+        latest_patch_status=PatchStatus.PROPOSED,
     )
-    app_state.drill_repository.create(drill_run)
-    app_state.answer_repository.create(
-        id="answer-1",
-        drill_run_id="drill-1",
-        learner_name="受講者A",
-        status=AnswerStatus.GRADED,
-        answers={"q1": "回答"},
-    )
-    patch = DocumentPatch(
-        id="patch-1",
-        course_id=course_id,
-        drill_run_id="drill-1",
-        status=PatchStatus.PROPOSED,
-        base_markdown="# Body",
-        patched_markdown="# Body2",
-        patch_summary="要約",
-        diff_text="-a\n+b",
-    )
-    app_state.patch_repository.create(patch)
-    course = Course.model_validate(
-        app_state.firestore_client.get_document("courses", course_id),
-    )
-    app_state.course_repository.update(
-        course.model_copy(update={"latest_drill_run_id": "drill-1", "latest_patch_id": "patch-1"}),
-    )
+
+    def fail_related_read(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("course list should use stored course summary")
+
+    monkeypatch.setattr(app_state.drill_repository, "get", fail_related_read)
+    monkeypatch.setattr(app_state.answer_repository, "list_by_drill_run", fail_related_read)
+    monkeypatch.setattr(app_state.patch_repository, "get", fail_related_read)
 
     response = client.get("/api/courses")
 
@@ -91,6 +79,57 @@ def test_list_courses_resolves_drill_and_patch_status(client: TestClient) -> Non
     assert summary["patchStatus"] == "proposed"
     assert summary["latestDrillRunId"] == "drill-1"
     assert summary["latestPatchId"] == "patch-1"
+
+
+def test_list_courses_backfills_legacy_summary_fields(client: TestClient) -> None:
+    create = client.post("/api/courses", json={"title": "旧データ", "markdown": "# Body"})
+    course_id = create.json()["courseId"]
+
+    app_state = client.app.state  # type: ignore[attr-defined]
+    app_state.drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id=course_id,
+            status=DrillRunStatus.READY,
+            share_token="token-1",
+        )
+    )
+    app_state.answer_repository.create(
+        id="answer-1",
+        drill_run_id="drill-1",
+        learner_name="受講者A",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+    app_state.patch_repository.create(
+        DocumentPatch(
+            id="patch-1",
+            course_id=course_id,
+            drill_run_id="drill-1",
+            status=PatchStatus.PROPOSED,
+            base_markdown="# Body",
+            patched_markdown="# Body2",
+            patch_summary="要約",
+            diff_text="-a\n+b",
+        )
+    )
+    course = Course.model_validate(app_state.firestore_client.get_document("courses", course_id))
+    app_state.course_repository.update(
+        course.model_copy(update={"latest_drill_run_id": "drill-1", "latest_patch_id": "patch-1"})
+    )
+
+    response = client.get("/api/courses")
+
+    assert response.status_code == 200
+    summary = response.json()["courses"][0]
+    assert summary["drillStatus"] == "ready"
+    assert summary["answerCount"] == 1
+    assert summary["patchStatus"] == "proposed"
+    saved_course = app_state.course_repository.get(course_id)
+    assert saved_course is not None
+    assert saved_course.latest_drill_status == "ready"
+    assert saved_course.answer_count == 1
+    assert saved_course.latest_patch_status == "proposed"
 
 
 def test_course_revisions_and_diff(client: TestClient) -> None:

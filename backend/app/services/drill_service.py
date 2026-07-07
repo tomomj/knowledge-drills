@@ -56,6 +56,12 @@ class DrillService:
         saved_drill_run = self._drill_repository.get(drill_run.id)
         if saved_drill_run is None:
             raise RuntimeError("drill run was not created")
+        self._course_repository.update_summary(
+            course.id,
+            latest_drill_run_id=saved_drill_run.id,
+            latest_drill_status=saved_drill_run.status,
+            answer_count=0,
+        )
 
         try:
             agent_response = self._agent_client.generate_drill(
@@ -73,6 +79,12 @@ class DrillService:
                 }
             )
             self._drill_repository.update(failed)
+            self._course_repository.update_summary(
+                course.id,
+                latest_drill_run_id=failed.id,
+                latest_drill_status=failed.status,
+                answer_count=0,
+            )
             raise
 
         ready = saved_drill_run.model_copy(
@@ -83,19 +95,33 @@ class DrillService:
             }
         )
         self._drill_repository.update(ready)
-        self._course_repository.update(
-            course.model_copy(update={"latest_drill_run_id": ready.id})
+        self._course_repository.update_summary(
+            course.id,
+            latest_drill_run_id=ready.id,
+            latest_drill_status=ready.status,
+            answer_count=0,
         )
         return ready
 
-    def get_admin_drill(self, drill_run_id: str) -> DrillAdminResponse:
+    def get_admin_drill(
+        self,
+        drill_run_id: str,
+        *,
+        course_id: str | None = None,
+    ) -> DrillAdminResponse:
         drill_run = self._drill_repository.get(drill_run_id)
         if drill_run is None:
             raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+        if course_id is not None and drill_run.course_id != course_id:
+            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
 
-        answer_count = 0
-        if self._answer_repository is not None:
-            answer_count = len(self._answer_repository.list_by_drill_run(drill_run.id))
+        answer_count = self._stored_answer_count(drill_run)
+        if answer_count is None:
+            answer_count = (
+                len(self._answer_repository.list_by_drill_run(drill_run.id))
+                if self._answer_repository is not None
+                else 0
+            )
 
         return DrillAdminResponse(
             id=drill_run.id,
@@ -112,9 +138,16 @@ class DrillService:
             error_message=drill_run.error_message,
         )
 
-    def list_answers(self, drill_run_id: str) -> DrillAnswersResponse:
+    def list_answers(
+        self,
+        drill_run_id: str,
+        *,
+        course_id: str | None = None,
+    ) -> DrillAnswersResponse:
         drill_run = self._drill_repository.get(drill_run_id)
         if drill_run is None:
+            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+        if course_id is not None and drill_run.course_id != course_id:
             raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
         submissions = (
             self._answer_repository.list_by_drill_run(drill_run.id)
@@ -136,6 +169,12 @@ class DrillService:
                 for submission in submissions
             ],
         )
+
+    def ensure_drill_belongs_to_course(self, drill_run_id: str, course_id: str) -> DrillRun:
+        drill_run = self._drill_repository.get(drill_run_id)
+        if drill_run is None or drill_run.course_id != course_id:
+            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+        return drill_run
 
     def get_learner_drill(self, share_token: str) -> LearnerDrillResponse:
         if self._share_token_repository is None:
@@ -172,3 +211,9 @@ class DrillService:
             f"{question.id}: {', '.join(item.criterion for item in question.rubric)}"
             for question in questions
         ]
+
+    def _stored_answer_count(self, drill_run: DrillRun) -> int | None:
+        course = self._course_repository.get(drill_run.course_id)
+        if course is None or course.latest_drill_run_id != drill_run.id:
+            return None
+        return course.answer_count

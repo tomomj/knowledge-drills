@@ -2,7 +2,6 @@ from typing import cast
 
 from fastapi import APIRouter, Query, Request, status
 
-from app.errors import AppError
 from app.schemas import (
     AnalysisStartResponse,
     CourseCreateRequest,
@@ -36,23 +35,23 @@ def get_analysis_service(request: Request) -> AnalysisService:
 
 
 @router.post("", response_model=CourseCreateResponse, status_code=status.HTTP_201_CREATED)
-async def create_course(request: Request, payload: CourseCreateRequest) -> CourseCreateResponse:
+def create_course(request: Request, payload: CourseCreateRequest) -> CourseCreateResponse:
     course = get_course_service(request).create_course(payload)
     return CourseCreateResponse(course_id=course.id)
 
 
 @router.get("", response_model=CourseListResponse)
-async def list_courses(request: Request) -> CourseListResponse:
+def list_courses(request: Request) -> CourseListResponse:
     return get_course_service(request).list_courses()
 
 
 @router.get("/{course_id}", response_model=CourseDetailResponse)
-async def get_course(request: Request, course_id: str) -> CourseDetailResponse:
+def get_course(request: Request, course_id: str) -> CourseDetailResponse:
     return get_course_service(request).get_course(course_id)
 
 
 @router.put("/{course_id}", response_model=CourseDetailResponse)
-async def update_course(
+def update_course(
     request: Request,
     course_id: str,
     payload: CourseUpdateRequest,
@@ -61,7 +60,7 @@ async def update_course(
 
 
 @router.get("/{course_id}/revisions", response_model=CourseRevisionListResponse)
-async def list_course_revisions(
+def list_course_revisions(
     request: Request,
     course_id: str,
 ) -> CourseRevisionListResponse:
@@ -69,7 +68,7 @@ async def list_course_revisions(
 
 
 @router.get("/{course_id}/revisions/diff", response_model=CourseRevisionDiffResponse)
-async def diff_course_revisions(
+def diff_course_revisions(
     request: Request,
     course_id: str,
     from_version: int = Query(alias="from", ge=1),
@@ -92,27 +91,21 @@ def generate_drill(request: Request, course_id: str) -> DrillGenerationStartResp
 
 
 @router.get("/{course_id}/drill-runs/{drill_run_id}", response_model=DrillAdminResponse)
-async def get_course_drill_admin(
+def get_course_drill_admin(
     request: Request,
     course_id: str,
     drill_run_id: str,
 ) -> DrillAdminResponse:
-    drill = get_drill_service(request).get_admin_drill(drill_run_id)
-    if drill.course_id != course_id:
-        raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
-    return drill
+    return get_drill_service(request).get_admin_drill(drill_run_id, course_id=course_id)
 
 
 @router.get("/{course_id}/drill-runs/{drill_run_id}/answers", response_model=DrillAnswersResponse)
-async def list_course_drill_answers(
+def list_course_drill_answers(
     request: Request,
     course_id: str,
     drill_run_id: str,
 ) -> DrillAnswersResponse:
-    drill = get_drill_service(request).get_admin_drill(drill_run_id)
-    if drill.course_id != course_id:
-        raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
-    return get_drill_service(request).list_answers(drill_run_id)
+    return get_drill_service(request).list_answers(drill_run_id, course_id=course_id)
 
 
 @router.post(
@@ -124,8 +117,6 @@ def analyze_course_drill(
     course_id: str,
     drill_run_id: str,
 ) -> AnalysisStartResponse:
-    drill = get_drill_service(request).get_admin_drill(drill_run_id)
-    if drill.course_id != course_id:
-        raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+    get_drill_service(request).ensure_drill_belongs_to_course(drill_run_id, course_id)
     patch = get_analysis_service(request).run_analysis(drill_run_id)
     return AnalysisStartResponse(patch_id=patch.id)

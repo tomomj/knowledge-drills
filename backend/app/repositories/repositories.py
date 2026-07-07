@@ -50,6 +50,36 @@ class CourseRepository:
         )
         self._record_revision(course)
 
+    def update_summary(
+        self,
+        course_id: str,
+        *,
+        latest_drill_run_id: str | None = None,
+        latest_drill_status: DrillRunStatus | None = None,
+        answer_count: int | None = None,
+        latest_patch_id: str | None = None,
+        latest_patch_status: PatchStatus | None = None,
+    ) -> None:
+        data: dict[str, object] = {}
+        if latest_drill_run_id is not None:
+            data["latestDrillRunId"] = latest_drill_run_id
+        if latest_drill_status is not None:
+            data["latestDrillStatus"] = latest_drill_status.value
+        if answer_count is not None:
+            data["answerCount"] = answer_count
+        if latest_patch_id is not None:
+            data["latestPatchId"] = latest_patch_id
+        if latest_patch_status is not None:
+            data["latestPatchStatus"] = latest_patch_status.value
+        if data:
+            self._client.update_document(self.collection, course_id, data)
+
+    def increment_answer_count(self, course_id: str) -> None:
+        course = self.get(course_id)
+        if course is None:
+            return
+        self.update_summary(course_id, answer_count=course.answer_count + 1)
+
     def list_revisions(self, course_id: str) -> list[CourseRevision]:
         return [
             CourseRevision.model_validate(document)
