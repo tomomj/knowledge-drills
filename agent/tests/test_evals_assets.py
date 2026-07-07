@@ -26,17 +26,17 @@ def _load_eval_entry_module(name: str) -> object:
         sys.path.remove(str(EVALS_DIR))
 
 
-def _load_smoke_eval_cases() -> dict[str, tuple[str, ...]]:
+def _load_quick_eval_cases() -> dict[str, tuple[str, ...]]:
     module = ast.parse(RUNNER_PATH.read_text("utf-8"))
     for node in module.body:
         if (
             isinstance(node, ast.AnnAssign)
             and isinstance(node.target, ast.Name)
-            and node.target.id == "SMOKE_EVAL_CASES"
+            and node.target.id == "QUICK_EVAL_CASES"
             and node.value is not None
         ):
             return cast(dict[str, tuple[str, ...]], ast.literal_eval(node.value))
-    raise AssertionError("SMOKE_EVAL_CASES is not defined in scripts/run_adk_evals.py")
+    raise AssertionError("QUICK_EVAL_CASES is not defined in scripts/run_adk_evals.py")
 
 
 def test_eval_entry_modules_expose_parentless_root_agent() -> None:
@@ -67,10 +67,10 @@ def test_configs_use_one_integrated_rubric_per_agent() -> None:
         assert len(rubrics) == 1, f"{name}: LLM judge rubric は統合して1つにする"
 
 
-def test_smoke_eval_cases_exist() -> None:
-    smoke_eval_cases = _load_smoke_eval_cases()
-    assert set(smoke_eval_cases) == set(AGENT_EVAL_DIRS)
-    for name, eval_case_ids in smoke_eval_cases.items():
+def test_quick_eval_cases_exist() -> None:
+    quick_eval_cases = _load_quick_eval_cases()
+    assert set(quick_eval_cases) == set(AGENT_EVAL_DIRS)
+    for name, eval_case_ids in quick_eval_cases.items():
         payload = json.loads((EVALS_DIR / name / f"{name}.evalset.json").read_text("utf-8"))
         available_case_ids = {case["eval_id"] for case in payload["eval_cases"]}
         assert set(eval_case_ids) <= available_case_ids

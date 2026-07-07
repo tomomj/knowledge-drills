@@ -120,7 +120,7 @@ cp .env.example .env
 
 python scripts/run_adk_evals.py
 # PR CI と同じ軽量ゲートだけ確認する場合
-python scripts/run_adk_evals.py --profile smoke
+python scripts/run_adk_evals.py --profile quick
 ```
 
 通常の Agent CI は認証情報なしで `tests/test_evals_assets.py` によるアセット構造検証まで行う。
@@ -132,7 +132,7 @@ repository variables の `GCP_AGENT_EVAL_WORKLOAD_IDENTITY_PROVIDER` と
 結果 JSON を読む `scripts/run_adk_evals.py` を経由する。
 この runner は Vertex AI の 429 / `RESOURCE_EXHAUSTED` を避けるため、evalset 内の
 case を `evalset.json:eval_id` 指定で1件ずつ直列実行する。一時的な quota / rate limit
-エラーだけは backoff 付きで再試行する。PR CI は `--profile smoke` で各エージェント1ケースだけを
+エラーだけは backoff 付きで再試行する。PR CI は `--profile quick` で各エージェント1ケースだけを
 実行し、手動実行（`workflow_dispatch`）では既定で `full` profile を実行する。
 
 ## 閾値の校正記録

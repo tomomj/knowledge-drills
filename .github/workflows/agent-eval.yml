@@ -14,7 +14,7 @@ on:
         type: choice
         options:
           - full
-          - smoke
+          - quick
 
 permissions:
   contents: read
@@ -84,7 +84,7 @@ jobs:
       - name: Run ADK evals
         shell: bash
         run: |
-          profile="${{ github.event_name == 'pull_request' && 'smoke' || inputs.profile }}"
+          profile="${{ github.event_name == 'pull_request' && 'quick' || inputs.profile }}"
           if [[ -z "$profile" ]]; then
             profile="full"
           fi

@@ -33,7 +33,7 @@ EVALS: dict[str, tuple[str, str, str]] = {
     ),
 }
 
-SMOKE_EVAL_CASES: dict[str, tuple[str, ...]] = {
+QUICK_EVAL_CASES: dict[str, tuple[str, ...]] = {
     "grading": ("grading_partial_score",),
     "drill_generator": ("dg_expense_course",),
     "failure_analysis": ("fa_detects_planted_common_error",),
@@ -254,9 +254,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--profile",
-        choices=("smoke", "full"),
+        choices=("quick", "full"),
         default="full",
-        help="Eval profile. smoke runs one representative case per agent.",
+        help="Eval profile. quick runs one representative case per agent.",
     )
     args = parser.parse_args()
 
@@ -274,8 +274,8 @@ def main() -> int:
     all_ok = True
     for eval_name in requested_evals:
         profile_case_ids = None
-        if args.profile == "smoke":
-            profile_case_ids = list(SMOKE_EVAL_CASES[eval_name])
+        if args.profile == "quick":
+            profile_case_ids = list(QUICK_EVAL_CASES[eval_name])
         print(f"running {eval_name} ({args.profile})...")
         all_ok = _run_eval(eval_name, profile_case_ids) and all_ok
 
