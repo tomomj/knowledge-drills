@@ -12,6 +12,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  agent:
+    name: Agent
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: agent
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        # v8 系はメジャーエイリアスタグが無いためパッチまで固定する
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: agent/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run --frozen ruff check .
+
+      - name: Typecheck
+        run: uv run --frozen mypy .
+
+      - name: Test
+        run: uv run --frozen pytest
+
   backend:
     name: Backend
     runs-on: ubuntu-latest

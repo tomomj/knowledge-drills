@@ -23,6 +23,11 @@ locals {
   backend_max_instances  = 3
   frontend_max_instances = 2
 
+  backend_agent_mode            = "adk"
+  backend_agent_model           = "gemini-2.5-flash-lite"
+  backend_agent_timeout_seconds = "120"
+  backend_vertex_location       = "us-central1"
+
   frontend_cloud_run_origins = [
     google_cloud_run_v2_service.frontend.uri,
     "https://${local.frontend_service_name}-${local.project_number}.${local.region}.run.app",
@@ -35,6 +40,7 @@ locals {
   }
 
   required_services = toset([
+    "aiplatform.googleapis.com",
     "artifactregistry.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",

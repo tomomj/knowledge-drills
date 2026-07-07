@@ -171,8 +171,33 @@ resource "google_cloud_run_v2_service" "backend" {
       }
 
       env {
+        name  = "KNOWLEDGE_DRILLS_AGENT_MODE"
+        value = local.backend_agent_mode
+      }
+
+      env {
+        name  = "KNOWLEDGE_DRILLS_AGENT_TIMEOUT_SECONDS"
+        value = local.backend_agent_timeout_seconds
+      }
+
+      env {
         name  = "KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS"
         value = join(",", local.frontend_cloud_run_origins)
+      }
+
+      env {
+        name  = "GOOGLE_GENAI_USE_VERTEXAI"
+        value = "TRUE"
+      }
+
+      env {
+        name  = "GOOGLE_CLOUD_LOCATION"
+        value = local.backend_vertex_location
+      }
+
+      env {
+        name  = "KNOWLEDGE_DRILL_AGENT_MODEL"
+        value = local.backend_agent_model
       }
 
       resources {
@@ -217,6 +242,16 @@ resource "google_project_iam_member" "deploy_cloud_run_admin" {
   project = local.project_id
   role    = "roles/run.admin"
   member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_project_iam_member" "backend_vertex_ai_user" {
+  project = local.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+
+  depends_on = [
+    google_project_service.required["aiplatform.googleapis.com"],
+  ]
 }
 
 resource "google_artifact_registry_repository_iam_member" "deploy_artifact_writer" {
