@@ -33,6 +33,13 @@ EVALS: dict[str, tuple[str, str, str]] = {
     ),
 }
 
+SMOKE_EVAL_CASES: dict[str, tuple[str, ...]] = {
+    "grading": ("grading_partial_score",),
+    "drill_generator": ("dg_expense_course",),
+    "failure_analysis": ("fa_detects_planted_common_error",),
+    "document_patch": ("dp_prior_approval_gap",),
+}
+
 PASS_STATUS = 1
 VERTEX_TRUE_VALUES = {"1", "true", "yes"}
 TRANSIENT_ERROR_MARKERS = (
@@ -202,12 +209,13 @@ def _run_eval_case(
     return False
 
 
-def _run_eval(eval_name: str) -> bool:
+def _run_eval(eval_name: str, eval_case_ids: list[str] | None = None) -> bool:
     eval_dir, evalset, config = EVALS[eval_name]
-    eval_case_ids = _eval_case_ids(AGENT_DIR / evalset)
-    max_attempts = _env_int("ADK_EVAL_MAX_ATTEMPTS", 3)
-    case_delay_seconds = _env_float("ADK_EVAL_CASE_DELAY_SECONDS", 5.0)
-    retry_base_delay_seconds = _env_float("ADK_EVAL_RETRY_BASE_DELAY_SECONDS", 20.0)
+    if eval_case_ids is None:
+        eval_case_ids = _eval_case_ids(AGENT_DIR / evalset)
+    max_attempts = _env_int("ADK_EVAL_MAX_ATTEMPTS", 2)
+    case_delay_seconds = _env_float("ADK_EVAL_CASE_DELAY_SECONDS", 1.0)
+    retry_base_delay_seconds = _env_float("ADK_EVAL_RETRY_BASE_DELAY_SECONDS", 10.0)
 
     all_ok = True
     for index, eval_case_id in enumerate(eval_case_ids):
@@ -244,6 +252,12 @@ def main() -> int:
         default=AGENT_DIR / ".env",
         help="Optional .env file to load before running evals.",
     )
+    parser.add_argument(
+        "--profile",
+        choices=("smoke", "full"),
+        default="full",
+        help="Eval profile. smoke runs one representative case per agent.",
+    )
     args = parser.parse_args()
 
     _load_env_file(args.env_file)
@@ -259,8 +273,11 @@ def main() -> int:
     requested_evals = args.evals or list(EVALS)
     all_ok = True
     for eval_name in requested_evals:
-        print(f"running {eval_name}...")
-        all_ok = _run_eval(eval_name) and all_ok
+        profile_case_ids = None
+        if args.profile == "smoke":
+            profile_case_ids = list(SMOKE_EVAL_CASES[eval_name])
+        print(f"running {eval_name} ({args.profile})...")
+        all_ok = _run_eval(eval_name, profile_case_ids) and all_ok
 
     return 0 if all_ok else 1
 
