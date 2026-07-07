@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import TypeVar
 
 from app.errors import AppError
-from app.repositories.firestore_client import InMemoryFirestoreClient
+from app.repositories.firestore_client import FirestoreClient
 from app.repositories.repositories import CourseRepository, PatchRepository
 from app.schemas import Course, DocumentPatch, PatchStatus
 
@@ -15,7 +15,7 @@ class PatchService:
         self,
         course_repository: CourseRepository,
         patch_repository: PatchRepository,
-        firestore_client: InMemoryFirestoreClient,
+        firestore_client: FirestoreClient,
     ) -> None:
         self._course_repository = course_repository
         self._patch_repository = patch_repository
