@@ -24,6 +24,30 @@
           }
         }
       ]
+    },
+    {
+      "eval_id": "fa_missing_network_isolation",
+      "conversation": [
+        {
+          "invocation_id": "fa_network_isolation_inv",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "{\"courseMarkdown\":\"# 情報セキュリティの基本対応\\n\\n## パスワード管理\\nパスワードは12文字以上とし、他のサービスと使い回してはいけません。パスワードを他人と共有することは禁止です。\\n共同作業でアカウントが必要な場合は、情報システム部に共有アカウントの発行を申請します。\\n\\n## 不審メール\\n心当たりのないメールの添付ファイルやURLは開いてはいけません。不審なメールを受信した場合は、開かずに情報システム部に報告します。\\n誤って添付ファイルを開いてしまった場合は、直ちにPCをネットワークから切断し、情報システム部に連絡します。\\n\\n## 端末の持ち出し\\n社用PCを社外に持ち出す場合は、事前に上長の承認が必要です。持ち出し中は公共のフリーWi-Fiに接続してはいけません。\\n\",\"questions\":[{\"id\":\"q1\",\"question\":\"心当たりのない差出人からのメールに添付されていたファイルを、誤って開いてしまいました。あなたはこの後どう対応すべきですか。判断理由も書いてください。\",\"intent\":\"誤って添付ファイルを開いた場合に、ネットワーク切断と情報システム部への連絡という初動対応ができるかを確認する。\",\"rubric\":[{\"criterion\":\"直ちにPCをネットワークから切断することを示している\",\"points\":2,\"required\":true},{\"criterion\":\"情報システム部に連絡することを示している\",\"points\":2,\"required\":true}],\"idealAnswer\":\"マルウェア感染の可能性があるため、直ちにPCをネットワークから切断し、情報システム部に連絡する。\",\"sourceEvidence\":[{\"sectionHeading\":\"不審メール\",\"excerpt\":\"誤って添付ファイルを開いてしまった場合は、直ちにPCをネットワークから切断し、情報システム部に連絡します。\"}],\"maxScore\":4}],\"answers\":[{\"learnerName\":\"学習者A\",\"totalScore\":4,\"maxScore\":4,\"gradingResults\":[{\"questionId\":\"q1\",\"score\":4,\"maxScore\":4,\"correctPoints\":[\"直ちにPCをネットワークから切断することを示している\",\"情報システム部に連絡することを示している\"],\"missingPoints\":[],\"feedback\":\"ネットワーク切断と情報システム部への連絡がどちらも明確に書けています。\",\"failureTags\":[]}]},{\"learnerName\":\"学習者B\",\"totalScore\":2,\"maxScore\":4,\"gradingResults\":[{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"情報システム部に連絡することを示している\"],\"missingPoints\":[\"直ちにPCをネットワークから切断するという対応が書かれていない\"],\"feedback\":\"情報システム部への連絡は書けています。まず直ちにPCをネットワークから切断するという初動まで書けると満点になります。\",\"failureTags\":[\"missing_network_isolation_step\"]}]},{\"learnerName\":\"学習者C\",\"totalScore\":2,\"maxScore\":4,\"gradingResults\":[{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"情報システム部に連絡することを示している\"],\"missingPoints\":[\"直ちにPCをネットワークから切断するという対応が書かれていない\"],\"feedback\":\"情報システム部への連絡は書けています。まず直ちにPCをネットワークから切断するという初動まで書けると満点になります。\",\"failureTags\":[\"missing_network_isolation_step\"]}]},{\"learnerName\":\"学習者D\",\"totalScore\":2,\"maxScore\":4,\"gradingResults\":[{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"情報システム部に連絡することを示している\"],\"missingPoints\":[\"直ちにPCをネットワークから切断するという対応が書かれていない\"],\"feedback\":\"情報システム部への連絡は書けています。まず直ちにPCをネットワークから切断するという初動まで書けると満点になります。\",\"failureTags\":[\"missing_network_isolation_step\"]}]}],\"gradingResults\":[{\"questionId\":\"q1\",\"score\":4,\"maxScore\":4,\"correctPoints\":[\"直ちにPCをネットワークから切断することを示している\",\"情報システム部に連絡することを示している\"],\"missingPoints\":[],\"feedback\":\"ネットワーク切断と情報システム部への連絡がどちらも明確に書けています。\",\"failureTags\":[]},{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"情報システム部に連絡することを示している\"],\"missingPoints\":[\"直ちにPCをネットワークから切断するという対応が書かれていない\"],\"feedback\":\"情報システム部への連絡は書けています。まず直ちにPCをネットワークから切断するという初動まで書けると満点になります。\",\"failureTags\":[\"missing_network_isolation_step\"]},{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"情報システム部に連絡することを示している\"],\"missingPoints\":[\"直ちにPCをネットワークから切断するという対応が書かれていない\"],\"feedback\":\"情報システム部への連絡は書けています。まず直ちにPCをネットワークから切断するという初動まで書けると満点になります。\",\"failureTags\":[\"missing_network_isolation_step\"]},{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"情報システム部に連絡することを示している\"],\"missingPoints\":[\"直ちにPCをネットワークから切断するという対応が書かれていない\"],\"feedback\":\"情報システム部への連絡は書けています。まず直ちにPCをネットワークから切断するという初動まで書けると満点になります。\",\"failureTags\":[\"missing_network_isolation_step\"]}]}"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "{\"failureSignals\":[{\"id\":\"fs_network_isolation_gap\",\"title\":\"不審メールの添付を誤って開いた際に、ネットワーク切断の初動が抜ける傾向\",\"severity\":\"medium\",\"evidence\":[\"4人中3人が、情報システム部への連絡は書けたが、直ちにPCをネットワークから切断する対応に言及しなかった\"],\"likelyCause\":\"報告先は覚えやすい一方で、感染拡大を防ぐ初動手順の優先順位が伝わっていない\",\"suspectedDocumentGap\":\"不審メールセクションで誤開封時の対応が1文にまとまっており、対応の順序が強調されていない\",\"targetSections\":[\"不審メール\"],\"recommendedChange\":\"不審メールセクションに、誤開封時の対応を順番の分かる手順として示す記述を追加する\",\"sampleSize\":4,\"confidenceNote\":\"4件の回答に基づく傾向のため、追加回答で傾向を確認してください。\"}]}"
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
