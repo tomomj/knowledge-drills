@@ -1,7 +1,9 @@
 name: Agent Eval
 
 on:
-  pull_request:
+  push:
+    branches:
+      - main
     paths:
       - "agent/**"
       - ".github/workflows/agent-eval.yml"
