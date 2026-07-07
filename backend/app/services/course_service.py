@@ -54,17 +54,18 @@ class CourseService:
         self._course_repository.create(course)
         return CourseDetailResponse.model_validate(course.model_dump())
 
-    def get_course(self, course_id: str) -> CourseDetailResponse:
-        course = self._course_repository.get(course_id)
-        if course is None:
-            raise AppError("course_not_found", "Course was not found.", status_code=404)
+    def get_course(self, course_id: str, owner_user_id: str) -> CourseDetailResponse:
+        course = self._get_owned_course_or_404(course_id, owner_user_id)
         return CourseDetailResponse.model_validate(course.model_dump())
 
-    def update_course(self, course_id: str, request: CourseUpdateRequest) -> CourseDetailResponse:
+    def update_course(
+        self,
+        course_id: str,
+        request: CourseUpdateRequest,
+        owner_user_id: str,
+    ) -> CourseDetailResponse:
         self._validate_title_and_markdown(request.title, request.markdown)
-        course = self._course_repository.get(course_id)
-        if course is None:
-            raise AppError("course_not_found", "Course was not found.", status_code=404)
+        course = self._get_owned_course_or_404(course_id, owner_user_id)
 
         updated = course.model_copy(
             update={
@@ -86,8 +87,12 @@ class CourseService:
         summaries.sort(key=lambda summary: summary.updated_at or "", reverse=True)
         return CourseListResponse(courses=summaries)
 
-    def list_revisions(self, course_id: str) -> CourseRevisionListResponse:
-        self._ensure_course_exists(course_id)
+    def list_revisions(
+        self,
+        course_id: str,
+        owner_user_id: str,
+    ) -> CourseRevisionListResponse:
+        self._get_owned_course_or_404(course_id, owner_user_id)
         revisions = self._course_repository.list_revisions(course_id)
         revisions.sort(key=lambda revision: revision.version, reverse=True)
         return CourseRevisionListResponse(
@@ -106,8 +111,9 @@ class CourseService:
         course_id: str,
         from_version: int,
         to_version: int,
+        owner_user_id: str,
     ) -> CourseRevisionDiffResponse:
-        self._ensure_course_exists(course_id)
+        self._get_owned_course_or_404(course_id, owner_user_id)
         from_revision = self._course_repository.get_revision(course_id, from_version)
         to_revision = self._course_repository.get_revision(course_id, to_version)
         if from_revision is None or to_revision is None:
@@ -128,9 +134,11 @@ class CourseService:
             diff_text=diff_text,
         )
 
-    def _ensure_course_exists(self, course_id: str) -> None:
-        if self._course_repository.get(course_id) is None:
+    def _get_owned_course_or_404(self, course_id: str, owner_user_id: str) -> Course:
+        course = self._course_repository.get(course_id)
+        if course is None or course.owner_user_id != owner_user_id:
             raise AppError("course_not_found", "Course was not found.", status_code=404)
+        return course
 
     def _summarize(self, course: Course) -> CourseSummary:
         drill_status = None

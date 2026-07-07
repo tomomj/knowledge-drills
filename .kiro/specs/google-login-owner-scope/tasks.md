@@ -48,7 +48,7 @@
   - 完了条件: 新規 Course document には現在ユーザーの owner id が保存され、ownerless Course は一覧に出ない。
   - _Requirements: 2.4, 4.1, 4.2, 4.5_
 
-- [ ] 3.2 Course service の詳細・更新・履歴・差分に owner check を適用する
+- [x] 3.2 Course service の詳細・更新・履歴・差分に owner check を適用する
   - Course detail、update、revision list、revision diff の前に `Course.ownerUserId` を照合する。
   - 存在しない Course、他 owner の Course、ownerless Course は同じ `404 course_not_found` として扱う。
   - Course detail と Course summary の response に不要な `ownerUserId` を露出しないよう、公開 response fields を明示する。

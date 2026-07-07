@@ -92,8 +92,14 @@ class CourseUpdateRequest(ApiModel):
     markdown: str
 
 
-class CourseDetailResponse(Course):
-    pass
+class CourseDetailResponse(ApiModel):
+    id: str
+    title: str
+    markdown: str
+    version: int
+    updated_at: str | None = None
+    latest_drill_run_id: str | None = None
+    latest_patch_id: str | None = None
 
 
 class CourseCreateResponse(ApiModel):
