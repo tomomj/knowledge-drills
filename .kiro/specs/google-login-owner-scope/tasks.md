@@ -76,7 +76,7 @@
   - 完了条件: mock auth state で未ログイン、ログイン成功、backend 確認失敗の画面遷移を確認できる。
   - _Requirements: 1.1, 1.2, 1.3, 3.1_
 
-- [ ] 4.3 管理 route guard と learner route の公開例外を実装する
+- [x] 4.3 管理 route guard と learner route の公開例外を実装する
   - `/courses` 配下と `/patches/:patchId` を認証必須 route にする。
   - `/drills/:shareToken` は AuthProvider の signed-in requirement から外し、未ログインでも回答画面を表示する。
   - 401 を受けた管理画面は再ログイン可能な状態へ戻す。

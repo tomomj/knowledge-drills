@@ -17,6 +17,7 @@ import type {
   PatchDecisionPayload,
   SubmitAnswerResponse,
 } from './types'
+import { notifyAuthUnauthorized } from '../lib/authEvents'
 import { getAuthToken } from '../lib/authToken'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -41,6 +42,9 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   })
   const payload = (await response.json().catch(() => null)) as T | ApiError | null
   if (!response.ok) {
+    if (response.status === 401) {
+      notifyAuthUnauthorized()
+    }
     throw new ApiClientError(response.status, normalizeError(payload))
   }
   return payload as T

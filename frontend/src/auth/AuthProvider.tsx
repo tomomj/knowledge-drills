@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { api } from '../api/client'
 import type { CurrentUser } from '../api/types'
+import { addAuthUnauthorizedListener } from '../lib/authEvents'
 import type { AuthStateProvider, AuthStateUser } from '../lib/authState'
 import {
   firebaseAuthStateProvider,
@@ -10,7 +11,9 @@ import {
 } from '../lib/firebaseAuth'
 import { AuthContext, type AuthContextValue, type AuthStatus, useAuth } from './AuthContext'
 
-type AuthProviderProps = {
+const UNAUTHORIZED_MESSAGE = 'ログインの有効期限が切れました。再ログインしてください。'
+
+export type AuthProviderProps = {
   children: React.ReactNode
   authStateProvider?: AuthStateProvider
   confirmCurrentUser?: () => Promise<CurrentUser>
@@ -70,6 +73,18 @@ export function AuthProvider({
       }
     }
   }, [authStateProvider, confirm])
+
+  useEffect(
+    () =>
+      addAuthUnauthorizedListener(() => {
+        setStatus({
+          state: 'failed',
+          firebaseUser: latestFirebaseUser,
+          message: UNAUTHORIZED_MESSAGE,
+        })
+      }),
+    [latestFirebaseUser],
+  )
 
   const value = useMemo<AuthContextValue>(
     () => ({
