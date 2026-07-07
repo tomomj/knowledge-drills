@@ -20,18 +20,21 @@ from app.repositories.repositories import (
     PatchRepository,
     ShareTokenRepository,
 )
+from app.repositories.user_repository import UserRepository
 from app.request_context import RequestContextMiddleware
 from app.routes.courses import router as courses_router
 from app.routes.drills import router as drills_router
 from app.routes.health import router as health_router
 from app.routes.learn import router as learn_router
 from app.routes.patches import router as patches_router
+from app.routes.users import router as users_router
 from app.services.analysis_service import AnalysisService
 from app.services.answer_service import AnswerService
 from app.services.course_service import CourseService
 from app.services.drill_service import DrillService
 from app.services.patch_service import PatchService
 from app.services.share_token_service import ShareTokenService
+from app.services.user_service import UserService
 
 
 def _create_agent_invoker(settings: Settings) -> AgentInvoker:
@@ -63,12 +66,15 @@ def create_app() -> FastAPI:
     share_token_repository = ShareTokenRepository(firestore_client)
     answer_repository = AnswerRepository(firestore_client)
     patch_repository = PatchRepository(firestore_client)
+    user_repository = UserRepository(firestore_client)
     app.state.firestore_client = firestore_client
     app.state.course_repository = course_repository
     app.state.drill_repository = drill_repository
     app.state.answer_repository = answer_repository
     app.state.share_token_repository = share_token_repository
     app.state.patch_repository = patch_repository
+    app.state.user_repository = user_repository
+    app.state.user_service = UserService(user_repository)
     app.state.course_service = CourseService(
         course_repository,
         drill_repository=drill_repository,
@@ -107,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(drills_router)
     app.include_router(learn_router)
     app.include_router(patches_router)
+    app.include_router(users_router)
     app.include_router(health_router)
     return app
 
