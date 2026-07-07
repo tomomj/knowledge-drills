@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     firestore_database: str = "(default)"
     agent_mode: str = "local"
     agent_timeout_seconds: int = 60
+    agent_trace_exporter: Literal["none", "otlp", "gcp"] = "none"
+    agent_trace_service_name: str = "knowledge-drills-backend"
+    agent_trace_resource_attributes: str = ""
     cors_allowed_origins: str = (
         "http://127.0.0.1:5173,"
         "http://127.0.0.1:5174,"

@@ -12,11 +12,14 @@ from app.repositories.firestore_client import InMemoryFirestoreClient
 def _clear_auth_and_mode_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (
         "KNOWLEDGE_DRILLS_AGENT_MODE",
+        "KNOWLEDGE_DRILLS_AGENT_TRACE_EXPORTER",
         "KNOWLEDGE_DRILLS_STORAGE_MODE",
         "GOOGLE_API_KEY",
         "GOOGLE_GENAI_USE_VERTEXAI",
         "GOOGLE_CLOUD_PROJECT",
         "GOOGLE_CLOUD_LOCATION",
+        "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
     ):
         monkeypatch.delenv(name, raising=False)
 
