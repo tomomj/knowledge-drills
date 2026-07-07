@@ -38,10 +38,12 @@ class AnalysisService:
         self._patch_repository = patch_repository
         self._agent_client = agent_client
 
-    def start_analysis(self, drill_run_id: str) -> DrillRun:
+    def start_analysis(self, drill_run_id: str, owner_user_id: str | None = None) -> DrillRun:
         drill_run = self._drill_repository.get(drill_run_id)
         if drill_run is None:
             raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+        if owner_user_id is not None:
+            self._ensure_drill_owned_by(drill_run, owner_user_id)
         if (
             drill_run.status == DrillRunStatus.FAILED
             and drill_run.error_message != ANALYSIS_FAILED_MESSAGE
@@ -68,7 +70,11 @@ class AnalysisService:
         self._drill_repository.update(analyzing)
         return analyzing
 
-    def generate_patch_proposal(self, drill_run_id: str) -> DocumentPatch:
+    def generate_patch_proposal(
+        self,
+        drill_run_id: str,
+        owner_user_id: str | None = None,
+    ) -> DocumentPatch:
         if self._course_repository is None or self._agent_client is None:
             raise RuntimeError("AnalysisService dependencies are not configured")
 
@@ -77,7 +83,11 @@ class AnalysisService:
             raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
         course = self._course_repository.get(drill_run.course_id)
         if course is None:
-            raise AppError("course_not_found", "Course was not found.", status_code=404)
+            if owner_user_id is None:
+                raise AppError("course_not_found", "Course was not found.", status_code=404)
+            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+        if owner_user_id is not None and course.owner_user_id != owner_user_id:
+            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
 
         graded_answers = [
             answer
@@ -116,13 +126,13 @@ class AnalysisService:
             failure_signals=failure_analysis.failure_signals,
         )
 
-    def run_analysis(self, drill_run_id: str) -> DocumentPatch:
+    def run_analysis(self, drill_run_id: str, owner_user_id: str) -> DocumentPatch:
         if self._course_repository is None or self._patch_repository is None:
             raise RuntimeError("AnalysisService dependencies are not configured")
 
-        drill_run = self.start_analysis(drill_run_id)
+        drill_run = self.start_analysis(drill_run_id, owner_user_id)
         try:
-            patch = self.generate_patch_proposal(drill_run.id)
+            patch = self.generate_patch_proposal(drill_run.id, owner_user_id)
         except Exception:
             failed = drill_run.model_copy(
                 update={
@@ -148,3 +158,10 @@ class AnalysisService:
             )
         )
         return patch
+
+    def _ensure_drill_owned_by(self, drill_run: DrillRun, owner_user_id: str) -> None:
+        if self._course_repository is None:
+            raise RuntimeError("AnalysisService dependencies are not configured")
+        course = self._course_repository.get(drill_run.course_id)
+        if course is None or course.owner_user_id != owner_user_id:
+            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
