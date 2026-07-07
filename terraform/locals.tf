@@ -25,13 +25,19 @@ locals {
   backend_max_instances  = 3
   frontend_max_instances = 2
 
-  backend_storage_mode          = "firestore"
-  backend_agent_mode            = "adk"
-  backend_agent_model           = "gemini-2.5-flash-lite"
-  backend_agent_timeout_seconds = "120"
-  backend_vertex_location       = "us-central1"
-  firestore_database_id         = "${local.project_name}-${local.environment}"
-  firestore_location            = local.region
+  backend_storage_mode             = "firestore"
+  backend_agent_mode               = "adk"
+  backend_agent_model              = "gemini-2.5-flash-lite"
+  backend_agent_timeout_seconds    = "120"
+  backend_agent_trace_exporter     = "gcp"
+  backend_agent_trace_service_name = "${local.project_name}-${local.environment}-backend"
+  backend_agent_trace_resource_attributes = join(",", [
+    "deployment.environment=${local.environment}",
+    "service.namespace=${local.project_name}",
+  ])
+  backend_vertex_location = "us-central1"
+  firestore_database_id   = "${local.project_name}-${local.environment}"
+  firestore_location      = local.region
 
   frontend_cloud_run_origins = [
     google_cloud_run_v2_service.frontend.uri,
@@ -47,6 +53,7 @@ locals {
   required_services = toset([
     "aiplatform.googleapis.com",
     "artifactregistry.googleapis.com",
+    "cloudtrace.googleapis.com",
     "firestore.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
