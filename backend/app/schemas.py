@@ -31,6 +31,19 @@ class ErrorResponse(ApiModel):
     current_status: str | None = None
 
 
+class UserProfile(ApiModel):
+    uid: str
+    email: str | None = None
+    display_name: str | None = None
+    photo_url: str | None = None
+    created_at: str
+    last_login_at: str
+
+
+class CurrentUserResponse(UserProfile):
+    pass
+
+
 class DrillRunStatus(StrEnum):
     GENERATING = "generating"
     READY = "ready"

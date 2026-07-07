@@ -27,7 +27,7 @@
   - 完了条件: 管理 API から呼べる current user dependency が、成功時は検証済み `uid` を返し、失敗時は設計どおりの 401 / 500 を返す。
   - _Requirements: 2.1, 2.2, 2.3, 2.5, 7.1, 7.2, 7.3_
 
-- [ ] 2.2 user profile の保存と `/api/me` を実装する
+- [x] 2.2 user profile の保存と `/api/me` を実装する
   - `users/{uid}` に最小 profile を作成または更新し、`createdAt` と `lastLoginAt` を扱う。
   - `/api/me` は current user を必須にし、profile の存在ではなく検証済み token の `uid` を認可判断の根拠にする。
   - 完了条件: ログイン済み user で `/api/me` を呼ぶと profile が upsert され、response で現在ユーザーを確認できる。
