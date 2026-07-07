@@ -30,7 +30,9 @@ def _proposal_service(
     drill_repository = DrillRepository(client)
     answer_repository = AnswerRepository(client)
     patch_repository = PatchRepository(client)
-    course_repository.create(Course(id="course-1", title="講座", markdown="# Before\n"))
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
+    )
 
     def invoke(task_name: str, payload: dict[str, object]) -> dict[str, object]:
         invocations.append((task_name, payload))
@@ -199,7 +201,7 @@ def test_run_analysis_persists_patch_and_latest_state() -> None:
         answers={"q1": "回答"},
     )
 
-    patch = service.run_analysis("drill-1")
+    patch = service.run_analysis("drill-1", "owner-1")
 
     saved_patch = patch_repository.get(patch.id)
     saved_drill = drill_repository.get("drill-1")
@@ -221,7 +223,9 @@ def test_run_analysis_marks_drill_failed_when_generation_fails() -> None:
     drill_repository = DrillRepository(client)
     answer_repository = AnswerRepository(client)
     patch_repository = PatchRepository(client)
-    course_repository.create(Course(id="course-1", title="講座", markdown="# Before\n"))
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
+    )
     drill_repository.create(
         DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
     )
@@ -243,7 +247,7 @@ def test_run_analysis_marks_drill_failed_when_generation_fails() -> None:
     )
 
     with pytest.raises(AgentInvocationError):
-        service.run_analysis("drill-1")
+        service.run_analysis("drill-1", "owner-1")
 
     saved_drill = drill_repository.get("drill-1")
     saved_course = course_repository.get("course-1")

@@ -41,9 +41,9 @@ class DrillService:
         self._answer_repository = answer_repository
         self._share_token_repository = share_token_repository
 
-    def generate_drill(self, course_id: str) -> DrillRun:
+    def generate_drill(self, course_id: str, owner_user_id: str) -> DrillRun:
         course = self._course_repository.get(course_id)
-        if course is None:
+        if course is None or course.owner_user_id != owner_user_id:
             raise AppError("course_not_found", "Course was not found.", status_code=404)
 
         drill_run = DrillRun(
@@ -107,13 +107,14 @@ class DrillService:
         self,
         drill_run_id: str,
         *,
+        owner_user_id: str,
         course_id: str | None = None,
     ) -> DrillAdminResponse:
-        drill_run = self._drill_repository.get(drill_run_id)
-        if drill_run is None:
-            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
-        if course_id is not None and drill_run.course_id != course_id:
-            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+        drill_run = self._get_owned_drill_or_404(
+            drill_run_id,
+            owner_user_id=owner_user_id,
+            course_id=course_id,
+        )
 
         answer_count = self._stored_answer_count(drill_run)
         if answer_count is None:
@@ -142,13 +143,14 @@ class DrillService:
         self,
         drill_run_id: str,
         *,
+        owner_user_id: str,
         course_id: str | None = None,
     ) -> DrillAnswersResponse:
-        drill_run = self._drill_repository.get(drill_run_id)
-        if drill_run is None:
-            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
-        if course_id is not None and drill_run.course_id != course_id:
-            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+        drill_run = self._get_owned_drill_or_404(
+            drill_run_id,
+            owner_user_id=owner_user_id,
+            course_id=course_id,
+        )
         submissions = (
             self._answer_repository.list_by_drill_run(drill_run.id)
             if self._answer_repository is not None
@@ -170,9 +172,32 @@ class DrillService:
             ],
         )
 
-    def ensure_drill_belongs_to_course(self, drill_run_id: str, course_id: str) -> DrillRun:
+    def ensure_drill_belongs_to_course(
+        self,
+        drill_run_id: str,
+        course_id: str,
+        owner_user_id: str,
+    ) -> DrillRun:
+        return self._get_owned_drill_or_404(
+            drill_run_id,
+            owner_user_id=owner_user_id,
+            course_id=course_id,
+        )
+
+    def _get_owned_drill_or_404(
+        self,
+        drill_run_id: str,
+        *,
+        owner_user_id: str,
+        course_id: str | None = None,
+    ) -> DrillRun:
         drill_run = self._drill_repository.get(drill_run_id)
-        if drill_run is None or drill_run.course_id != course_id:
+        if drill_run is None:
+            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+        if course_id is not None and drill_run.course_id != course_id:
+            raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
+        course = self._course_repository.get(drill_run.course_id)
+        if course is None or course.owner_user_id != owner_user_id:
             raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
         return drill_run
 

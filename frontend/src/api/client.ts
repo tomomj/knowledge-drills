@@ -8,6 +8,7 @@ import type {
   CoursePayload,
   CourseRevisionDiff,
   CourseRevisionListResponse,
+  CurrentUser,
   DocumentPatch,
   DrillAdmin,
   DrillAnswersResponse,
@@ -16,6 +17,8 @@ import type {
   PatchDecisionPayload,
   SubmitAnswerResponse,
 } from './types'
+import { notifyAuthUnauthorized } from '../lib/authEvents'
+import { getAuthToken } from '../lib/authToken'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -32,15 +35,31 @@ export class ApiClientError extends Error {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = await buildHeaders(init?.headers)
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
+    headers,
   })
   const payload = (await response.json().catch(() => null)) as T | ApiError | null
   if (!response.ok) {
+    if (response.status === 401) {
+      notifyAuthUnauthorized()
+    }
     throw new ApiClientError(response.status, normalizeError(payload))
   }
   return payload as T
+}
+
+async function buildHeaders(initHeaders?: HeadersInit): Promise<Headers> {
+  const headers = new Headers(initHeaders)
+  if (!headers.has('content-type')) {
+    headers.set('content-type', 'application/json')
+  }
+  const authToken = await getAuthToken()
+  if (authToken) {
+    headers.set('authorization', `Bearer ${authToken}`)
+  }
+  return headers
 }
 
 function normalizeError(payload: unknown): ApiError {
@@ -60,6 +79,7 @@ function isApiError(payload: unknown): payload is ApiError {
 }
 
 export const api = {
+  getCurrentUser: () => requestJson<CurrentUser>('/api/me'),
   createCourse: (payload: CoursePayload) =>
     requestJson<CourseCreateResponse>('/api/courses', {
       method: 'POST',

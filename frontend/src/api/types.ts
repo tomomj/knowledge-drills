@@ -55,6 +55,15 @@ export type CourseCreateResponse = {
   courseId: string
 }
 
+export type CurrentUser = {
+  uid: string
+  email: string | null
+  displayName: string | null
+  photoUrl: string | null
+  createdAt: string
+  lastLoginAt: string
+}
+
 export type RubricItem = {
   criterion: string
   points: number
