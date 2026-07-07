@@ -91,7 +91,7 @@
   - _Requirements: 8.1_
   - _Boundary: Terraform_
 
-- [ ] 5.2 (P) CD workflow と frontend Docker build に Firebase frontend config を渡す
+- [x] 5.2 (P) CD workflow と frontend Docker build に Firebase frontend config を渡す
   - GitHub repository variables から `VITE_FIREBASE_*` を読み、欠落時は CD validation で失敗させる。
   - frontend image build に API base URL と Firebase build args を渡す。
   - 完了条件: CD workflow は Firebase frontend config 不足を deploy 前に検出し、設定済みの場合は frontend image build に値を渡せる。
