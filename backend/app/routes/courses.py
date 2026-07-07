@@ -83,7 +83,7 @@ async def diff_course_revisions(
     response_model=DrillGenerationStartResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def generate_drill(request: Request, course_id: str) -> DrillGenerationStartResponse:
+def generate_drill(request: Request, course_id: str) -> DrillGenerationStartResponse:
     drill_run = get_drill_service(request).generate_drill(course_id)
     return DrillGenerationStartResponse(
         drill_run_id=drill_run.id,
@@ -119,7 +119,7 @@ async def list_course_drill_answers(
     "/{course_id}/drill-runs/{drill_run_id}/analyze",
     response_model=AnalysisStartResponse,
 )
-async def analyze_course_drill(
+def analyze_course_drill(
     request: Request,
     course_id: str,
     drill_run_id: str,

@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 
 from app.clients.agent_runtime_client import AgentRuntimeClient
@@ -131,9 +133,24 @@ def _configured_service(
         drill_repository=drill_repository,
         answer_repository=answer_repository,
         share_token_repository=token_repository,
-        agent_client=AgentRuntimeClient(invoker=lambda _task_name, _payload: agent_response),
+        agent_client=AgentRuntimeClient(
+            invoker=lambda _task_name, payload: _agent_response_for_question(
+                agent_response,
+                payload,
+            )
+        ),
     )
     return service, answer_repository
+
+
+def _agent_response_for_question(
+    agent_response: dict[str, object],
+    payload: dict[str, object],
+) -> dict[str, object]:
+    if "questionId" not in agent_response:
+        return agent_response
+    question = cast(dict[str, object], payload["question"])
+    return {**agent_response, "questionId": question["id"]}
 
 
 def test_submit_answer_grades_and_persists_results() -> None:

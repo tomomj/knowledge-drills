@@ -43,8 +43,21 @@ def _configure_ready_drill_and_answer_service(
         drill_repository=app.state.drill_repository,
         answer_repository=app.state.answer_repository,
         share_token_repository=app.state.share_token_repository,
-        agent_client=AgentRuntimeClient(invoker=lambda _task_name, _payload: agent_response),
+        agent_client=AgentRuntimeClient(
+            invoker=lambda _task_name, payload: _agent_response_for_question(
+                agent_response,
+                payload,
+            )
+        ),
     )
+
+
+def _agent_response_for_question(
+    agent_response: dict[str, object],
+    payload: dict[str, object],
+) -> dict[str, object]:
+    question = cast(dict[str, object], payload["question"])
+    return {**agent_response, "questionId": question["id"]}
 
 
 def test_submit_answer_returns_minimal_feedback_without_private_fields(client: TestClient) -> None:

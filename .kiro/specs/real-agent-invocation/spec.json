@@ -1,0 +1,22 @@
+{
+  "feature_name": "real-agent-invocation",
+  "created_at": "2026-07-06T07:22:26Z",
+  "updated_at": "2026-07-06T09:20:00Z",
+  "language": "ja",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}

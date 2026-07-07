@@ -6,6 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Knowledge Drills API"
     environment: str = "dev"
+    agent_mode: str = "local"
+    agent_timeout_seconds: int = 60
     cors_allowed_origins: str = (
         "http://127.0.0.1:5173,"
         "http://127.0.0.1:5174,"

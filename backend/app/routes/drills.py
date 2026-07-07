@@ -23,5 +23,5 @@ async def get_drill_admin(request: Request, drill_run_id: str) -> DrillAdminResp
 
 
 @router.post("/{drill_run_id}/analysis", response_model=DocumentPatch)
-async def analyze_drill(request: Request, drill_run_id: str) -> DocumentPatch:
+def analyze_drill(request: Request, drill_run_id: str) -> DocumentPatch:
     return get_analysis_service(request).run_analysis(drill_run_id)
