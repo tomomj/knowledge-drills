@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agent ADK"
+  short_description: "Google ADK agent と eval の運用規約"
+  default_prompt: "$agent-adk を使って Knowledge Drills の ADK agent または eval を実装・レビューする。"

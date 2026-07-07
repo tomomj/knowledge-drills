@@ -118,7 +118,7 @@ Python 3.12+ 構文で失敗する。残ってしまった場合は `uv sync --f
 cd agent
 
 # 認証は Vertex AI が正道（API キー不要。プロジェクトのモデル実行基盤に一致）
-gcloud auth application-default login   # ローカルの場合。CI では cd.yml の WIF 認証をそのまま利用
+gcloud auth application-default login   # ローカルの場合。CI では agent-eval.yml の eval 専用 WIF 認証を利用
 cp .env.example .env
 # .env の GOOGLE_CLOUD_PROJECT を、Vertex AI で gemini-2.5-flash-lite を
 # us-central1 から実行できるプロジェクトに変更する
@@ -128,9 +128,15 @@ python scripts/run_adk_evals.py
 ```
 
 通常の Agent CI は認証情報なしで `tests/test_evals_assets.py` によるアセット構造検証まで行う。
-実モデル eval は `.github/workflows/agent-eval.yml` が `main` への `agent/**` 差分 push 時に Vertex AI 認証付きで
-実行する。`adk eval` は eval 失敗時も exit code 0 を返すことがあるため、自動化では必ず
+実モデル eval は `.github/workflows/agent-eval.yml` が `agent/**` 差分時に Vertex AI 認証付きで
+実行する。認証は Terraform が作成する eval 専用 service account と WIF provider を使い、
+repository variables の `GCP_AGENT_EVAL_WORKLOAD_IDENTITY_PROVIDER` と
+`GCP_AGENT_EVAL_SERVICE_ACCOUNT` から参照する。`adk eval` は eval 失敗時も exit code 0 を
+返すことがあるため、自動化では必ず
 結果 JSON を読む `scripts/run_adk_evals.py` を経由する。
+この runner は Vertex AI の 429 / `RESOURCE_EXHAUSTED` を避けるため、evalset 内の
+case を `evalset.json:eval_id` 指定で1件ずつ直列実行する。一時的な quota / rate limit
+エラーだけは backoff 付きで再試行する。
 
 ## 閾値の校正記録
 

@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 AGENT_DIR = Path(__file__).resolve().parents[1]
@@ -34,6 +35,15 @@ EVALS: dict[str, tuple[str, str, str]] = {
 
 PASS_STATUS = 1
 VERTEX_TRUE_VALUES = {"1", "true", "yes"}
+TRANSIENT_ERROR_MARKERS = (
+    "RESOURCE_EXHAUSTED",
+    "429",
+    "quota",
+    "rate limit",
+    "temporarily unavailable",
+    "UNAVAILABLE",
+    "DEADLINE_EXCEEDED",
+)
 
 
 def _load_env_file(path: Path) -> None:
@@ -77,6 +87,36 @@ def _latest_result(history_dir: Path, before: set[Path]) -> Path:
     return all_results[-1]
 
 
+def _eval_case_ids(evalset_path: Path) -> list[str]:
+    payload = json.loads(evalset_path.read_text(encoding="utf-8"))
+    return [case["eval_id"] for case in payload["eval_cases"]]
+
+
+def _is_transient_output(output: str) -> bool:
+    normalized = output.lower()
+    return any(marker.lower() in normalized for marker in TRANSIENT_ERROR_MARKERS)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    try:
+        return max(1, int(raw_value))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+
+
+def _env_float(name: str, default: float) -> float:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    try:
+        return max(0.0, float(raw_value))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a number") from exc
+
+
 def _summarize_result(eval_name: str, result_path: Path) -> bool:
     payload = json.loads(result_path.read_text(encoding="utf-8"))
     case_results = payload.get("eval_case_results", [])
@@ -93,33 +133,101 @@ def _summarize_result(eval_name: str, result_path: Path) -> bool:
     return failed == 0
 
 
-def _run_eval(eval_name: str) -> bool:
-    eval_dir, evalset, config = EVALS[eval_name]
+def _run_eval_case(
+    eval_name: str,
+    eval_dir: str,
+    evalset: str,
+    config: str,
+    eval_case_id: str,
+    max_attempts: int,
+    retry_base_delay_seconds: float,
+) -> bool:
     history_dir = AGENT_DIR / eval_dir / ".adk" / "eval_history"
     history_dir.mkdir(parents=True, exist_ok=True)
-    before = set(history_dir.glob("*.evalset_result.json"))
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(AGENT_DIR)
-    command = [
-        "uv",
-        "run",
-        "--isolated",
-        "--frozen",
-        "--group",
-        "eval",
-        "adk",
-        "eval",
-        eval_dir,
-        evalset,
-        "--config_file_path",
-        config,
-        "--print_detailed_results",
-    ]
-    completed = subprocess.run(command, cwd=AGENT_DIR, env=env, check=False)
-    result_path = _latest_result(history_dir, before)
-    result_ok = _summarize_result(eval_name, result_path)
-    return completed.returncode == 0 and result_ok
+
+    for attempt in range(1, max_attempts + 1):
+        print(f"running {eval_name}:{eval_case_id} (attempt {attempt}/{max_attempts})...")
+        before = set(history_dir.glob("*.evalset_result.json"))
+        command = [
+            "uv",
+            "run",
+            "--isolated",
+            "--frozen",
+            "--group",
+            "eval",
+            "adk",
+            "eval",
+            eval_dir,
+            f"{evalset}:{eval_case_id}",
+            "--config_file_path",
+            config,
+            "--print_detailed_results",
+        ]
+        completed = subprocess.run(
+            command,
+            cwd=AGENT_DIR,
+            env=env,
+            check=False,
+            stderr=subprocess.STDOUT,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        if completed.stdout:
+            print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
+
+        try:
+            result_path = _latest_result(history_dir, before)
+            result_ok = _summarize_result(eval_name, result_path)
+        except RuntimeError as exc:
+            print(f"{eval_name}:{eval_case_id}: {exc}", file=sys.stderr)
+            result_ok = False
+
+        if completed.returncode == 0 and result_ok:
+            return True
+
+        should_retry = _is_transient_output(completed.stdout or "")
+        if not should_retry or attempt == max_attempts:
+            return False
+
+        delay_seconds = retry_base_delay_seconds * attempt
+        print(
+            f"{eval_name}:{eval_case_id}: transient model error detected; "
+            f"retrying in {delay_seconds:g}s..."
+        )
+        time.sleep(delay_seconds)
+
+    return False
+
+
+def _run_eval(eval_name: str) -> bool:
+    eval_dir, evalset, config = EVALS[eval_name]
+    eval_case_ids = _eval_case_ids(AGENT_DIR / evalset)
+    max_attempts = _env_int("ADK_EVAL_MAX_ATTEMPTS", 3)
+    case_delay_seconds = _env_float("ADK_EVAL_CASE_DELAY_SECONDS", 5.0)
+    retry_base_delay_seconds = _env_float("ADK_EVAL_RETRY_BASE_DELAY_SECONDS", 20.0)
+
+    all_ok = True
+    for index, eval_case_id in enumerate(eval_case_ids):
+        all_ok = (
+            _run_eval_case(
+                eval_name=eval_name,
+                eval_dir=eval_dir,
+                evalset=evalset,
+                config=config,
+                eval_case_id=eval_case_id,
+                max_attempts=max_attempts,
+                retry_base_delay_seconds=retry_base_delay_seconds,
+            )
+            and all_ok
+        )
+        if index < len(eval_case_ids) - 1 and case_delay_seconds:
+            print(f"waiting {case_delay_seconds:g}s before the next eval case...")
+            time.sleep(case_delay_seconds)
+
+    return all_ok
 
 
 def main() -> int:

@@ -51,6 +51,16 @@ resource "google_service_account" "deploy" {
   ]
 }
 
+resource "google_service_account" "agent_eval" {
+  project      = local.project_id
+  account_id   = local.agent_eval_service_account_id
+  display_name = "Knowledge Drills GitHub Actions agent eval ${local.environment}"
+
+  depends_on = [
+    google_project_service.required["iam.googleapis.com"],
+  ]
+}
+
 resource "google_firestore_database" "app" {
   project                     = local.project_id
   name                        = local.firestore_database_id
@@ -91,6 +101,33 @@ resource "google_iam_workload_identity_pool_provider" "github_actions" {
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
     "attribute.actor"      = "assertion.actor"
+    "attribute.repository" = "assertion.repository"
+    "attribute.ref"        = "assertion.ref"
+    "attribute.workflow"   = "assertion.workflow"
+  }
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
+resource "google_iam_workload_identity_pool_provider" "github_actions_agent_eval" {
+  project                            = local.project_id
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = local.github_eval_wif_provider_id
+  display_name                       = "GitHub Actions Agent Eval"
+  description                        = "Trust GitHub Actions OIDC tokens for Agent Eval only."
+  disabled                           = false
+  attribute_condition = join(" && ", [
+    "assertion.repository == \"${local.github_repository}\"",
+    "assertion.workflow == \"Agent Eval\"",
+    "(assertion.event_name == \"pull_request\" || assertion.event_name == \"workflow_dispatch\")",
+  ])
+
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.actor"      = "assertion.actor"
+    "attribute.event_name" = "assertion.event_name"
     "attribute.repository" = "assertion.repository"
     "attribute.ref"        = "assertion.ref"
     "attribute.workflow"   = "assertion.workflow"
@@ -279,6 +316,16 @@ resource "google_project_iam_member" "backend_vertex_ai_user" {
   ]
 }
 
+resource "google_project_iam_member" "agent_eval_vertex_ai_user" {
+  project = local.project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.agent_eval.email}"
+
+  depends_on = [
+    google_project_service.required["aiplatform.googleapis.com"],
+  ]
+}
+
 resource "google_project_iam_member" "backend_firestore_user" {
   project = local.project_id
   role    = "roles/datastore.user"
@@ -315,6 +362,12 @@ resource "google_service_account_iam_member" "deploy_workload_identity_user" {
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${local.github_repository}"
 }
 
+resource "google_service_account_iam_member" "agent_eval_workload_identity_user" {
+  service_account_id = google_service_account.agent_eval.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${local.github_repository}"
+}
+
 output "frontend_url" {
   value = google_cloud_run_v2_service.frontend.uri
 }
@@ -333,4 +386,12 @@ output "github_actions_service_account" {
 
 output "github_actions_workload_identity_provider" {
   value = google_iam_workload_identity_pool_provider.github_actions.name
+}
+
+output "github_actions_agent_eval_service_account" {
+  value = google_service_account.agent_eval.email
+}
+
+output "github_actions_agent_eval_workload_identity_provider" {
+  value = google_iam_workload_identity_pool_provider.github_actions_agent_eval.name
 }

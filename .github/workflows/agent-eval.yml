@@ -1,9 +1,7 @@
 name: Agent Eval
 
 on:
-  push:
-    branches:
-      - main
+  pull_request:
     paths:
       - "agent/**"
       - ".github/workflows/agent-eval.yml"
@@ -22,8 +20,8 @@ env:
   GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT_ID }}
   GOOGLE_CLOUD_LOCATION: "us-central1"
   KNOWLEDGE_DRILL_AGENT_MODEL: "gemini-2.5-flash-lite"
-  GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-  GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+  GCP_AGENT_EVAL_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_AGENT_EVAL_WORKLOAD_IDENTITY_PROVIDER }}
+  GCP_AGENT_EVAL_SERVICE_ACCOUNT: ${{ vars.GCP_AGENT_EVAL_SERVICE_ACCOUNT }}
 
 jobs:
   agent-eval:
@@ -44,8 +42,8 @@ jobs:
           required_vars=(
             GOOGLE_CLOUD_PROJECT
             GOOGLE_CLOUD_LOCATION
-            GCP_WORKLOAD_IDENTITY_PROVIDER
-            GCP_SERVICE_ACCOUNT
+            GCP_AGENT_EVAL_WORKLOAD_IDENTITY_PROVIDER
+            GCP_AGENT_EVAL_SERVICE_ACCOUNT
           )
 
           for var_name in "${required_vars[@]}"; do
@@ -59,8 +57,8 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           project_id: ${{ env.GOOGLE_CLOUD_PROJECT }}
-          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.GCP_AGENT_EVAL_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_AGENT_EVAL_SERVICE_ACCOUNT }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
