@@ -13,7 +13,7 @@
   - 完了条件: frontend build が Firebase env を受け取れる状態になり、backend secret や Admin credentials は frontend に含まれない。
   - _Requirements: 1.4, 8.2_
 
-- [ ] 1.3 認証テスト用の差し替え境界を整える
+- [x] 1.3 認証テスト用の差し替え境界を整える
   - backend route / service tests で fake auth client を注入できる前提を作る。
   - frontend tests で Firebase 実接続なしに auth state と ID token を mock できる前提を作る。
   - 完了条件: 認証関連テストが外部 Firebase project や Google ログイン画面に依存せずに記述できる。
