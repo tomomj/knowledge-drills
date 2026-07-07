@@ -118,7 +118,7 @@
   - 完了条件: 管理データの cross-owner access がすべて遮断され、learner 体験の既存回帰がない。
   - _Requirements: 2.4, 4.1, 4.2, 4.3, 4.4, 4.5, 5.1, 5.2, 5.3, 5.4, 6.1, 6.2, 6.3_
 
-- [ ] 6.3 frontend auth と routing の tests を追加する
+- [x] 6.3 frontend auth と routing の tests を追加する
   - auth state mock で未ログイン、ログイン成功、ログアウト、`/api/me` 失敗、401 後の再ログイン導線を検証する。
   - API client の Authorization header と `/drills/:shareToken` の公開表示を検証する。
   - 完了条件: Firebase 実接続なしで Google ログイン導線、管理 route guard、learner route 例外が自動テストで確認できる。
