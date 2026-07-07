@@ -134,6 +134,9 @@ repository variables の `GCP_AGENT_EVAL_WORKLOAD_IDENTITY_PROVIDER` と
 `GCP_AGENT_EVAL_SERVICE_ACCOUNT` から参照する。`adk eval` は eval 失敗時も exit code 0 を
 返すことがあるため、自動化では必ず
 結果 JSON を読む `scripts/run_adk_evals.py` を経由する。
+この runner は Vertex AI の 429 / `RESOURCE_EXHAUSTED` を避けるため、evalset 内の
+case を `evalset.json:eval_id` 指定で1件ずつ直列実行する。一時的な quota / rate limit
+エラーだけは backoff 付きで再試行する。
 
 ## 閾値の校正記録
 
