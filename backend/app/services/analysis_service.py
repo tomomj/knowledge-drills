@@ -56,11 +56,8 @@ class AnalysisService:
         }:
             raise AppError("drill_not_analyzable", "Drill run is not analyzable.", status_code=409)
 
-        graded_answers = [
-            answer
-            for answer in self._answer_repository.list_by_drill_run(drill_run.id)
-            if answer.status == AnswerStatus.GRADED
-        ]
+        answers = self._answer_repository.list_by_drill_run(drill_run.id)
+        graded_answers = [answer for answer in answers if answer.status == AnswerStatus.GRADED]
         if not graded_answers:
             raise AppError("no_graded_answers", "At least one graded answer is required.")
 
@@ -68,6 +65,13 @@ class AnalysisService:
             update={"status": DrillRunStatus.ANALYZING, "error_message": None}
         )
         self._drill_repository.update(analyzing)
+        if self._course_repository is not None:
+            self._course_repository.update_summary(
+                drill_run.course_id,
+                latest_drill_run_id=drill_run.id,
+                latest_drill_status=analyzing.status,
+                answer_count=len(answers),
+            )
         return analyzing
 
     def generate_patch_proposal(
@@ -141,6 +145,11 @@ class AnalysisService:
                 }
             )
             self._drill_repository.update(failed)
+            self._course_repository.update_summary(
+                failed.course_id,
+                latest_drill_run_id=failed.id,
+                latest_drill_status=failed.status,
+            )
             raise
 
         self._patch_repository.create(patch)
@@ -149,13 +158,12 @@ class AnalysisService:
         course = self._course_repository.get(drill_run.course_id)
         if course is None:
             raise AppError("course_not_found", "Course was not found.", status_code=404)
-        self._course_repository.update(
-            course.model_copy(
-                update={
-                    "latest_patch_id": patch.id,
-                    "latest_drill_run_id": drill_run.id,
-                }
-            )
+        self._course_repository.update_summary(
+            course.id,
+            latest_drill_run_id=drill_run.id,
+            latest_drill_status=analyzed.status,
+            latest_patch_id=patch.id,
+            latest_patch_status=patch.status,
         )
         return patch
 

@@ -212,7 +212,9 @@ def test_run_analysis_persists_patch_and_latest_state() -> None:
     assert saved_patch.status == "proposed"
     assert saved_drill.status == "analyzed"
     assert saved_course.latest_patch_id == patch.id
+    assert saved_course.latest_patch_status == "proposed"
     assert saved_course.latest_drill_run_id == "drill-1"
+    assert saved_course.latest_drill_status == "analyzed"
 
 
 def test_run_analysis_marks_drill_failed_when_generation_fails() -> None:
@@ -248,6 +250,10 @@ def test_run_analysis_marks_drill_failed_when_generation_fails() -> None:
         service.run_analysis("drill-1", "owner-1")
 
     saved_drill = drill_repository.get("drill-1")
+    saved_course = course_repository.get("course-1")
     assert saved_drill is not None
+    assert saved_course is not None
     assert saved_drill.status == "failed"
     assert saved_drill.error_message == "analysis failed"
+    assert saved_course.latest_drill_run_id == "drill-1"
+    assert saved_course.latest_drill_status == "failed"

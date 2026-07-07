@@ -44,6 +44,10 @@ def test_get_patch_marks_proposed_patch_stale_when_course_changed() -> None:
     assert patch.status == "stale"
     assert saved is not None
     assert saved.status == "stale"
+    course = course_repository.get("course-1")
+    assert course is not None
+    assert course.latest_patch_id == "patch-1"
+    assert course.latest_patch_status == "stale"
 
 
 def test_apply_patch_updates_course_and_patch_in_transaction() -> None:
@@ -59,6 +63,8 @@ def test_apply_patch_updates_course_and_patch_in_transaction() -> None:
     assert course is not None
     assert course.markdown == "# After"
     assert course.version == 2
+    assert course.latest_patch_id == "patch-1"
+    assert course.latest_patch_status == "applied"
     assert patch.status == "applied"
     assert patch.owner_feedback == "LGTM"
 
@@ -75,6 +81,8 @@ def test_reject_patch_saves_feedback_without_changing_course() -> None:
     course = course_repository.get("course-1")
     assert course is not None
     assert course.markdown == "# Before"
+    assert course.latest_patch_id == "patch-1"
+    assert course.latest_patch_status == "rejected"
     assert patch.status == "rejected"
     assert patch.owner_feedback == "不要"
 

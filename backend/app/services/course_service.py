@@ -141,20 +141,39 @@ class CourseService:
         return course
 
     def _summarize(self, course: Course) -> CourseSummary:
-        drill_status = None
-        answer_count = 0
-        if course.latest_drill_run_id and self._drill_repository is not None:
+        drill_status = course.latest_drill_status
+        answer_count = course.answer_count
+        patch_status = course.latest_patch_status
+
+        if (
+            course.latest_drill_run_id
+            and drill_status is None
+            and self._drill_repository is not None
+        ):
             drill_run = self._drill_repository.get(course.latest_drill_run_id)
             if drill_run is not None:
                 drill_status = drill_run.status
                 if self._answer_repository is not None:
                     answer_count = len(self._answer_repository.list_by_drill_run(drill_run.id))
 
-        patch_status = None
-        if course.latest_patch_id and self._patch_repository is not None:
+        if course.latest_patch_id and patch_status is None and self._patch_repository is not None:
             patch = self._patch_repository.get(course.latest_patch_id)
             if patch is not None:
                 patch_status = patch.status
+
+        if (
+            drill_status != course.latest_drill_status
+            or answer_count != course.answer_count
+            or patch_status != course.latest_patch_status
+        ):
+            self._course_repository.update_summary(
+                course.id,
+                latest_drill_run_id=course.latest_drill_run_id,
+                latest_drill_status=drill_status,
+                answer_count=answer_count,
+                latest_patch_id=course.latest_patch_id,
+                latest_patch_status=patch_status,
+            )
 
         return CourseSummary(
             id=course.id,

@@ -79,7 +79,10 @@ class Course(ApiModel):
     version: int = 1
     updated_at: str | None = None
     latest_drill_run_id: str | None = None
+    latest_drill_status: DrillRunStatus | None = None
+    answer_count: int = 0
     latest_patch_id: str | None = None
+    latest_patch_status: PatchStatus | None = None
 
 
 class CourseCreateRequest(ApiModel):
