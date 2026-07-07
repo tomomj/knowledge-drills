@@ -111,7 +111,7 @@
   - 完了条件: 外部 Firebase 接続なしで認証境界の成功・失敗パターンがすべて自動テストで確認できる。
   - _Requirements: 2.1, 2.2, 2.3, 2.5, 3.1, 3.2, 3.3, 7.1, 7.2, 7.3_
 
-- [ ] 6.2 backend owner scope と learner 公開 API の integration tests を追加する
+- [x] 6.2 backend owner scope と learner 公開 API の integration tests を追加する
   - Course 作成・一覧・詳細・更新・履歴・差分が owner 単位で制限されることを検証する。
   - ownerless Course と他 owner の Course は 404 `course_not_found`、他 owner の drill run は 404 `drill_run_not_found`、他 owner の patch は 404 `patch_not_found` になることを検証する。
   - learner share URL API と legacy learner API は token なしで成功し、無効 token は `invalid_share_token`、response は `rubric` / `idealAnswer` なしであることを検証する。
