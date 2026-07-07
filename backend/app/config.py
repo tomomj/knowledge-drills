@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     firestore_database: str = "(default)"
     agent_mode: str = "local"
     agent_timeout_seconds: int = 60
+    auth_mode: Literal["none", "firebase"] = "none"
+    firebase_project_id: str | None = None
+    local_auth_user_id: str = "local-owner"
+    local_auth_email: str = "local-owner@example.test"
     cors_allowed_origins: str = (
         "http://127.0.0.1:5173,"
         "http://127.0.0.1:5174,"
@@ -29,6 +33,15 @@ class Settings(BaseSettings):
             for origin in self.cors_allowed_origins.split(",")
             if origin.strip()
         ]
+
+    @property
+    def auth_configuration_error(self) -> str | None:
+        if self.auth_mode == "firebase" and not self.firebase_project_id:
+            return (
+                "KNOWLEDGE_DRILLS_FIREBASE_PROJECT_ID is required when "
+                "KNOWLEDGE_DRILLS_AUTH_MODE=firebase"
+            )
+        return None
 
 
 @lru_cache
