@@ -1,0 +1,24 @@
+{
+  "criteria": {
+    "rubric_based_final_response_quality_v1": {
+      "threshold": 0.6,
+      "judge_model_options": {
+        "judge_model": "gemini-2.5-flash-lite"
+      },
+      "rubrics": [
+        {
+          "rubric_id": "dp_minimal_change",
+          "rubric_content": {
+            "text_property": "patchedMarkdown の変更が failureSignals の targetSections に対応する最小限に留まり、無関係なセクションの内容や見出し構造を書き換えていない。"
+          }
+        },
+        {
+          "rubric_id": "dp_no_invented_rules",
+          "rubric_content": {
+            "text_property": "講座に存在しない社内ルールや数値を新しく作っておらず、既存の記述から安全に明確化できる範囲で修正し、不確かな内容は riskNotes に明示している。"
+          }
+        }
+      ]
+    }
+  }
+}

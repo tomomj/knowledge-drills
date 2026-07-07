@@ -1,0 +1,21 @@
+{
+  "eval_set_id": "document_patch_minimal_grounded",
+  "eval_cases": [
+    {
+      "eval_id": "dp_prior_approval_gap",
+      "conversation": [
+        {
+          "invocation_id": "dp_prior_approval_inv",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "{\"courseMarkdown\":\"# 経費精算の判断基準\\n\\n## 事前承認\\n1万円以上の物品購入は、購入前に部門長の事前承認が必要です。1万円未満は事後精算で構いません。\\n\\n## 交際費\\n社外の関係者との会食は、1人あたり5,000円までは交際費として精算できます。\\n1人あたり5,000円を超える場合は、事前に部門長の承認が必要です。\\n\\n## 領収書\\nすべての精算には領収書が必要です。領収書を紛失した場合は、支払証明書を添付して経理部に提出します。\\n\",\"failureSignals\":[{\"id\":\"fs_prior_approval_gap\",\"title\":\"交際費の上限超過時に、事前承認という対応が抜ける傾向\",\"severity\":\"medium\",\"evidence\":[\"4人中3人が、上限超過の識別はできたが事前に部門長の承認を得る対応に言及しなかった\"],\"likelyCause\":\"上限額の数字は印象に残るが、超過時の手続きが読み飛ばされやすい\",\"suspectedDocumentGap\":\"交際費セクションで超過時の手続きが1文だけで説明されており、具体的な進め方の例がない\",\"targetSections\":[\"交際費\"],\"recommendedChange\":\"交際費セクションに、上限を超える場合の事前承認の進め方の例を追記する\",\"sampleSize\":4,\"confidenceNote\":\"4件の回答に基づく傾向のため、追加回答で傾向を確認してください。\"}]}"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
