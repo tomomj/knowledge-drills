@@ -1,7 +1,8 @@
 locals {
-  project_id  = "onyx-harmony-457309-p9"
-  region      = "asia-northeast1"
-  environment = "prd"
+  project_id     = "onyx-harmony-457309-p9"
+  project_number = "96923902284"
+  region         = "asia-northeast1"
+  environment    = "prd"
 
   project_name = "knowledge-drills"
 
@@ -21,6 +22,11 @@ locals {
 
   backend_max_instances  = 3
   frontend_max_instances = 2
+
+  frontend_cloud_run_origins = [
+    google_cloud_run_v2_service.frontend.uri,
+    "https://${local.frontend_service_name}-${local.project_number}.${local.region}.run.app",
+  ]
 
   labels = {
     app         = local.project_name
