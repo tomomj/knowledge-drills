@@ -37,10 +37,15 @@ class CourseService:
         self._answer_repository = answer_repository
         self._patch_repository = patch_repository
 
-    def create_course(self, request: CourseCreateRequest) -> CourseDetailResponse:
+    def create_course(
+        self,
+        request: CourseCreateRequest,
+        owner_user_id: str,
+    ) -> CourseDetailResponse:
         self._validate_title_and_markdown(request.title, request.markdown)
         course = Course(
             id=uuid4().hex,
+            owner_user_id=owner_user_id,
             title=request.title,
             markdown=request.markdown,
             version=1,
@@ -72,8 +77,11 @@ class CourseService:
         self._course_repository.update(updated)
         return CourseDetailResponse.model_validate(updated.model_dump())
 
-    def list_courses(self) -> CourseListResponse:
-        summaries = [self._summarize(course) for course in self._course_repository.list_all()]
+    def list_courses(self, owner_user_id: str) -> CourseListResponse:
+        summaries = [
+            self._summarize(course)
+            for course in self._course_repository.list_by_owner(owner_user_id)
+        ]
         # updatedAt 降順、updatedAt なしは末尾
         summaries.sort(key=lambda summary: summary.updated_at or "", reverse=True)
         return CourseListResponse(courses=summaries)

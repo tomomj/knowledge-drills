@@ -41,7 +41,7 @@
   - _Requirements: 2.1, 2.2, 6.1, 6.2_
 
 - [ ] 3. Backend owner scope: Course / Drill / Analysis / Patch を所有者単位に制限する
-- [ ] 3.1 Course schema と repository を owner 対応にする
+- [x] 3.1 Course schema と repository を owner 対応にする
   - Course に nullable な `ownerUserId` を保存できるようにし、既存 ownerless document が validation error で 500 にならないようにする。
   - 新規 Course 作成では request body の `ownerUserId` を信頼せず、現在ユーザーの `uid` を保存する。
   - owner-scoped list query を追加し、管理 API の一覧では自分の Course だけを返す。
