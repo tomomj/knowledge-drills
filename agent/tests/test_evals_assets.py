@@ -2,7 +2,7 @@
 
 Real-model execution happens only via `uv run --group eval adk eval ...`;
 these tests only verify the assets stay loadable and within the agreed
-budget of at most two eval criteria per agent.
+budget of one integrated LLM-judge rubric per agent.
 """
 
 import importlib
@@ -42,11 +42,10 @@ def test_evalset_files_are_wellformed() -> None:
                 json.loads(text)  # input must be a JSON string (input_schema enforcement)
 
 
-def test_configs_stay_within_two_criteria_per_agent() -> None:
+def test_configs_use_one_integrated_rubric_per_agent() -> None:
     for name in AGENT_EVAL_DIRS:
         config = json.loads((EVALS_DIR / name / "test_config.json").read_text("utf-8"))
         criteria = config["criteria"]
-        assert 1 <= len(criteria) <= 2, f"{name}: 評価項目は各エージェント最大2つ"
-        rubric_criterion = criteria.get("rubric_based_final_response_quality_v1")
-        if rubric_criterion is not None:
-            assert rubric_criterion["rubrics"], f"{name}: rubric メトリクスには rubrics が必須"
+        assert list(criteria) == ["rubric_based_final_response_quality_v1"]
+        rubrics = criteria["rubric_based_final_response_quality_v1"]["rubrics"]
+        assert len(rubrics) == 1, f"{name}: LLM judge rubric は統合して1つにする"
