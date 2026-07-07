@@ -105,7 +105,7 @@
   - _Requirements: 4.5, 8.4_
 
 - [ ] 6. Validation: 回帰テストと境界テストを追加・実行する
-- [ ] 6.1 backend 認証境界の unit / route tests を追加する
+- [x] 6.1 backend 認証境界の unit / route tests を追加する
   - `auth_mode=none` の token 欠落時に local user として成功すること、Firebase mode project id 不足、`auth_mode=firebase` の token 欠落、形式不正、不正 token、fake auth client 成功を検証する。
   - `/api/me` の user profile upsert と、profile の存在を認可判断に使わないことを検証する。
   - 完了条件: 外部 Firebase 接続なしで認証境界の成功・失敗パターンがすべて自動テストで確認できる。
