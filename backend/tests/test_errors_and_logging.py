@@ -1,12 +1,16 @@
 import logging
+from typing import cast
 
 from _pytest.logging import LogCaptureFixture
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
+from app.clients.agent_runtime_client import AgentInvocationError, AgentRuntimeClient
 from app.errors import AppError
 from app.main import create_app
+from app.services.drill_service import DrillService
+from app.services.share_token_service import ShareTokenService
 
 
 class Payload(BaseModel):
@@ -52,6 +56,46 @@ def test_system_error_response_is_distinct_from_app_error() -> None:
     assert app_response.json()["code"] == "course_not_found"
     assert system_response.status_code == 500
     assert system_response.json()["code"] == "internal_server_error"
+
+
+def test_agent_invocation_error_returns_502_without_payload_and_app_continues(
+    caplog: LogCaptureFixture,
+) -> None:
+    client = _client_with_test_routes()
+    app = cast(FastAPI, client.app)
+    sentinel = "SECRET_COURSE_BODY_d5f1"
+
+    def failing_invoker(_task_name: str, _payload: dict[str, object]) -> dict[str, object]:
+        raise AgentInvocationError(f"provider failed near {sentinel}")
+
+    app.state.drill_service = DrillService(
+        course_repository=app.state.course_repository,
+        drill_repository=app.state.drill_repository,
+        share_token_service=ShareTokenService(
+            drill_repository=app.state.drill_repository,
+            share_token_repository=app.state.share_token_repository,
+        ),
+        agent_client=AgentRuntimeClient(invoker=failing_invoker),
+        answer_repository=app.state.answer_repository,
+        share_token_repository=app.state.share_token_repository,
+    )
+    course_response = client.post(
+        "/api/courses",
+        json={"title": "講座", "markdown": sentinel},
+    )
+    course_id = course_response.json()["courseId"]
+
+    with caplog.at_level(logging.INFO, logger="app.error"):
+        response = client.post(f"/api/courses/{course_id}/drill-runs")
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "agent_invocation_failed"
+    assert sentinel not in str(response.json())
+    assert sentinel not in caplog.text
+
+    health_response = client.get("/health")
+    assert health_response.status_code == 200
+    assert health_response.json()["status"] == "ok"
 
 
 def test_access_log_includes_request_and_resource_ids_without_body(

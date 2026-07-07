@@ -35,7 +35,12 @@ class AgentRuntimeClient:
         return self._invoke_typed("generate_drill", request, DrillGenerationResponse)
 
     def grade_answer(self, request: GradingRequest) -> GradingResponse:
-        return self._invoke_typed("grade_answer", request, GradingResponse)
+        return self._invoke_typed(
+            "grade_answer",
+            request,
+            GradingResponse,
+            post_validate=lambda response: self._validate_grading_response(request, response),
+        )
 
     def analyze_failures(self, request: FailureAnalysisRequest) -> FailureAnalysisResponse:
         return self._invoke_typed("analyze_failures", request, FailureAnalysisResponse)
@@ -48,21 +53,17 @@ class AgentRuntimeClient:
         task_name: str,
         request: BaseModel,
         response_model: type[ResponseT],
+        *,
+        post_validate: Callable[[ResponseT], str | None] | None = None,
     ) -> ResponseT:
         payload = request.model_dump(mode="json", by_alias=True)
-        last_error: ValidationError | None = None
+        last_error: ValidationError | str | None = None
         started_at = perf_counter()
 
         for attempt in range(2):
             raw_response = self._invoker(task_name, payload)
             try:
                 response = response_model.model_validate(raw_response)
-                logger.info(
-                    "agent invocation completed task=%s latency_ms=%.2f",
-                    task_name,
-                    (perf_counter() - started_at) * 1000,
-                )
-                return response
             except ValidationError as exc:
                 last_error = exc
                 logger.info(
@@ -71,5 +72,35 @@ class AgentRuntimeClient:
                     attempt + 1,
                     len(exc.errors()),
                 )
+                continue
+
+            validation_error = post_validate(response) if post_validate is not None else None
+            if validation_error is not None:
+                last_error = validation_error
+                logger.info(
+                    "agent response validation failed task=%s attempt=%s error_count=%s",
+                    task_name,
+                    attempt + 1,
+                    1,
+                )
+                continue
+
+            logger.info(
+                "agent invocation completed task=%s latency_ms=%.2f",
+                task_name,
+                (perf_counter() - started_at) * 1000,
+            )
+            return response
 
         raise AgentInvocationError(f"schema validation failed for {task_name}: {last_error}")
+
+    def _validate_grading_response(
+        self,
+        request: GradingRequest,
+        response: GradingResponse,
+    ) -> str | None:
+        if response.question_id != request.question.id:
+            return "questionId does not match request question"
+        if response.score > request.question.max_score:
+            return "score exceeds request question maxScore"
+        return None

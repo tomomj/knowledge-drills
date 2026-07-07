@@ -1,4 +1,8 @@
 from knowledge_drill_agent.agent import (
+    create_document_patch_agent,
+    create_drill_generator_agent,
+    create_failure_analysis_agent,
+    create_grading_agent,
     document_patch_agent,
     drill_generator_agent,
     failure_analysis_agent,
@@ -7,6 +11,10 @@ from knowledge_drill_agent.agent import (
 )
 
 __all__ = [
+    "create_document_patch_agent",
+    "create_drill_generator_agent",
+    "create_failure_analysis_agent",
+    "create_grading_agent",
     "document_patch_agent",
     "drill_generator_agent",
     "failure_analysis_agent",
