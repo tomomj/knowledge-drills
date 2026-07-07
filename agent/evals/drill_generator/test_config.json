@@ -7,15 +7,9 @@
       },
       "rubrics": [
         {
-          "rubric_id": "dg_scenario_style",
+          "rubric_id": "dg_quality_gate",
           "rubric_content": {
-            "text_property": "生成された3問すべてが実務シナリオ型で、用語の定義や暗記を直接尋ねる問題が含まれておらず、受講者に判断理由を書かせる問いになっている。"
-          }
-        },
-        {
-          "rubric_id": "dg_grounded",
-          "rubric_content": {
-            "text_property": "すべての問題・idealAnswer・sourceEvidence が入力の講座 Markdown に実在する記述に根拠を持ち、講座に書かれていないルールや数値を問うていない。"
+            "text_property": "ドリル生成品質を総合的に評価する。生成された3問すべてが実務シナリオ型で、用語の定義や暗記を直接尋ねる問題が含まれず、受講者に判断理由を書かせる問いになっている。すべての問題・idealAnswer・sourceEvidence は入力の講座 Markdown に実在する記述に根拠を持ち、講座に書かれていないルールや数値を問うていない。"
           }
         }
       ]

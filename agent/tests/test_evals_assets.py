@@ -2,15 +2,18 @@
 
 Real-model execution happens only via `uv run --group eval adk eval ...`;
 these tests only verify the assets stay loadable and within the agreed
-budget of at most two eval criteria per agent.
+budget of one integrated LLM-judge rubric per agent.
 """
 
+import ast
 import importlib
 import json
 import sys
 from pathlib import Path
+from typing import cast
 
 EVALS_DIR = Path(__file__).resolve().parent.parent / "evals"
+RUNNER_PATH = Path(__file__).resolve().parent.parent / "scripts" / "run_adk_evals.py"
 AGENT_EVAL_DIRS = ["drill_generator", "grading", "failure_analysis", "document_patch"]
 
 
@@ -21,6 +24,19 @@ def _load_eval_entry_module(name: str) -> object:
         return importlib.reload(module)
     finally:
         sys.path.remove(str(EVALS_DIR))
+
+
+def _load_quick_eval_cases() -> dict[str, tuple[str, ...]]:
+    module = ast.parse(RUNNER_PATH.read_text("utf-8"))
+    for node in module.body:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "QUICK_EVAL_CASES"
+            and node.value is not None
+        ):
+            return cast(dict[str, tuple[str, ...]], ast.literal_eval(node.value))
+    raise AssertionError("QUICK_EVAL_CASES is not defined in scripts/run_adk_evals.py")
 
 
 def test_eval_entry_modules_expose_parentless_root_agent() -> None:
@@ -42,11 +58,19 @@ def test_evalset_files_are_wellformed() -> None:
                 json.loads(text)  # input must be a JSON string (input_schema enforcement)
 
 
-def test_configs_stay_within_two_criteria_per_agent() -> None:
+def test_configs_use_one_integrated_rubric_per_agent() -> None:
     for name in AGENT_EVAL_DIRS:
         config = json.loads((EVALS_DIR / name / "test_config.json").read_text("utf-8"))
         criteria = config["criteria"]
-        assert 1 <= len(criteria) <= 2, f"{name}: 評価項目は各エージェント最大2つ"
-        rubric_criterion = criteria.get("rubric_based_final_response_quality_v1")
-        if rubric_criterion is not None:
-            assert rubric_criterion["rubrics"], f"{name}: rubric メトリクスには rubrics が必須"
+        assert list(criteria) == ["rubric_based_final_response_quality_v1"]
+        rubrics = criteria["rubric_based_final_response_quality_v1"]["rubrics"]
+        assert len(rubrics) == 1, f"{name}: LLM judge rubric は統合して1つにする"
+
+
+def test_quick_eval_cases_exist() -> None:
+    quick_eval_cases = _load_quick_eval_cases()
+    assert set(quick_eval_cases) == set(AGENT_EVAL_DIRS)
+    for name, eval_case_ids in quick_eval_cases.items():
+        payload = json.loads((EVALS_DIR / name / f"{name}.evalset.json").read_text("utf-8"))
+        available_case_ids = {case["eval_id"] for case in payload["eval_cases"]}
+        assert set(eval_case_ids) <= available_case_ids

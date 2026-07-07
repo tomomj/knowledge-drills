@@ -6,6 +6,15 @@ on:
       - "agent/**"
       - ".github/workflows/agent-eval.yml"
   workflow_dispatch:
+    inputs:
+      profile:
+        description: ADK eval profile to run
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - quick
 
 permissions:
   contents: read
@@ -25,8 +34,18 @@ env:
 
 jobs:
   agent-eval:
-    name: Agent Eval
+    name: Agent Eval (${{ matrix.eval }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        eval:
+          - grading
+          - drill_generator
+          - failure_analysis
+          - document_patch
 
     defaults:
       run:
@@ -73,4 +92,10 @@ jobs:
           cache-dependency-glob: agent/uv.lock
 
       - name: Run ADK evals
-        run: python scripts/run_adk_evals.py
+        shell: bash
+        run: |
+          profile="${{ inputs.profile }}"
+          if [[ -z "$profile" ]]; then
+            profile="full"
+          fi
+          python scripts/run_adk_evals.py --profile "$profile" "${{ matrix.eval }}"
