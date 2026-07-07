@@ -102,3 +102,67 @@ def test_course_list_returns_only_current_owner_courses() -> None:
     assert courses[0]["updatedAt"] is not None
     assert courses[0]["answerCount"] == 0
     assert "ownerUserId" not in courses[0]
+
+
+def test_course_detail_update_revisions_and_diff_are_owner_scoped() -> None:
+    app = create_app()
+
+    with TestClient(app) as client:
+        _set_current_user(client, "owner-1")
+        course_id = client.post(
+            "/api/courses",
+            json={"title": "Owner 1 Course", "markdown": "# v1"},
+        ).json()["courseId"]
+        update = client.put(
+            f"/api/courses/{course_id}",
+            json={"title": "Owner 1 Course", "markdown": "# v2"},
+        )
+        assert update.status_code == 200
+
+        detail = client.get(f"/api/courses/{course_id}")
+        assert detail.status_code == 200
+        assert detail.json()["id"] == course_id
+        assert "ownerUserId" not in detail.json()
+
+        revisions = client.get(f"/api/courses/{course_id}/revisions")
+        diff = client.get(f"/api/courses/{course_id}/revisions/diff?from=1&to=2")
+        assert revisions.status_code == 200
+        assert diff.status_code == 200
+
+        _set_current_user(client, "owner-2")
+        blocked_detail = client.get(f"/api/courses/{course_id}")
+        blocked_update = client.put(
+            f"/api/courses/{course_id}",
+            json={"title": "Hacked", "markdown": "# hacked"},
+        )
+        blocked_revisions = client.get(f"/api/courses/{course_id}/revisions")
+        blocked_diff = client.get(f"/api/courses/{course_id}/revisions/diff?from=1&to=2")
+
+        saved = client.app.state.course_repository.get(course_id)  # type: ignore[attr-defined]
+
+    assert blocked_detail.status_code == 404
+    assert blocked_update.status_code == 404
+    assert blocked_revisions.status_code == 404
+    assert blocked_diff.status_code == 404
+    assert blocked_detail.json()["code"] == "course_not_found"
+    assert blocked_update.json()["code"] == "course_not_found"
+    assert blocked_revisions.json()["code"] == "course_not_found"
+    assert blocked_diff.json()["code"] == "course_not_found"
+    assert saved is not None
+    assert saved.title == "Owner 1 Course"
+    assert saved.markdown == "# v2"
+
+
+def test_ownerless_course_detail_is_not_visible_to_authenticated_owner() -> None:
+    app = create_app()
+
+    with TestClient(app) as client:
+        client.app.state.course_repository.create(  # type: ignore[attr-defined]
+            Course(id="ownerless-course", title="Ownerless", markdown="# Body")
+        )
+        _set_current_user(client, "owner-1")
+
+        response = client.get("/api/courses/ownerless-course")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "course_not_found"

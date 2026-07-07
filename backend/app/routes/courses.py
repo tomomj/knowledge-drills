@@ -59,8 +59,12 @@ async def list_courses(
 
 
 @router.get("/{course_id}", response_model=CourseDetailResponse)
-async def get_course(request: Request, course_id: str) -> CourseDetailResponse:
-    return get_course_service(request).get_course(course_id)
+async def get_course(
+    request: Request,
+    course_id: str,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
+) -> CourseDetailResponse:
+    return get_course_service(request).get_course(course_id, current_user.uid)
 
 
 @router.put("/{course_id}", response_model=CourseDetailResponse)
@@ -68,26 +72,34 @@ async def update_course(
     request: Request,
     course_id: str,
     payload: CourseUpdateRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
 ) -> CourseDetailResponse:
-    return get_course_service(request).update_course(course_id, payload)
+    return get_course_service(request).update_course(course_id, payload, current_user.uid)
 
 
 @router.get("/{course_id}/revisions", response_model=CourseRevisionListResponse)
 async def list_course_revisions(
     request: Request,
     course_id: str,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
 ) -> CourseRevisionListResponse:
-    return get_course_service(request).list_revisions(course_id)
+    return get_course_service(request).list_revisions(course_id, current_user.uid)
 
 
 @router.get("/{course_id}/revisions/diff", response_model=CourseRevisionDiffResponse)
 async def diff_course_revisions(
     request: Request,
     course_id: str,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
     from_version: int = Query(alias="from", ge=1),
     to_version: int = Query(alias="to", ge=1),
 ) -> CourseRevisionDiffResponse:
-    return get_course_service(request).diff_revisions(course_id, from_version, to_version)
+    return get_course_service(request).diff_revisions(
+        course_id,
+        from_version,
+        to_version,
+        current_user.uid,
+    )
 
 
 @router.post(
