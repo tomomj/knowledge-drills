@@ -6,6 +6,7 @@ from app.clients.agent_runtime_client import AgentInvoker, AgentRuntimeClient
 from app.clients.local_agent_invoker import LocalAgentInvoker
 from app.config import Settings, get_settings
 from app.errors import register_exception_handlers
+from app.observability import configure_adk_tracing
 from app.repositories.firestore_client import (
     FirestoreClient,
     GoogleFirestoreClient,
@@ -46,6 +47,7 @@ def _create_firestore_client(settings: Settings) -> FirestoreClient:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_adk_tracing(settings)
     app = FastAPI(title=settings.app_name)
     app.add_middleware(
         CORSMiddleware,

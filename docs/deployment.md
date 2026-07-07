@@ -46,3 +46,13 @@ Workload Identity Federation 側では、GitHub Actions の principal に deploy
 - frontend の `VITE_API_BASE_URL` は、CD 中に backend Cloud Run URL を取得して build arg として渡します。
 
 Cloud Run は Terraform 側で `min_instance_count = 0` にしているため、アイドル時は scale to zero します。
+
+## ADK trace
+
+backend Cloud Run は `KNOWLEDGE_DRILLS_AGENT_TRACE_EXPORTER=gcp` で ADK trace を Cloud Trace に送ります。
+確認先は Google Cloud Console の Trace Explorer です。`service.name` は
+`knowledge-drills-prd-backend`、resource attribute には `deployment.environment=prd` と
+`service.namespace=knowledge-drills` が入ります。
+
+OTLP collector に送る場合は `KNOWLEDGE_DRILLS_AGENT_TRACE_EXPORTER=otlp` に変更し、
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` または `OTEL_EXPORTER_OTLP_ENDPOINT` を Cloud Run env に追加します。
