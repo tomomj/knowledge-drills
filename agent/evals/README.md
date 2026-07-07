@@ -7,7 +7,7 @@
 
 | Agent | 評価項目 | 検証内容 |
 |---|---|---|
-| `grading` | `final_response_match_v2` + rubric | ゴールデン採点との一致（満点 / 部分点 / rubric 外は加点しない）、回答にないことを補完しない |
+| `grading` | rubric のみ | 満点 / 部分点 / rubric 外は加点しない、回答にないことを補完しない、score が rubric points と一致する |
 | `failure_analysis` | rubric のみ | 仕込んだ共通誤答（4人中3人が事前承認に言及せず）の検出をルーブリックで判定、confidenceNote・表現の節度 |
 | `drill_generator` | rubric のみ | 実務シナリオ型であること、講座 Markdown への根拠性（生成に多様性があるためゴールデン一致は不採用） |
 | `document_patch` | rubric のみ | 最小変更・ルール創作なし・riskNotes（全文一致は brittle なため不採用） |
@@ -28,26 +28,17 @@ cd agent
 
 # 認証は Vertex AI が正道（API キー不要。プロジェクトのモデル実行基盤に一致）
 gcloud auth application-default login   # ローカルの場合。CI では cd.yml の WIF 認証をそのまま利用
-export GOOGLE_GENAI_USE_VERTEXAI=TRUE
-export GOOGLE_CLOUD_PROJECT=...
-export GOOGLE_CLOUD_LOCATION=us-central1
+cp .env.example .env
+# .env の GOOGLE_CLOUD_PROJECT を、Vertex AI で gemini-2.5-flash-lite を
+# us-central1 から実行できるプロジェクトに変更する
 # （代替: AI Studio を使うなら GOOGLE_API_KEY=... でも動く）
 
-PYTHONPATH=. uv run --isolated --frozen --group eval adk eval evals/grading evals/grading/grading.evalset.json \
-  --config_file_path evals/grading/test_config.json --print_detailed_results
-
-PYTHONPATH=. uv run --isolated --frozen --group eval adk eval evals/drill_generator evals/drill_generator/drill_generator.evalset.json \
-  --config_file_path evals/drill_generator/test_config.json --print_detailed_results
-
-PYTHONPATH=. uv run --isolated --frozen --group eval adk eval evals/failure_analysis evals/failure_analysis/failure_analysis.evalset.json \
-  --config_file_path evals/failure_analysis/test_config.json --print_detailed_results
-
-PYTHONPATH=. uv run --isolated --frozen --group eval adk eval evals/document_patch evals/document_patch/document_patch.evalset.json \
-  --config_file_path evals/document_patch/test_config.json --print_detailed_results
+python scripts/run_adk_evals.py
 ```
 
-CI/CD への組み込みは cd.yml（main push、WIF 認証済み）のデプロイ前ゲートを想定。
 PR CI は認証情報なしを維持する（`tests/test_evals_assets.py` がアセットの構造のみ検証する）。
+`adk eval` は eval 失敗時も exit code 0 を返すことがあるため、自動化する場合は必ず
+結果 JSON を読む `scripts/run_adk_evals.py` を経由する。
 
 ## 閾値の校正記録
 
@@ -55,8 +46,12 @@ PR CI は認証情報なしを維持する（`tests/test_evals_assets.py` がア
   document_patch 1/1 合格。failure_analysis は `final_response_match_v2` が実行ごとに
   合格/不合格が割れた（分析系は出力の構成・表現の自由度が高く、ゴールデン全体一致が不安定）。
   → match メトリクスを外し、「仕込んだ共通誤答を検出できたか」を rubric の1項目として
-  判定する方式に変更（rubric のみ・3項目）。この構成での実モデル再検証は未実施。
-  プロンプト自体も未チューニングのため、閾値・ルーブリックは CI 組み込み時に再校正する。
+  判定する方式に変更（rubric のみ・3項目）。
+- 2026-07-07 に Vertex AI（gemini-2.5-flash-lite / us-central1）で
+  `scripts/run_adk_evals.py` 経由の現行構成を再検証。grading 3/3・drill_generator 1/1・
+  failure_analysis 1/1・document_patch 1/1 合格。grading は `feedback` / `failureTags` の
+  表現揺れで `final_response_match_v2` が brittle だったため、rubric-only に変更し、
+  score と maxScore の整合性 rubric を追加した。
 
 ## モデル
 
