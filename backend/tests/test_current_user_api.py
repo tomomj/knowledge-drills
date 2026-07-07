@@ -157,3 +157,37 @@ def test_create_app_exposes_me_endpoint_in_local_auth_mode(
     assert response.json()["uid"] == "local-owner-2"
     assert response.json()["email"] == "local-owner-2@example.test"
     assert app.state.user_repository.get("local-owner-2") is not None
+
+
+def test_admin_authorization_does_not_require_existing_user_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_create_app_env(monkeypatch)
+    get_settings.cache_clear()
+
+    app_main = importlib.import_module("app.main")
+    app = app_main.create_app()
+    set_auth_client(
+        app,
+        StaticAuthClient(
+            AuthenticatedUser(
+                uid="profileless-owner",
+                email="owner@example.test",
+            )
+        ),
+    )
+
+    assert app.state.user_repository.get("profileless-owner") is None
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/courses",
+            headers={"Authorization": "Bearer id-token"},
+            json={"title": "Profileless owner course", "markdown": "# Body"},
+        )
+
+    assert response.status_code == 201
+    course = app.state.course_repository.get(response.json()["courseId"])
+    assert course is not None
+    assert course.owner_user_id == "profileless-owner"
+    assert app.state.user_repository.get("profileless-owner") is None
