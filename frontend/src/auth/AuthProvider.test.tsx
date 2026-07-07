@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CurrentUser } from '../api/types'
 import { clearAuthUnauthorizedListeners, notifyAuthUnauthorized } from '../lib/authEvents'
 import type { AuthStateProvider, AuthStateUser } from '../lib/authState'
+import { useAuth } from './AuthContext'
 import { AuthGate, AuthProvider } from './AuthProvider'
 
 const firebaseUser: AuthStateUser = {
@@ -31,6 +32,23 @@ function authStateProvider(user: AuthStateUser | null): AuthStateProvider {
   }
 }
 
+function controllableAuthStateProvider(initialUser: AuthStateUser | null) {
+  let listener: ((user: AuthStateUser | null) => void) | null = null
+  const provider: AuthStateProvider = (next) => {
+    listener = next
+    next(initialUser)
+    return () => {
+      listener = null
+    }
+  }
+  return {
+    provider,
+    emit: (user: AuthStateUser | null) => {
+      listener?.(user)
+    },
+  }
+}
+
 function renderGate({
   user,
   confirmCurrentUser = vi.fn().mockResolvedValue(currentUser),
@@ -50,6 +68,15 @@ function renderGate({
         <div>管理画面</div>
       </AuthGate>
     </AuthProvider>,
+  )
+}
+
+function LogoutButton() {
+  const auth = useAuth()
+  return (
+    <button type="button" onClick={() => void auth.signOut()}>
+      ログアウト
+    </button>
   )
 }
 
@@ -76,6 +103,30 @@ describe('AuthProvider', () => {
 
     expect(await screen.findByText('管理画面')).toBeTruthy()
     expect(confirmCurrentUser).toHaveBeenCalledOnce()
+  })
+
+  it('signs out and returns to the login action', async () => {
+    const authState = controllableAuthStateProvider(firebaseUser)
+    const signOutAction = vi.fn(async () => {
+      authState.emit(null)
+    })
+    render(
+      <AuthProvider
+        authStateProvider={authState.provider}
+        confirmCurrentUser={vi.fn().mockResolvedValue(currentUser)}
+        signOutAction={signOutAction}
+      >
+        <AuthGate>
+          <LogoutButton />
+        </AuthGate>
+      </AuthProvider>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'ログアウト' }))
+
+    expect(signOutAction).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: 'ログアウト' })).toBeNull()
+    expect(await screen.findByRole('button', { name: 'Google でログイン' })).toBeTruthy()
   })
 
   it('keeps children hidden when backend confirmation fails and can retry', async () => {
