@@ -17,6 +17,23 @@ __pycache__/
 .env.*
 !.env.example
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl.backup
+crash.log
+
+# サービスアカウントキー / 秘密鍵
+*-key.json
+*_key.json
+service-account*.json
+sa-*.json
+*.pem
+*.p12
+
 # Claude Code の個人ローカル設定
 .claude/settings.local.json
 
