@@ -128,7 +128,7 @@ python scripts/run_adk_evals.py
 ```
 
 通常の Agent CI は認証情報なしで `tests/test_evals_assets.py` によるアセット構造検証まで行う。
-実モデル eval は `.github/workflows/agent-eval.yml` が `agent/**` 差分時に Vertex AI 認証付きで
+実モデル eval は `.github/workflows/agent-eval.yml` が `main` への `agent/**` 差分 push 時に Vertex AI 認証付きで
 実行する。`adk eval` は eval 失敗時も exit code 0 を返すことがあるため、自動化では必ず
 結果 JSON を読む `scripts/run_adk_evals.py` を経由する。
 

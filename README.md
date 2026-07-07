@@ -28,12 +28,12 @@ CI は Backend / Frontend / Agent で workflow を分け、該当ディレクト
 - `.github/workflows/backend-ci.yml`: `backend/**`
 - `.github/workflows/frontend-ci.yml`: `frontend/**`
 - `.github/workflows/agent-ci.yml`: `agent/**`
-- `.github/workflows/agent-eval.yml`: `agent/**` 差分時に実 Gemini eval を実行する
+- `.github/workflows/agent-eval.yml`: `main` への `agent/**` 差分 push 時に実 Gemini eval を実行する
 
 ## Agent eval をローカルで回す
 
 エージェントの出力品質は `adk eval` で回帰検証する（実 Gemini 呼び出しが発生。
-1エージェントあたり1〜2分・数円程度）。CI では `agent/**` 差分時に
+1エージェントあたり1〜2分・数円程度）。CI では `main` への `agent/**` 差分 push 時に
 `.github/workflows/agent-eval.yml` が同じ wrapper を実行する。詳細な設計と全コマンドは
 [`agent/evals/README.md`](agent/evals/README.md) を参照。
 
