@@ -1,6 +1,6 @@
 ---
 name: frontend
-description: React、Vite、TypeScript の MVP フロントエンドを実装またはレビューするときに使う。浅いディレクトリ構成、依存方向、API と UI の分離、明示的なページ状態、テストしやすい validation、ESLint import rule / dependency-cruiser / knip の導入判断を扱う。
+description: Knowledge Drills の React、Vite、TypeScript フロントエンドを実装またはレビューするときに使う。浅いディレクトリ構成、依存方向、API と UI の分離、明示的なページ状態、テストしやすい validation、oxlint / ESLint / dependency-cruiser / knip / Playwright の確認方針を扱う。
 ---
 
 # Frontend
@@ -92,9 +92,9 @@ retry 可能な失敗は UI と test で確認できる状態にする。invalid
 
 ## 依存関係チェック tooling
 
-現在の構造を守るために、最も軽い tool から使う。`frontend/` scaffold 時は、少なくとも TypeScript typecheck と ESLint を実行できる状態にする。
+現在の構造を守るために、最も軽い tool から使う。`frontend/` scaffold 時は、少なくとも TypeScript typecheck と lint を実行できる状態にする。
 
-1. まず TypeScript typecheck と ESLint を使う。
+1. まず TypeScript typecheck と `oxlint && eslint .` を使う。
 2. 明らかな禁止 import が少数なら ESLint `no-restricted-imports` を使う。例: `components -> api`。
 3. import rule が増える、循環 import が出る、architecture drift を review で見つけにくくなった場合に `dependency-cruiser` を追加する。
 4. 未使用 file、export、dependency が増え始めた場合に `knip` を追加する。
@@ -104,19 +104,24 @@ retry 可能な失敗は UI と test で確認できる状態にする。invalid
 推奨 dev dependency:
 
 ```text
+oxlint
 eslint
 dependency-cruiser
 knip
+@playwright/test
 ```
 
 推奨 npm scripts:
 
 ```json
 {
-  "typecheck": "tsc --noEmit",
-  "lint": "eslint .",
+  "typecheck": "tsc -b",
+  "lint": "oxlint && eslint .",
   "depcheck": "depcruise src --validate .dependency-cruiser.cjs",
-  "knip": "knip"
+  "knip": "knip",
+  "test": "vitest run",
+  "test:e2e": "playwright test",
+  "build": "tsc -b && vite build"
 }
 ```
 
@@ -138,7 +143,10 @@ knip
 フロントエンド作業の完了を主張する前に確認する。
 
 - frontend typecheck があれば実行する。
+- frontend lint があれば実行する。
+- dependency rule を変更した場合は `npm run depcheck` を実行する。
 - 変更した page、component、validation helper の frontend test があれば実行する。
 - routing、bundling、shared type を変更した場合は frontend build を実行する。
+- browser workflow を変更した場合は Playwright e2e の該当範囲を確認する。
 - learner view に `rubric` や `idealAnswer` が表示されないことを確認する。
 - mobile と desktop で明らかな text overflow や incoherent overlap がないことを確認する。

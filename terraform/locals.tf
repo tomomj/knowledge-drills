@@ -6,15 +6,17 @@ locals {
 
   project_name = "knowledge-drills"
 
-  frontend_service_name       = "${local.project_name}-${local.environment}-frontend"
-  backend_service_name        = "${local.project_name}-${local.environment}-backend"
-  frontend_service_account_id = "${local.project_name}-${local.environment}-frontend"
-  backend_service_account_id  = "${local.project_name}-${local.environment}-backend"
-  deploy_service_account_id   = "${local.project_name}-${local.environment}-deploy"
-  artifact_repository_id      = "${local.project_name}-${local.environment}"
-  github_repository           = "tomomj/knowledge-drills"
-  github_wif_pool_id          = "${local.project_name}-${local.environment}-github"
-  github_wif_provider_id      = "github-actions"
+  frontend_service_name         = "${local.project_name}-${local.environment}-frontend"
+  backend_service_name          = "${local.project_name}-${local.environment}-backend"
+  frontend_service_account_id   = "${local.project_name}-${local.environment}-frontend"
+  backend_service_account_id    = "${local.project_name}-${local.environment}-backend"
+  deploy_service_account_id     = "${local.project_name}-${local.environment}-deploy"
+  agent_eval_service_account_id = "${local.project_name}-${local.environment}-eval"
+  artifact_repository_id        = "${local.project_name}-${local.environment}"
+  github_repository             = "tomomj/knowledge-drills"
+  github_wif_pool_id            = "${local.project_name}-${local.environment}-github"
+  github_wif_provider_id        = "github-actions"
+  github_eval_wif_provider_id   = "github-actions-agent-eval"
 
   # Terraform bootstraps Cloud Run with a known public image. CI/CD should deploy
   # the real frontend/backend images after the services and Artifact Registry exist.
