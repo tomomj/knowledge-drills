@@ -176,7 +176,7 @@ def test_model_env_var_is_resolved_at_factory_call_time(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv(MODEL_ENV_VAR, raising=False)
-    assert create_drill_generator_agent().model == "gemini-2.5-flash"
+    assert create_drill_generator_agent().model == "gemini-2.5-flash-lite"
 
     monkeypatch.setenv(MODEL_ENV_VAR, "gemini-operational-model")
     for factory in LEAF_FACTORIES.values():
