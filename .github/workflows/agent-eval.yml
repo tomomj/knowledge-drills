@@ -84,7 +84,7 @@ jobs:
       - name: Run ADK evals
         shell: bash
         run: |
-          profile="${{ github.event_name == 'pull_request' && 'quick' || inputs.profile }}"
+          profile="${{ inputs.profile }}"
           if [[ -z "$profile" ]]; then
             profile="full"
           fi

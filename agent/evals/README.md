@@ -119,7 +119,7 @@ cp .env.example .env
 # （代替: AI Studio を使うなら GOOGLE_API_KEY=... でも動く）
 
 python scripts/run_adk_evals.py
-# PR CI と同じ軽量ゲートだけ確認する場合
+# 軽量ゲートだけ確認する場合
 python scripts/run_adk_evals.py --profile quick
 ```
 
@@ -132,8 +132,9 @@ repository variables の `GCP_AGENT_EVAL_WORKLOAD_IDENTITY_PROVIDER` と
 結果 JSON を読む `scripts/run_adk_evals.py` を経由する。
 この runner は Vertex AI の 429 / `RESOURCE_EXHAUSTED` を避けるため、evalset 内の
 case を `evalset.json:eval_id` 指定で1件ずつ直列実行する。一時的な quota / rate limit
-エラーだけは backoff 付きで再試行する。PR CI は `--profile quick` で各エージェント1ケースだけを
-実行し、手動実行（`workflow_dispatch`）では既定で `full` profile を実行する。
+エラーだけは backoff 付きで再試行する。PR CI は main merge 前の本番ゲートとして
+既定の `full` profile を実行する。手動実行（`workflow_dispatch`）でも既定は `full` で、
+必要に応じて `quick` profile を選べる。
 
 ## 閾値の校正記録
 
