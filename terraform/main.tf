@@ -41,6 +41,51 @@ resource "google_service_account" "backend" {
   ]
 }
 
+resource "google_service_account" "deploy" {
+  project      = local.project_id
+  account_id   = local.deploy_service_account_id
+  display_name = "Knowledge Drills GitHub Actions deploy ${local.environment}"
+
+  depends_on = [
+    google_project_service.required["iam.googleapis.com"],
+  ]
+}
+
+resource "google_iam_workload_identity_pool" "github" {
+  project                   = local.project_id
+  workload_identity_pool_id = local.github_wif_pool_id
+  display_name              = "Knowledge Drills GitHub Actions ${local.environment}"
+  description               = "OIDC pool for GitHub Actions deployments."
+  disabled                  = false
+
+  depends_on = [
+    google_project_service.required["iam.googleapis.com"],
+    google_project_service.required["sts.googleapis.com"],
+  ]
+}
+
+resource "google_iam_workload_identity_pool_provider" "github_actions" {
+  project                            = local.project_id
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = local.github_wif_provider_id
+  display_name                       = "GitHub Actions"
+  description                        = "Trust GitHub Actions OIDC tokens from ${local.github_repository} main."
+  disabled                           = false
+  attribute_condition                = "assertion.repository == \"${local.github_repository}\" && assertion.ref == \"refs/heads/main\""
+
+  attribute_mapping = {
+    "google.subject"       = "assertion.sub"
+    "attribute.actor"      = "assertion.actor"
+    "attribute.repository" = "assertion.repository"
+    "attribute.ref"        = "assertion.ref"
+    "attribute.workflow"   = "assertion.workflow"
+  }
+
+  oidc {
+    issuer_uri = "https://token.actions.githubusercontent.com"
+  }
+}
+
 resource "google_cloud_run_v2_service" "frontend" {
   project             = local.project_id
   name                = local.frontend_service_name
@@ -168,6 +213,38 @@ resource "google_cloud_run_v2_service_iam_member" "backend_public_invoker" {
   member   = "allUsers"
 }
 
+resource "google_project_iam_member" "deploy_cloud_run_admin" {
+  project = local.project_id
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "deploy_artifact_writer" {
+  project    = local.project_id
+  location   = google_artifact_registry_repository.containers.location
+  repository = google_artifact_registry_repository.containers.name
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_service_account_iam_member" "deploy_act_as_frontend" {
+  service_account_id = google_service_account.frontend.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_service_account_iam_member" "deploy_act_as_backend" {
+  service_account_id = google_service_account.backend.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deploy.email}"
+}
+
+resource "google_service_account_iam_member" "deploy_workload_identity_user" {
+  service_account_id = google_service_account.deploy.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${local.github_repository}"
+}
+
 output "frontend_url" {
   value = google_cloud_run_v2_service.frontend.uri
 }
@@ -178,4 +255,12 @@ output "backend_url" {
 
 output "artifact_registry_repository" {
   value = "${local.region}-docker.pkg.dev/${local.project_id}/${google_artifact_registry_repository.containers.repository_id}"
+}
+
+output "github_actions_service_account" {
+  value = google_service_account.deploy.email
+}
+
+output "github_actions_workload_identity_provider" {
+  value = google_iam_workload_identity_pool_provider.github_actions.name
 }
