@@ -172,7 +172,7 @@ resource "google_cloud_run_v2_service" "backend" {
 
       env {
         name  = "KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS"
-        value = google_cloud_run_v2_service.frontend.uri
+        value = join(",", local.frontend_cloud_run_origins)
       }
 
       resources {

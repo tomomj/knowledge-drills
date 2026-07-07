@@ -96,7 +96,11 @@ jobs:
             --project "$PROJECT_ID" \
             --region "$REGION" \
             --format='value(status.url)')"
+          project_number="$(gcloud projects describe "$PROJECT_ID" \
+            --format='value(projectNumber)')"
+          frontend_run_url="https://${FRONTEND_SERVICE}-${project_number}.${REGION}.run.app"
           echo "FRONTEND_URL=${frontend_url}" >> "$GITHUB_ENV"
+          echo "FRONTEND_CORS_ALLOWED_ORIGINS=${frontend_url},${frontend_run_url}" >> "$GITHUB_ENV"
 
       - name: Deploy backend
         run: |
@@ -104,7 +108,7 @@ jobs:
             --project "$PROJECT_ID" \
             --region "$REGION" \
             --image "$BACKEND_IMAGE" \
-            --update-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},KNOWLEDGE_DRILLS_ENVIRONMENT=${KNOWLEDGE_DRILLS_ENVIRONMENT},KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS=${FRONTEND_URL}" \
+            --update-env-vars "^|^GOOGLE_CLOUD_PROJECT=${PROJECT_ID}|KNOWLEDGE_DRILLS_ENVIRONMENT=${KNOWLEDGE_DRILLS_ENVIRONMENT}|KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS=${FRONTEND_CORS_ALLOWED_ORIGINS}" \
             --quiet
 
       - name: Read backend URL
