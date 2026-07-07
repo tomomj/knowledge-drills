@@ -33,16 +33,16 @@ export GOOGLE_CLOUD_PROJECT=...
 export GOOGLE_CLOUD_LOCATION=us-central1
 # （代替: AI Studio を使うなら GOOGLE_API_KEY=... でも動く）
 
-uv run --isolated --frozen --group eval adk eval evals/grading evals/grading/grading.evalset.json \
+PYTHONPATH=. uv run --isolated --frozen --group eval adk eval evals/grading evals/grading/grading.evalset.json \
   --config_file_path evals/grading/test_config.json --print_detailed_results
 
-uv run --isolated --frozen --group eval adk eval evals/drill_generator evals/drill_generator/drill_generator.evalset.json \
+PYTHONPATH=. uv run --isolated --frozen --group eval adk eval evals/drill_generator evals/drill_generator/drill_generator.evalset.json \
   --config_file_path evals/drill_generator/test_config.json --print_detailed_results
 
-uv run --isolated --frozen --group eval adk eval evals/failure_analysis evals/failure_analysis/failure_analysis.evalset.json \
+PYTHONPATH=. uv run --isolated --frozen --group eval adk eval evals/failure_analysis evals/failure_analysis/failure_analysis.evalset.json \
   --config_file_path evals/failure_analysis/test_config.json --print_detailed_results
 
-uv run --isolated --frozen --group eval adk eval evals/document_patch evals/document_patch/document_patch.evalset.json \
+PYTHONPATH=. uv run --isolated --frozen --group eval adk eval evals/document_patch evals/document_patch/document_patch.evalset.json \
   --config_file_path evals/document_patch/test_config.json --print_detailed_results
 ```
 
