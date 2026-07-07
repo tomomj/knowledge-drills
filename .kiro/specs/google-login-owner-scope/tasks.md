@@ -55,7 +55,7 @@
   - 完了条件: 他 owner または ownerless の Course URL を直接指定しても詳細・更新・履歴・差分は取得できない。
   - _Requirements: 2.4, 3.3, 4.3, 4.4, 4.5_
 
-- [ ] 3.3 Drill / Analysis / Patch service に Course 経由の owner check を適用する
+- [x] 3.3 Drill / Analysis / Patch service に Course 経由の owner check を適用する
   - ドリル生成は対象 Course の owner check 後にだけ Agent を呼び出す。
   - admin drill run、answers、analysis は drill run の `courseId` から Course を辿って owner check する。
   - Patch 取得・Apply・Reject は patch の `courseId` から Course を辿って owner check する。

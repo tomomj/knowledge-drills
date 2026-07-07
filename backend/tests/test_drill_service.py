@@ -25,7 +25,9 @@ def _service(agent_response: dict[str, object]) -> tuple[DrillService, DrillRepo
     course_repository = CourseRepository(client)
     drill_repository = DrillRepository(client)
     token_repository = ShareTokenRepository(client)
-    course_repository.create(Course(id="course-1", title="講座", markdown="# Body"))
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Body")
+    )
     service = DrillService(
         course_repository=course_repository,
         drill_repository=drill_repository,
@@ -50,7 +52,7 @@ def test_generate_drill_marks_run_ready_with_three_valid_questions() -> None:
         }
     )
 
-    drill_run = service.generate_drill("course-1")
+    drill_run = service.generate_drill("course-1", "owner-1")
 
     saved = drill_repository.get(drill_run.id)
     assert saved is not None
@@ -71,7 +73,7 @@ def test_generate_drill_marks_run_failed_when_agent_output_is_invalid() -> None:
     )
 
     with pytest.raises(ValueError, match="rubric points"):
-        service.generate_drill("course-1")
+        service.generate_drill("course-1", "owner-1")
 
     saved_runs = drill_repository.list_by_course("course-1")
     assert saved_runs[0].status == "failed"
@@ -90,4 +92,4 @@ def test_generate_drill_rejects_missing_course() -> None:
     )
 
     with pytest.raises(Exception, match="Course was not found"):
-        service.generate_drill("missing-course")
+        service.generate_drill("missing-course", "owner-1")

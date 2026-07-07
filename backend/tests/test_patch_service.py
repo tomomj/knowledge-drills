@@ -33,10 +33,12 @@ def _patch(status: PatchStatus = PatchStatus.PROPOSED) -> DocumentPatch:
 
 def test_get_patch_marks_proposed_patch_stale_when_course_changed() -> None:
     service, course_repository, patch_repository = _service()
-    course_repository.create(Course(id="course-1", title="講座", markdown="# Changed"))
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Changed")
+    )
     patch_repository.create(_patch())
 
-    patch = service.get_patch("patch-1")
+    patch = service.get_patch("patch-1", "owner-1")
     saved = patch_repository.get("patch-1")
 
     assert patch.status == "stale"
@@ -46,10 +48,12 @@ def test_get_patch_marks_proposed_patch_stale_when_course_changed() -> None:
 
 def test_apply_patch_updates_course_and_patch_in_transaction() -> None:
     service, course_repository, patch_repository = _service()
-    course_repository.create(Course(id="course-1", title="講座", markdown="# Before"))
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before")
+    )
     patch_repository.create(_patch())
 
-    patch = service.apply_patch("patch-1", owner_feedback="LGTM")
+    patch = service.apply_patch("patch-1", owner_user_id="owner-1", owner_feedback="LGTM")
 
     course = course_repository.get("course-1")
     assert course is not None
@@ -61,10 +65,12 @@ def test_apply_patch_updates_course_and_patch_in_transaction() -> None:
 
 def test_reject_patch_saves_feedback_without_changing_course() -> None:
     service, course_repository, patch_repository = _service()
-    course_repository.create(Course(id="course-1", title="講座", markdown="# Before"))
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before")
+    )
     patch_repository.create(_patch())
 
-    patch = service.reject_patch("patch-1", owner_feedback="不要")
+    patch = service.reject_patch("patch-1", owner_user_id="owner-1", owner_feedback="不要")
 
     course = course_repository.get("course-1")
     assert course is not None
@@ -75,11 +81,13 @@ def test_reject_patch_saves_feedback_without_changing_course() -> None:
 
 def test_apply_reject_non_proposed_patch_is_rejected_with_current_status() -> None:
     service, course_repository, patch_repository = _service()
-    course_repository.create(Course(id="course-1", title="講座", markdown="# Before"))
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before")
+    )
     patch_repository.create(_patch(status=PatchStatus.APPLIED))
 
     with pytest.raises(AppError) as exc_info:
-        service.reject_patch("patch-1", owner_feedback="遅い")
+        service.reject_patch("patch-1", owner_user_id="owner-1", owner_feedback="遅い")
 
     assert exc_info.value.code == "patch_not_proposed"
     assert exc_info.value.current_status == "applied"
