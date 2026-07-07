@@ -34,8 +34,18 @@ env:
 
 jobs:
   agent-eval:
-    name: Agent Eval
+    name: Agent Eval (${{ matrix.eval }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        eval:
+          - grading
+          - drill_generator
+          - failure_analysis
+          - document_patch
 
     defaults:
       run:
@@ -88,4 +98,4 @@ jobs:
           if [[ -z "$profile" ]]; then
             profile="full"
           fi
-          python scripts/run_adk_evals.py --profile "$profile"
+          python scripts/run_adk_evals.py --profile "$profile" "${{ matrix.eval }}"
