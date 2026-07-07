@@ -7,7 +7,7 @@
   - 完了条件: 設定の既定値は外部 Firebase なしで既存 local / CI テストを起動でき、`firebase` mode では project id 不足を検出できる。
   - _Requirements: 2.5, 7.1, 7.2, 7.3_
 
-- [ ] 1.2 frontend の Firebase SDK と公開 build 設定を追加する
+- [x] 1.2 frontend の Firebase SDK と公開 build 設定を追加する
   - Firebase client SDK を frontend 依存に追加し、Vite env で Firebase web config を参照できるようにする。
   - frontend Docker build に Firebase 用 build arg を追加し、API key を secret として扱わない構成にする。
   - 完了条件: frontend build が Firebase env を受け取れる状態になり、backend secret や Admin credentials は frontend に含まれない。
