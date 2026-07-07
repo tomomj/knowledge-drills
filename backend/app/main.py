@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
     )
     agent_client = AgentRuntimeClient(invoker=_create_agent_invoker(settings))
     app.state.answer_service = AnswerService(
+        course_repository=course_repository,
         drill_repository=drill_repository,
         answer_repository=answer_repository,
         share_token_repository=share_token_repository,

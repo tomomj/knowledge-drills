@@ -2,7 +2,12 @@ from uuid import uuid4
 
 from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.errors import AppError
-from app.repositories.repositories import AnswerRepository, DrillRepository, ShareTokenRepository
+from app.repositories.repositories import (
+    AnswerRepository,
+    CourseRepository,
+    DrillRepository,
+    ShareTokenRepository,
+)
 from app.schemas import (
     AnswerStatus,
     AnswerSubmission,
@@ -19,11 +24,13 @@ class AnswerService:
     def __init__(
         self,
         *,
+        course_repository: CourseRepository | None = None,
         drill_repository: DrillRepository | None = None,
         answer_repository: AnswerRepository | None = None,
         share_token_repository: ShareTokenRepository | None = None,
         agent_client: AgentRuntimeClient | None = None,
     ) -> None:
+        self._course_repository = course_repository
         self._drill_repository = drill_repository
         self._answer_repository = answer_repository
         self._share_token_repository = share_token_repository
@@ -55,6 +62,8 @@ class AnswerService:
             answers=answers_by_question_id,
         )
         self._answer_repository.create_submission(answer)
+        if self._course_repository is not None:
+            self._course_repository.increment_answer_count(drill_run.course_id)
 
         try:
             grading_results = [
