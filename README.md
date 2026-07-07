@@ -28,13 +28,18 @@ CI は Backend / Frontend / Agent で workflow を分け、該当ディレクト
 - `.github/workflows/backend-ci.yml`: `backend/**`
 - `.github/workflows/frontend-ci.yml`: `frontend/**`
 - `.github/workflows/agent-ci.yml`: `agent/**`
-- `.github/workflows/agent-eval.yml`: `main` への `agent/**` 差分 push 時に実 Gemini eval を実行する
+- `.github/workflows/agent-eval.yml`: `agent/**` 差分時に eval 専用 WIF で実 Gemini eval を実行する
+
+`agent-eval.yml` は deploy 用 service account ではなく、Terraform が作成する
+eval 専用 service account を使う。Terraform apply 後、repository variables に
+`GCP_AGENT_EVAL_WORKLOAD_IDENTITY_PROVIDER` と `GCP_AGENT_EVAL_SERVICE_ACCOUNT` を設定する。
 
 ## Agent eval をローカルで回す
 
 エージェントの出力品質は `adk eval` で回帰検証する（実 Gemini 呼び出しが発生。
-1エージェントあたり1〜2分・数円程度）。CI では `main` への `agent/**` 差分 push 時に
-`.github/workflows/agent-eval.yml` が同じ wrapper を実行する。詳細な設計と全コマンドは
+1エージェントあたり1〜2分・数円程度）。CI では `agent/**` 差分時に
+`.github/workflows/agent-eval.yml` が eval 専用 service account で同じ wrapper を実行する。
+詳細な設計と全コマンドは
 [`agent/evals/README.md`](agent/evals/README.md) を参照。
 
 ```sh
