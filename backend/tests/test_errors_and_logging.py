@@ -113,10 +113,11 @@ def test_access_log_includes_request_and_resource_ids_without_body(
     assert all("sensitive learner answer" not in message for message in messages)
 
 
-def test_app_bootstrap_declares_no_auth_boundary() -> None:
+def test_app_bootstrap_registers_local_auth_client_by_default() -> None:
     app: FastAPI = create_app()
 
-    assert app.state.auth_boundary == "mvp_no_auth"
+    user = app.state.auth_client.verify_authorization_header(None)
+    assert user.uid == "local-owner"
 
 
 def test_cors_allows_local_vite_dev_server() -> None:

@@ -26,6 +26,10 @@ env:
   FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE }}
   GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
   GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+  VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
+  VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
+  VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}
+  VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
 
 jobs:
   deploy-frontend:
@@ -52,6 +56,10 @@ jobs:
             FRONTEND_SERVICE
             GCP_WORKLOAD_IDENTITY_PROVIDER
             GCP_SERVICE_ACCOUNT
+            VITE_FIREBASE_API_KEY
+            VITE_FIREBASE_AUTH_DOMAIN
+            VITE_FIREBASE_PROJECT_ID
+            VITE_FIREBASE_APP_ID
           )
 
           for var_name in "${required_vars[@]}"; do
@@ -94,6 +102,10 @@ jobs:
           docker build
           --file frontend/Dockerfile
           --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL"
+          --build-arg VITE_FIREBASE_API_KEY="$VITE_FIREBASE_API_KEY"
+          --build-arg VITE_FIREBASE_AUTH_DOMAIN="$VITE_FIREBASE_AUTH_DOMAIN"
+          --build-arg VITE_FIREBASE_PROJECT_ID="$VITE_FIREBASE_PROJECT_ID"
+          --build-arg VITE_FIREBASE_APP_ID="$VITE_FIREBASE_APP_ID"
           --tag "$FRONTEND_IMAGE"
           .
 

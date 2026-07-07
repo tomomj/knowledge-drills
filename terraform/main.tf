@@ -228,6 +228,16 @@ resource "google_cloud_run_v2_service" "backend" {
       }
 
       env {
+        name  = "KNOWLEDGE_DRILLS_AUTH_MODE"
+        value = local.backend_auth_mode
+      }
+
+      env {
+        name  = "KNOWLEDGE_DRILLS_FIREBASE_PROJECT_ID"
+        value = local.backend_firebase_project_id
+      }
+
+      env {
         name  = "KNOWLEDGE_DRILLS_FIRESTORE_DATABASE"
         value = local.firestore_database_id
       }

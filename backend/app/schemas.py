@@ -31,6 +31,19 @@ class ErrorResponse(ApiModel):
     current_status: str | None = None
 
 
+class UserProfile(ApiModel):
+    uid: str
+    email: str | None = None
+    display_name: str | None = None
+    photo_url: str | None = None
+    created_at: str
+    last_login_at: str
+
+
+class CurrentUserResponse(UserProfile):
+    pass
+
+
 class DrillRunStatus(StrEnum):
     GENERATING = "generating"
     READY = "ready"
@@ -60,6 +73,7 @@ class FailureSeverity(StrEnum):
 
 class Course(ApiModel):
     id: str
+    owner_user_id: str | None = None
     title: str
     markdown: str
     version: int = 1
@@ -81,8 +95,14 @@ class CourseUpdateRequest(ApiModel):
     markdown: str
 
 
-class CourseDetailResponse(Course):
-    pass
+class CourseDetailResponse(ApiModel):
+    id: str
+    title: str
+    markdown: str
+    version: int
+    updated_at: str | None = None
+    latest_drill_run_id: str | None = None
+    latest_patch_id: str | None = None
 
 
 class CourseCreateResponse(ApiModel):

@@ -25,6 +25,9 @@ locals {
   backend_max_instances  = 3
   frontend_max_instances = 2
 
+  # Local backend default stays auth_mode=none; production Cloud Run uses Firebase auth.
+  backend_auth_mode                = "firebase"
+  backend_firebase_project_id      = local.project_id
   backend_storage_mode             = "firestore"
   backend_agent_mode               = "adk"
   backend_agent_model              = "gemini-2.5-flash-lite"

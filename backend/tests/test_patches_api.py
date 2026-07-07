@@ -36,7 +36,9 @@ def _patch(status: PatchStatus = PatchStatus.PROPOSED) -> DocumentPatch:
 
 def _seed_patch(client: TestClient, status: PatchStatus = PatchStatus.PROPOSED) -> None:
     app = cast(FastAPI, client.app)
-    app.state.course_repository.create(Course(id="course-1", title="講座", markdown="# Before"))
+    app.state.course_repository.create(
+        Course(id="course-1", owner_user_id="local-owner", title="講座", markdown="# Before")
+    )
     app.state.patch_repository.create(_patch(status=status))
 
 
@@ -56,7 +58,9 @@ def test_get_patch_returns_patch_detail(client: TestClient) -> None:
 def test_get_patch_marks_stale_when_course_changed(client: TestClient) -> None:
     _seed_patch(client)
     app = cast(FastAPI, client.app)
-    app.state.course_repository.update(Course(id="course-1", title="講座", markdown="# Changed"))
+    app.state.course_repository.update(
+        Course(id="course-1", owner_user_id="local-owner", title="講座", markdown="# Changed")
+    )
 
     response = client.get("/api/patches/patch-1")
 
@@ -75,6 +79,7 @@ def test_apply_patch_updates_course_and_saves_feedback(client: TestClient) -> No
     assert payload["ownerFeedback"] == "反映します"
     app = cast(FastAPI, client.app)
     course = app.state.course_repository.get("course-1")
+    assert course is not None
     assert course.markdown == "# After"
     assert course.version == 2
 
@@ -88,6 +93,7 @@ def test_reject_patch_saves_feedback_without_updating_course(client: TestClient)
     assert response.json()["status"] == "rejected"
     app = cast(FastAPI, client.app)
     course = app.state.course_repository.get("course-1")
+    assert course is not None
     assert course.markdown == "# Before"
 
 

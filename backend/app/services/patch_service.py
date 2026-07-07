@@ -21,9 +21,8 @@ class PatchService:
         self._patch_repository = patch_repository
         self._firestore_client = firestore_client
 
-    def get_patch(self, patch_id: str) -> DocumentPatch:
-        patch = self._get_patch_or_404(patch_id)
-        course = self._get_course_or_404(patch.course_id)
+    def get_patch(self, patch_id: str, owner_user_id: str) -> DocumentPatch:
+        patch, course = self._get_owned_patch_and_course_or_404(patch_id, owner_user_id)
         if patch.status == PatchStatus.PROPOSED and course.markdown != patch.base_markdown:
             stale = patch.model_copy(update={"status": PatchStatus.STALE})
             self._patch_repository.update(stale)
@@ -35,10 +34,18 @@ class PatchService:
             return stale
         return patch
 
-    def apply_patch(self, patch_id: str, owner_feedback: str | None = None) -> DocumentPatch:
+    def apply_patch(
+        self,
+        patch_id: str,
+        *,
+        owner_user_id: str,
+        owner_feedback: str | None = None,
+    ) -> DocumentPatch:
         def apply() -> DocumentPatch:
-            patch = self._get_patch_or_404(patch_id)
-            course = self._get_course_or_404(patch.course_id)
+            patch, course = self._get_owned_patch_and_course_or_404(
+                patch_id,
+                owner_user_id,
+            )
             self._ensure_proposed(patch)
             if course.markdown != patch.base_markdown:
                 stale = patch.model_copy(update={"status": PatchStatus.STALE})
@@ -76,11 +83,19 @@ class PatchService:
 
         return self._run_transaction(apply)
 
-    def reject_patch(self, patch_id: str, owner_feedback: str | None = None) -> DocumentPatch:
+    def reject_patch(
+        self,
+        patch_id: str,
+        *,
+        owner_user_id: str,
+        owner_feedback: str | None = None,
+    ) -> DocumentPatch:
         def reject() -> DocumentPatch:
-            patch = self._get_patch_or_404(patch_id)
+            patch, course = self._get_owned_patch_and_course_or_404(
+                patch_id,
+                owner_user_id,
+            )
             self._ensure_proposed(patch)
-            course = self._get_course_or_404(patch.course_id)
             if course.markdown != patch.base_markdown:
                 stale = patch.model_copy(update={"status": PatchStatus.STALE})
                 self._patch_repository.update(stale)
@@ -126,6 +141,17 @@ class PatchService:
         if course is None:
             raise AppError("course_not_found", "Course was not found.", status_code=404)
         return course
+
+    def _get_owned_patch_and_course_or_404(
+        self,
+        patch_id: str,
+        owner_user_id: str,
+    ) -> tuple[DocumentPatch, Course]:
+        patch = self._get_patch_or_404(patch_id)
+        course = self._course_repository.get(patch.course_id)
+        if course is None or course.owner_user_id != owner_user_id:
+            raise AppError("patch_not_found", "Patch was not found.", status_code=404)
+        return patch, course
 
     def _ensure_proposed(self, patch: DocumentPatch) -> None:
         if patch.status != PatchStatus.PROPOSED:
