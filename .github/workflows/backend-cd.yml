@@ -1,0 +1,94 @@
+name: Backend CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "agent/**"
+      - ".dockerignore"
+      - ".github/workflows/backend-cd.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: backend-cd-cloud-run-main
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.GCP_REGION }}
+  ARTIFACT_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
+  BACKEND_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE }}
+  GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+  GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+jobs:
+  deploy-backend:
+    name: Deploy backend to Cloud Run
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          required_vars=(
+            PROJECT_ID
+            REGION
+            ARTIFACT_REPOSITORY
+            BACKEND_SERVICE
+            GCP_WORKLOAD_IDENTITY_PROVIDER
+            GCP_SERVICE_ACCOUNT
+          )
+
+          for var_name in "${required_vars[@]}"; do
+            if [[ -z "${!var_name}" ]]; then
+              echo "::error::Repository variable ${var_name} is required."
+              exit 1
+            fi
+          done
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - name: Define image tag
+        shell: bash
+        run: |
+          registry="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}"
+          echo "BACKEND_IMAGE=${registry}/backend:${GITHUB_SHA}" >> "$GITHUB_ENV"
+
+      - name: Build backend image
+        run: docker build --file backend/Dockerfile --tag "$BACKEND_IMAGE" .
+
+      - name: Push backend image
+        run: docker push "$BACKEND_IMAGE"
+
+      - name: Deploy backend
+        run: |
+          gcloud run deploy "$BACKEND_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$BACKEND_IMAGE" \
+            --quiet

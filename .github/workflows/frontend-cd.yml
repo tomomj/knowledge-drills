@@ -1,9 +1,13 @@
-name: CD
+name: Frontend CD
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "frontend/**"
+      - ".dockerignore"
+      - ".github/workflows/frontend-cd.yml"
   workflow_dispatch:
 
 permissions:
@@ -11,7 +15,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: cd-cloud-run-main
+  group: frontend-cd-cloud-run-main
   cancel-in-progress: false
 
 env:
@@ -24,8 +28,8 @@ env:
   GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
 jobs:
-  deploy:
-    name: Deploy to Cloud Run
+  deploy-frontend:
+    name: Deploy frontend to Cloud Run
     runs-on: ubuntu-latest
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -70,26 +74,11 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
-      - name: Define image tags
+      - name: Define image tag
         shell: bash
         run: |
           registry="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}"
-          echo "BACKEND_IMAGE=${registry}/backend:${GITHUB_SHA}" >> "$GITHUB_ENV"
           echo "FRONTEND_IMAGE=${registry}/frontend:${GITHUB_SHA}" >> "$GITHUB_ENV"
-
-      - name: Build backend image
-        run: docker build --file backend/Dockerfile --tag "$BACKEND_IMAGE" .
-
-      - name: Push backend image
-        run: docker push "$BACKEND_IMAGE"
-
-      - name: Deploy backend
-        run: |
-          gcloud run deploy "$BACKEND_SERVICE" \
-            --project "$PROJECT_ID" \
-            --region "$REGION" \
-            --image "$BACKEND_IMAGE" \
-            --quiet
 
       - name: Read backend URL
         shell: bash
