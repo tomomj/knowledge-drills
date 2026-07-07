@@ -1,6 +1,6 @@
 ---
 name: backend-fastapi
-description: MVP 向け FastAPI backend のアーキテクチャと実装規約。Codex が backend/ 配下で FastAPI、Pydantic v2、uv、pytest、ruff、mypy、httpx、pydantic-settings を使う API 実装、リファクタリング、レビュー、テスト追加、依存関係整理を行うときに使う。特に薄い routes、services、clients、schemas.py、config.py、errors.py、MVP で分割しすぎない構成、lint/typecheck/test コマンドを判断するときに使う。
+description: Knowledge Drills の FastAPI backend のアーキテクチャと実装規約。Codex が backend/ 配下で FastAPI、Pydantic v2、uv、pytest、ruff、mypy、httpx、pydantic-settings、Google Firestore、Google ADK、AgentRuntimeClient、AdkAgentInvoker、local/adk 実行モードを使う API 実装、リファクタリング、レビュー、テスト追加、依存関係整理を行うときに使う。
 ---
 
 # Backend FastAPI MVP 規約
@@ -20,12 +20,9 @@ backend/
 │   ├── schemas.py
 │   ├── errors.py
 │   ├── routes/
-│   │   ├── health.py
-│   │   └── drills.py
 │   ├── services/
-│   │   └── drill_service.py
+│   ├── repositories/
 │   └── clients/
-│       └── agent_client.py
 └── tests/
     ├── conftest.py
     ├── test_health.py
@@ -34,7 +31,8 @@ backend/
 
 - `routes/` は FastAPI router を置く。route は薄く保つ。
 - `services/` は業務ロジックを置く。MVP でも route にロジックを詰め込まない。
-- `clients/` は外部 API、Agent、DB SDK など接続先ごとの client を置く。
+- `clients/` は Agent / ADK など接続先ごとの client を置く。
+- `repositories/` は Firestore と in-memory repository 境界を置く。
 - `schemas.py` は Pydantic model を置く。MVP では単一ファイルで始める。
 - `config.py` は環境変数と application settings を扱う。
 - `errors.py` は application exception と FastAPI exception handler を扱う。
@@ -43,7 +41,6 @@ backend/
 
 MVP では次を標準では作らない。
 
-- `repositories/`
 - `integrations/`
 - `utils/`
 - `schemas/` directory
@@ -88,15 +85,18 @@ dependencies = [
 - `pydantic-settings`: 環境変数ベースの settings。
 - `httpx`: 外部 API / Agent 呼び出し。テストにも使う。
 
-Firestore など DB を使うと決まった場合だけ、必要な SDK を追加する。
+この repository では Firestore と ADK 実接続が runtime dependency である。
 
 ```toml
 dependencies = [
+  "google-adk",
+  "google-cloud-aiplatform[agent-engines]",
   "google-cloud-firestore",
+  "knowledge-drill-agent",
 ]
 ```
 
-Agent や Google Cloud の SDK は、実装対象が明確になってから必要なものだけ追加する。
+`knowledge-drill-agent` は `../agent` の editable path dependency。backend の mypy は `mypy_path = "../agent"` で agent package を解決する。
 
 ## Dev dependencies
 
@@ -162,6 +162,15 @@ Ruff に format と import sorting を寄せる。Black、isort、flake8 を重�
 - timeout を明示する。
 - 外部レスポンスは client 境界で validation する。
 - secret や endpoint は `config.py` から受け取る。
+- `AgentRuntimeClient` が schema validation、retry、task latency logging、採点応答の文脈検証を持つ。
+- `AdkAgentInvoker` は task 名から parentless leaf agent Runner への deterministic mapping を持つ。root_agent 転送は使わない。
+- `LocalAgentInvoker` は認証なしの local / CI 用 fallback として維持する。
+
+### repositories
+
+- repository は永続化境界を閉じ込める。
+- `InMemoryFirestoreClient` は local / test 用、`GoogleFirestoreClient` は Firestore 用。
+- route や service から Google Firestore SDK を直接呼ばない。
 
 ### schemas.py
 
@@ -175,6 +184,8 @@ Ruff に format と import sorting を寄せる。Black、isort、flake8 を重�
 - `pydantic-settings` で settings class を定義する。
 - secret をコードにハードコードしない。
 - `.env` を使う場合も実 secret を commit しない。
+- `KNOWLEDGE_DRILLS_AGENT_MODE` は `local` / `adk`。既定は `local`。
+- ADK mode では `GOOGLE_GENAI_USE_VERTEXAI` + `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION`、または `GOOGLE_API_KEY` が必要。
 
 ### errors.py
 
@@ -201,10 +212,10 @@ Ruff に format と import sorting を寄せる。Black、isort、flake8 を重�
 作業後は実行できる範囲で次を確認する。
 
 ```bash
-uv run ruff format backend
-uv run ruff check backend
-uv run mypy backend
-uv run pytest backend
+cd backend
+uv run --frozen ruff check .
+uv run --frozen mypy .
+uv run --frozen pytest
 ```
 
 依存関係が未 install、`uv` が未設定、外部 service credentials がないなどで実行できない場合は、実行不可理由と次に確認すべき事項を明示する。
