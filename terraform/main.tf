@@ -243,6 +243,21 @@ resource "google_cloud_run_v2_service" "backend" {
       }
 
       env {
+        name  = "KNOWLEDGE_DRILLS_AGENT_TRACE_EXPORTER"
+        value = local.backend_agent_trace_exporter
+      }
+
+      env {
+        name  = "KNOWLEDGE_DRILLS_AGENT_TRACE_SERVICE_NAME"
+        value = local.backend_agent_trace_service_name
+      }
+
+      env {
+        name  = "KNOWLEDGE_DRILLS_AGENT_TRACE_RESOURCE_ATTRIBUTES"
+        value = local.backend_agent_trace_resource_attributes
+      }
+
+      env {
         name  = "KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS"
         value = join(",", local.frontend_cloud_run_origins)
       }
@@ -313,6 +328,16 @@ resource "google_project_iam_member" "backend_vertex_ai_user" {
 
   depends_on = [
     google_project_service.required["aiplatform.googleapis.com"],
+  ]
+}
+
+resource "google_project_iam_member" "backend_cloud_trace_agent" {
+  project = local.project_id
+  role    = "roles/cloudtrace.agent"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+
+  depends_on = [
+    google_project_service.required["cloudtrace.googleapis.com"],
   ]
 }
 
