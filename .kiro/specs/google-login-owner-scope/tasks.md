@@ -20,7 +20,7 @@
   - _Requirements: 7.4_
 
 - [ ] 2. Backend auth: ID token 検証と現在ユーザー API を実装する
-- [ ] 2.1 認証 client 境界と FastAPI dependency を実装する
+- [x] 2.1 認証 client 境界と FastAPI dependency を実装する
   - Firebase token 検証、local 固定ユーザー、設定不備 client を同じ認証境界で扱う。
   - `Authorization: Bearer` 欠落・形式不正・期限切れ・不正 token・Firebase 初期化不備を API error code に変換する。
   - ログには設定不備や例外種別だけを残し、ID token 本体や講座・回答本文を出さない。

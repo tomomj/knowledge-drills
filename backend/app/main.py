@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import set_auth_client
 from app.clients.adk_agent_invoker import create_adk_invoker
 from app.clients.agent_runtime_client import AgentInvoker, AgentRuntimeClient
+from app.clients.firebase_auth_client import create_auth_client
 from app.clients.local_agent_invoker import LocalAgentInvoker
 from app.config import Settings, get_settings
 from app.errors import register_exception_handlers
@@ -54,7 +56,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.state.auth_boundary = "mvp_no_auth"
+    set_auth_client(app, create_auth_client(settings))
     firestore_client = _create_firestore_client(settings)
     course_repository = CourseRepository(firestore_client)
     drill_repository = DrillRepository(firestore_client)
