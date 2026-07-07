@@ -1,11 +1,13 @@
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.schemas import (
     AnswerStatus,
+    Course,
     DrillQuestion,
     DrillRun,
     DrillRunStatus,
@@ -40,6 +42,9 @@ def _question() -> DrillQuestion:
 
 def test_get_drill_admin_returns_questions_share_url_and_answer_count(client: TestClient) -> None:
     app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(id="course-1", owner_user_id="local-owner", title="講座", markdown="# Body")
+    )
     drill_repository = app.state.drill_repository
     answer_repository = app.state.answer_repository
     drill_repository.create(
@@ -113,7 +118,11 @@ def test_generate_drill_api_creates_ready_run_from_course(client: TestClient) ->
     assert course_after.json()["latestDrillRunId"] == payload["drillRunId"]
 
 
-def test_get_learner_drill_by_share_token_excludes_private_fields(client: TestClient) -> None:
+@pytest.mark.parametrize("path", ["/api/drills/share-token", "/api/learn/share-token"])
+def test_get_learner_drill_by_share_token_excludes_private_fields(
+    client: TestClient,
+    path: str,
+) -> None:
     app = cast(FastAPI, client.app)
     app.state.drill_repository.create(
         DrillRun(
@@ -126,7 +135,7 @@ def test_get_learner_drill_by_share_token_excludes_private_fields(client: TestCl
     )
     app.state.share_token_repository.reserve("share-token", drill_run_id="drill-1")
 
-    response = client.get("/api/drills/share-token")
+    response = client.get(path)
 
     assert response.status_code == 200
     payload = response.json()

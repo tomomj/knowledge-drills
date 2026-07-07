@@ -1,5 +1,6 @@
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -60,7 +61,14 @@ def _agent_response_for_question(
     return {**agent_response, "questionId": question["id"]}
 
 
-def test_submit_answer_returns_minimal_feedback_without_private_fields(client: TestClient) -> None:
+@pytest.mark.parametrize(
+    "path",
+    ["/api/drills/share-token/answers", "/api/learn/share-token/answers"],
+)
+def test_submit_answer_returns_minimal_feedback_without_private_fields(
+    client: TestClient,
+    path: str,
+) -> None:
     _configure_ready_drill_and_answer_service(
         client,
         {
@@ -75,7 +83,7 @@ def test_submit_answer_returns_minimal_feedback_without_private_fields(client: T
     )
 
     response = client.post(
-        "/api/drills/share-token/answers",
+        path,
         json={
             "learnerName": "受講者",
             "answers": [
