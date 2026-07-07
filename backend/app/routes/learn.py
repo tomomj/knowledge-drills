@@ -39,7 +39,7 @@ async def get_learner_drill_legacy(
     response_model=SubmitAnswerResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def submit_answer(
+def submit_answer(
     request: Request,
     share_token: str,
     payload: SubmitAnswerRequest,
@@ -58,9 +58,9 @@ async def submit_answer(
     status_code=status.HTTP_201_CREATED,
     include_in_schema=False,
 )
-async def submit_answer_legacy(
+def submit_answer_legacy(
     request: Request,
     share_token: str,
     payload: SubmitAnswerRequest,
 ) -> SubmitAnswerResponse:
-    return await submit_answer(request, share_token, payload)
+    return submit_answer(request, share_token, payload)

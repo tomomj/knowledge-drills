@@ -1,0 +1,40 @@
+{
+  "ranAt": "2026-07-06T10:36:21Z",
+  "verifiedVia": "local backend server",
+  "serverUrl": "http://127.0.0.1:8010",
+  "agentMode": "adk",
+  "authMode": "Vertex AI via Google Cloud ADC",
+  "googleCloudProject": "technology-strategy-gen-ai",
+  "googleCloudLocation": "asia-northeast1",
+  "courseId": "74b6071cc9ac424c9047fb1a7f68662c",
+  "drillRunId": "15f5eef8e40c46f7986fca87bf7125a1",
+  "shareUrl": "/drills/KIl28PsMc2syOe_C29SGiF_wOGgu_qCWXx1Nz6XMOj0",
+  "answerId": "bee3bc726a9a407391a83774ec92ecc9",
+  "patchId": "6575fb6d199f4f83ba3b44256e47de35",
+  "operations": {
+    "health": {
+      "statusCode": 200
+    },
+    "generateDrill": {
+      "statusCode": 201,
+      "questionCount": 3,
+      "questionIds": [
+        "triage-scenario-q1",
+        "escalation-scenario-q2",
+        "communication-scenario-q3"
+      ]
+    },
+    "gradeAnswer": {
+      "statusCode": 201,
+      "status": "graded",
+      "feedbackCount": 3
+    },
+    "analyzeFailuresAndProposePatch": {
+      "statusCode": 200,
+      "patchStatus": "proposed",
+      "failureSignalCount": 3,
+      "patchSummary": "The 'Triage' section was updated to explicitly state that 'all three crucial elements' must be confirmed. The 'Escalation' section was rephrased to use 'when either...or' to clarify that both customer impact confirmation and unclear severity are independent triggers for escalation.",
+      "riskNoteCount": 1
+    }
+  }
+}
