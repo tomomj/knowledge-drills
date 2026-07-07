@@ -1,0 +1,77 @@
+{
+  "eval_set_id": "grading_golden_cases",
+  "eval_cases": [
+    {
+      "eval_id": "grading_full_score",
+      "conversation": [
+        {
+          "invocation_id": "grading_full_score_inv",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "{\"question\":{\"id\":\"q1\",\"question\":\"取引先2名との会食で、1人あたり7,000円のコースの店を予約しようとしています。あなたはどう対応すべきですか。判断理由も書いてください。\",\"intent\":\"交際費の上限超過時に事前承認が必要という判断ができるかを確認する。\",\"rubric\":[{\"criterion\":\"1人あたり5,000円の上限を超えていることを識別している\",\"points\":2,\"required\":true},{\"criterion\":\"事前に部門長の承認を得るという対応を示している\",\"points\":2,\"required\":true}],\"idealAnswer\":\"1人あたり7,000円は交際費の上限5,000円を超えるため、そのままでは精算できない。事前に部門長の承認を得てから会食を行う。\",\"sourceEvidence\":[{\"sectionHeading\":\"交際費\",\"excerpt\":\"社外の関係者との会食は、1人あたり5,000円までは交際費として精算できます。1人あたり5,000円を超える場合は、事前に部門長の承認が必要です。\"}],\"maxScore\":4},\"learnerAnswer\":\"1人あたり7,000円は交際費の上限である5,000円を超えています。そのため、事前に部門長の承認を得てから会食を行います。\"}"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "{\"questionId\":\"q1\",\"score\":4,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\",\"事前に部門長の承認を得るという対応を示している\"],\"missingPoints\":[],\"feedback\":\"上限超過の識別と事前承認の対応がどちらも明確に書けています。\",\"failureTags\":[]}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "grading_partial_score",
+      "conversation": [
+        {
+          "invocation_id": "grading_partial_score_inv",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "{\"question\":{\"id\":\"q1\",\"question\":\"取引先2名との会食で、1人あたり7,000円のコースの店を予約しようとしています。あなたはどう対応すべきですか。判断理由も書いてください。\",\"intent\":\"交際費の上限超過時に事前承認が必要という判断ができるかを確認する。\",\"rubric\":[{\"criterion\":\"1人あたり5,000円の上限を超えていることを識別している\",\"points\":2,\"required\":true},{\"criterion\":\"事前に部門長の承認を得るという対応を示している\",\"points\":2,\"required\":true}],\"idealAnswer\":\"1人あたり7,000円は交際費の上限5,000円を超えるため、そのままでは精算できない。事前に部門長の承認を得てから会食を行う。\",\"sourceEvidence\":[{\"sectionHeading\":\"交際費\",\"excerpt\":\"社外の関係者との会食は、1人あたり5,000円までは交際費として精算できます。1人あたり5,000円を超える場合は、事前に部門長の承認が必要です。\"}],\"maxScore\":4},\"learnerAnswer\":\"1人あたり5,000円を超えているので、このままでは交際費として精算できないと思います。\"}"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\"],\"missingPoints\":[\"事前に部門長の承認を得るという対応が書かれていない\"],\"feedback\":\"上限超過の識別はできています。超過する場合に事前に部門長の承認を得るという対応まで書けると満点になります。\",\"failureTags\":[\"missing_prior_approval_step\"]}"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "grading_off_rubric_no_credit",
+      "conversation": [
+        {
+          "invocation_id": "grading_off_rubric_inv",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "{\"question\":{\"id\":\"q1\",\"question\":\"取引先2名との会食で、1人あたり7,000円のコースの店を予約しようとしています。あなたはどう対応すべきですか。判断理由も書いてください。\",\"intent\":\"交際費の上限超過時に事前承認が必要という判断ができるかを確認する。\",\"rubric\":[{\"criterion\":\"1人あたり5,000円の上限を超えていることを識別している\",\"points\":2,\"required\":true},{\"criterion\":\"事前に部門長の承認を得るという対応を示している\",\"points\":2,\"required\":true}],\"idealAnswer\":\"1人あたり7,000円は交際費の上限5,000円を超えるため、そのままでは精算できない。事前に部門長の承認を得てから会食を行う。\",\"sourceEvidence\":[{\"sectionHeading\":\"交際費\",\"excerpt\":\"社外の関係者との会食は、1人あたり5,000円までは交際費として精算できます。1人あたり5,000円を超える場合は、事前に部門長の承認が必要です。\"}],\"maxScore\":4},\"learnerAnswer\":\"領収書をきちんともらって、経理部に提出すれば問題ないと思います。\"}"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "{\"questionId\":\"q1\",\"score\":0,\"maxScore\":4,\"correctPoints\":[],\"missingPoints\":[\"1人あたり5,000円の上限を超えていることが識別されていない\",\"事前に部門長の承認を得るという対応が書かれていない\"],\"feedback\":\"領収書の扱い自体は講座の内容と一致していますが、この設問で問われている交際費の上限超過の識別と事前承認の対応には触れられていません。\",\"failureTags\":[\"confused_receipt_rule_with_entertainment_limit\"]}"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

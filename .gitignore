@@ -12,6 +12,9 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 
+# ADK eval のローカル実行履歴（agent/evals/*/.adk/eval_history/）
+.adk/
+
 # 環境変数（example のみコミット可）
 .env
 .env.*

@@ -1,0 +1,29 @@
+{
+  "eval_set_id": "failure_analysis_planted_signal",
+  "eval_cases": [
+    {
+      "eval_id": "fa_detects_planted_common_error",
+      "conversation": [
+        {
+          "invocation_id": "fa_planted_inv",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "{\"courseMarkdown\":\"# 経費精算の判断基準\\n\\n## 事前承認\\n1万円以上の物品購入は、購入前に部門長の事前承認が必要です。1万円未満は事後精算で構いません。\\n\\n## 交際費\\n社外の関係者との会食は、1人あたり5,000円までは交際費として精算できます。\\n1人あたり5,000円を超える場合は、事前に部門長の承認が必要です。\\n\\n## 領収書\\nすべての精算には領収書が必要です。領収書を紛失した場合は、支払証明書を添付して経理部に提出します。\\n\",\"questions\":[{\"id\":\"q1\",\"question\":\"取引先2名との会食で、1人あたり7,000円のコースの店を予約しようとしています。あなたはどう対応すべきですか。判断理由も書いてください。\",\"intent\":\"交際費の上限超過時に事前承認が必要という判断ができるかを確認する。\",\"rubric\":[{\"criterion\":\"1人あたり5,000円の上限を超えていることを識別している\",\"points\":2,\"required\":true},{\"criterion\":\"事前に部門長の承認を得るという対応を示している\",\"points\":2,\"required\":true}],\"idealAnswer\":\"1人あたり7,000円は交際費の上限5,000円を超えるため、そのままでは精算できない。事前に部門長の承認を得てから会食を行う。\",\"sourceEvidence\":[{\"sectionHeading\":\"交際費\",\"excerpt\":\"社外の関係者との会食は、1人あたり5,000円までは交際費として精算できます。1人あたり5,000円を超える場合は、事前に部門長の承認が必要です。\"}],\"maxScore\":4}],\"answers\":[{\"learnerName\":\"学習者A\",\"totalScore\":4,\"maxScore\":4,\"gradingResults\":[{\"questionId\":\"q1\",\"score\":4,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\",\"事前に部門長の承認を得るという対応を示している\"],\"missingPoints\":[],\"feedback\":\"上限超過の識別と事前承認の対応がどちらも明確に書けています。\",\"failureTags\":[]}]},{\"learnerName\":\"学習者B\",\"totalScore\":2,\"maxScore\":4,\"gradingResults\":[{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\"],\"missingPoints\":[\"事前に部門長の承認を得るという対応が書かれていない\"],\"feedback\":\"上限超過の識別はできています。超過する場合に事前に部門長の承認を得るという対応まで書けると満点になります。\",\"failureTags\":[\"missing_prior_approval_step\"]}]},{\"learnerName\":\"学習者C\",\"totalScore\":2,\"maxScore\":4,\"gradingResults\":[{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\"],\"missingPoints\":[\"事前に部門長の承認を得るという対応が書かれていない\"],\"feedback\":\"上限超過の識別はできています。超過する場合に事前に部門長の承認を得るという対応まで書けると満点になります。\",\"failureTags\":[\"missing_prior_approval_step\"]}]},{\"learnerName\":\"学習者D\",\"totalScore\":2,\"maxScore\":4,\"gradingResults\":[{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\"],\"missingPoints\":[\"事前に部門長の承認を得るという対応が書かれていない\"],\"feedback\":\"上限超過の識別はできています。超過する場合に事前に部門長の承認を得るという対応まで書けると満点になります。\",\"failureTags\":[\"missing_prior_approval_step\"]}]}],\"gradingResults\":[{\"questionId\":\"q1\",\"score\":4,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\",\"事前に部門長の承認を得るという対応を示している\"],\"missingPoints\":[],\"feedback\":\"上限超過の識別と事前承認の対応がどちらも明確に書けています。\",\"failureTags\":[]},{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\"],\"missingPoints\":[\"事前に部門長の承認を得るという対応が書かれていない\"],\"feedback\":\"上限超過の識別はできています。超過する場合に事前に部門長の承認を得るという対応まで書けると満点になります。\",\"failureTags\":[\"missing_prior_approval_step\"]},{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\"],\"missingPoints\":[\"事前に部門長の承認を得るという対応が書かれていない\"],\"feedback\":\"上限超過の識別はできています。超過する場合に事前に部門長の承認を得るという対応まで書けると満点になります。\",\"failureTags\":[\"missing_prior_approval_step\"]},{\"questionId\":\"q1\",\"score\":2,\"maxScore\":4,\"correctPoints\":[\"1人あたり5,000円の上限を超えていることを識別している\"],\"missingPoints\":[\"事前に部門長の承認を得るという対応が書かれていない\"],\"feedback\":\"上限超過の識別はできています。超過する場合に事前に部門長の承認を得るという対応まで書けると満点になります。\",\"failureTags\":[\"missing_prior_approval_step\"]}]}"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "{\"failureSignals\":[{\"id\":\"fs_prior_approval_gap\",\"title\":\"交際費の上限超過時に、事前承認という対応が抜ける傾向\",\"severity\":\"medium\",\"evidence\":[\"4人中3人が、上限超過の識別はできたが事前に部門長の承認を得る対応に言及しなかった\"],\"likelyCause\":\"上限額の数字は印象に残るが、超過時の手続きが読み飛ばされやすい\",\"suspectedDocumentGap\":\"交際費セクションで超過時の手続きが1文だけで説明されており、具体的な進め方の例がない\",\"targetSections\":[\"交際費\"],\"recommendedChange\":\"交際費セクションに、上限を超える場合の事前承認の進め方の例を追記する\",\"sampleSize\":4,\"confidenceNote\":\"4件の回答に基づく傾向のため、追加回答で傾向を確認してください。\"}]}"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

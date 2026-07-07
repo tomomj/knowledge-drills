@@ -25,6 +25,7 @@ Status: Draft v0.1（2026-07-05）
 
 ### エージェント構成の方針（決定済み）
 
+
 4つの固定スキーマエージェントを **3つに削減**し、1つを完全自律型にする。
 
 1. `drill_generator_agent` — 固定スキーマ（現状維持）。出力の信頼性が命
@@ -57,7 +58,7 @@ Status: Draft v0.1（2026-07-05）
 | ② アプローチ力と新規性 | 「答えるAI(RAG)」の逆張り＝「資料自身が改善されるAI」。3エージェント構成にあえて削った設計判断 |
 | ③ ユーザビリティ | 講座一覧＝改善ループのダッシュボード、share URL だけで受講者参加 |
 | ④ 実用性と体験価値 | 企業研修・オンボーディングの実課題。改善効果を数字で証明（スコア推移） |
-| ⑤ 実装力と拡張性 | schema 検証境界、ガードレール、テスト、CI/CD、Cloud Run + Firestore + Agent Engine |
+| ⑤ 実装力と拡張性 | schema 検証境界、ガードレール、テスト、eval ゲート付き Agent CI/CD、Cloud Run + Firestore |
 
 ## 3. 手順（7/5 → 7/10）
 
@@ -103,8 +104,11 @@ Status: Draft v0.1（2026-07-05）
 - **README**:
   - 冒頭にヒーロー GIF（タイムライン → グラフ上昇）
   - 一文コンセプト
-  - アーキ図（Cloud Run / Firestore / Agent Engine / CI/CD を明示）
+  - アーキ図（Cloud Run / Firestore / CI/CD の eval ゲートを明示）
   - 「なぜ 4→3 にエージェントを減らしたか」の設計判断セクション（⑤実装力への強い答え）
+  - 「なぜ Agent Engine ではなく in-process ADK Runner か」の設計判断
+    （デプロイ単純性と同期呼び出し要件。invoker は `agent_mode` で差し替え可能な抽象であり、
+    スケール時は Agent Engine へ移行可能 — 拡張性の証明として書く）
 - **Proto Pedia + デモ動画（3分）**: Step 2 の台本をそのまま録画。ライブデモが壊れた時の保険も兼ねる
 
 ### Step 5: 模擬審査で磨く（7/9）
@@ -119,10 +123,16 @@ Status: Draft v0.1（2026-07-05）
 
 戦略の前提となる基盤作業。**7/8 までにずれ込むと敗北パターン**。
 
-- [ ] 実 Agent 接続（現状 `backend/app/main.py` は `LocalAgentInvoker` スタブ。ADK Runner in-process か Agent Engine）
+- [ ] 実 Agent 接続（現状 `backend/app/main.py` は `LocalAgentInvoker` スタブ。
+      **ADK Runner in-process に決定、Agent Engine は使わない**（2026-07-07 決定。
+      理由: 審査上の加点なし・提出物に映らない・デプロイ事故リスク増。
+      invoker 抽象により将来の Agent Engine 移行パスは残る）
 - [ ] 実 Firestore 接続（現状 `InMemoryFirestoreClient`）
 - [ ] Dockerfile + Cloud Run デプロイ（backend / frontend）
 - [ ] GitHub Actions で CD（「まわす」の証拠にもなる）
+- [ ] Agent の CI/CD: CI に agent パッケージのジョブを追加（lint / typecheck / pytest。現状 CI 未収載）。
+      余力があれば `adk eval` の小 evalset を cd.yml のデプロイ前ゲートに配置
+      （WIF 認証は構成済みを流用。PR CI は認証情報なしを維持し、実モデル eval は main push 時のみ）
 
 ## 5. 負け筋チェックリスト
 

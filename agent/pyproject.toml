@@ -13,6 +13,18 @@ dev = [
     "ruff>=0.8.0",
     "mypy>=1.11.0",
 ]
+# adk eval 実行時のみ必要（pandas/numpy 等が重く、numpy の型スタブが
+# python_version=3.11 の mypy を壊すため既定環境には入れない）。
+# 必ず --isolated 付きで実行し .venv を汚さないこと（詳細は evals/README.md）。
+# 実行例: uv run --isolated --frozen --group eval adk eval evals/grading ...
+eval = [
+    "google-adk[eval]>=2.3.0",
+]
+
+# evals/ は adk eval 用アセットであり配布対象外（backend からの editable install が
+# flat-layout の複数トップレベル検出で失敗しないよう明示する）
+[tool.setuptools.packages.find]
+include = ["knowledge_drill_agent*"]
 
 [tool.ruff]
 line-length = 100

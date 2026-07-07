@@ -82,7 +82,7 @@ def run_smoke() -> dict[str, object]:
     return {
         "ranAt": datetime.now(UTC).isoformat(),
         "agentMode": "adk",
-        "model": os.getenv("KNOWLEDGE_DRILL_AGENT_MODEL", "gemini-2.5-flash"),
+        "model": os.getenv("KNOWLEDGE_DRILL_AGENT_MODEL", "gemini-2.5-flash-lite"),
         "operations": {
             "generateDrill": {
                 "questionCount": len(drill.questions),

@@ -1,0 +1,21 @@
+{
+  "eval_set_id": "drill_generator_grounded_scenarios",
+  "eval_cases": [
+    {
+      "eval_id": "dg_expense_course",
+      "conversation": [
+        {
+          "invocation_id": "dg_expense_inv",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "{\"courseTitle\":\"経費精算の判断基準\",\"courseMarkdown\":\"# 経費精算の判断基準\\n\\n## 事前承認\\n1万円以上の物品購入は、購入前に部門長の事前承認が必要です。1万円未満は事後精算で構いません。\\n\\n## 交際費\\n社外の関係者との会食は、1人あたり5,000円までは交際費として精算できます。\\n1人あたり5,000円を超える場合は、事前に部門長の承認が必要です。\\n\\n## 領収書\\nすべての精算には領収書が必要です。領収書を紛失した場合は、支払証明書を添付して経理部に提出します。\\n\"}"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
