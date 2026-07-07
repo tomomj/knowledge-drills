@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser, LearnerDrill } from '../api/types'
@@ -12,6 +13,14 @@ const currentUser: CurrentUser = {
   photoUrl: null,
   createdAt: '2026-07-07T00:00:00+00:00',
   lastLoginAt: '2026-07-07T00:00:00+00:00',
+}
+
+const firebaseUser: AuthStateUser = {
+  uid: 'owner-1',
+  email: 'owner@example.test',
+  displayName: 'Owner',
+  photoUrl: null,
+  getIdToken: async () => 'id-token',
 }
 
 const learnerDrill: LearnerDrill = {
@@ -52,17 +61,18 @@ function authStateProvider(user: AuthStateUser | null): AuthStateProvider {
 function renderRoute(path: string, user: AuthStateUser | null) {
   window.history.pushState({}, '', path)
   const confirmCurrentUser = vi.fn<() => Promise<CurrentUser>>().mockResolvedValue(currentUser)
+  const signOutAction = vi.fn().mockResolvedValue(undefined)
   render(
     <AppRouter
       ownerAuth={{
         authStateProvider: authStateProvider(user),
         confirmCurrentUser,
         signInWithGoogleAction: vi.fn().mockResolvedValue(undefined),
-        signOutAction: vi.fn().mockResolvedValue(undefined),
+        signOutAction,
       }}
     />,
   )
-  return { confirmCurrentUser }
+  return { confirmCurrentUser, signOutAction }
 }
 
 describe('AppRouter auth boundaries', () => {
@@ -94,5 +104,15 @@ describe('AppRouter auth boundaries', () => {
 
     expect(screen.queryByRole('button', { name: 'Google でログイン' })).toBeNull()
     expect(confirmCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('shows logout on owner routes', async () => {
+    const user = userEvent.setup()
+    mocks.listCourses.mockResolvedValueOnce({ courses: [] })
+    const { signOutAction } = renderRoute('/courses', firebaseUser)
+
+    await user.click(await screen.findByRole('button', { name: 'ログアウト' }))
+
+    expect(signOutAction).toHaveBeenCalledOnce()
   })
 })
