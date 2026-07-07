@@ -8,6 +8,7 @@ import type {
   CoursePayload,
   CourseRevisionDiff,
   CourseRevisionListResponse,
+  CurrentUser,
   DocumentPatch,
   DrillAdmin,
   DrillAnswersResponse,
@@ -74,6 +75,7 @@ function isApiError(payload: unknown): payload is ApiError {
 }
 
 export const api = {
+  getCurrentUser: () => requestJson<CurrentUser>('/api/me'),
   createCourse: (payload: CoursePayload) =>
     requestJson<CourseCreateResponse>('/api/courses', {
       method: 'POST',
