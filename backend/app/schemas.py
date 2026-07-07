@@ -73,6 +73,7 @@ class FailureSeverity(StrEnum):
 
 class Course(ApiModel):
     id: str
+    owner_user_id: str | None = None
     title: str
     markdown: str
     version: int = 1

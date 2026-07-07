@@ -42,6 +42,16 @@ class CourseRepository:
             for document in self._client.list_documents(self.collection)
         ]
 
+    def list_by_owner(self, owner_user_id: str) -> list[Course]:
+        return [
+            Course.model_validate(document)
+            for document in self._client.list_documents_by_field(
+                self.collection,
+                "ownerUserId",
+                owner_user_id,
+            )
+        ]
+
     def update(self, course: Course) -> None:
         self._client.set_document(
             self.collection,

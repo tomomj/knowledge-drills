@@ -1,8 +1,8 @@
-from typing import cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
-from app.auth import require_current_user
+from app.auth import AuthenticatedUser, require_current_user
 from app.errors import AppError
 from app.schemas import (
     AnalysisStartResponse,
@@ -41,14 +41,21 @@ def get_analysis_service(request: Request) -> AnalysisService:
 
 
 @router.post("", response_model=CourseCreateResponse, status_code=status.HTTP_201_CREATED)
-async def create_course(request: Request, payload: CourseCreateRequest) -> CourseCreateResponse:
-    course = get_course_service(request).create_course(payload)
+async def create_course(
+    request: Request,
+    payload: CourseCreateRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
+) -> CourseCreateResponse:
+    course = get_course_service(request).create_course(payload, current_user.uid)
     return CourseCreateResponse(course_id=course.id)
 
 
 @router.get("", response_model=CourseListResponse)
-async def list_courses(request: Request) -> CourseListResponse:
-    return get_course_service(request).list_courses()
+async def list_courses(
+    request: Request,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
+) -> CourseListResponse:
+    return get_course_service(request).list_courses(current_user.uid)
 
 
 @router.get("/{course_id}", response_model=CourseDetailResponse)
