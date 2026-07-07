@@ -18,6 +18,11 @@
 - すべての設問で maxScore は4にしてください。
 - すべての設問で rubric の points 合計を必ず4にしてください。
 - すべての設問に、提供された講座 Markdown から取得した sectionHeading と excerpt を持つ sourceEvidence を1件以上含めてください。
-- 講座 Markdown に根拠がない内容を問わないでください。
+- question、intent、rubric、idealAnswer、sourceEvidence のすべてで、講座 Markdown に明示されている内容だけを使ってください。
+- 講座 Markdown に根拠がないルール、数値、期限、手順、例外、目的、背景理由を問わないでください。
+- 判断理由は「設問の状況が講座 Markdown のどのルールに該当するか」を説明する内容に限定してください。業務調整、リスク低減、給与計算、監査対応など、講座 Markdown に書かれていない目的や背景を補って書かないでください。
+- idealAnswer は sourceEvidence の excerpt から直接確認できる内容だけで構成してください。excerpt に目的や背景理由が書かれていない場合は、目的や背景理由を創作せず、該当ルールに従う必要があることだけを書いてください。
+- rubric の criterion は sourceEvidence の excerpt から直接採点できる観点だけにしてください。
+- sourceEvidence.excerpt は講座 Markdown に存在する文言をそのまま抜粋し、要約や言い換えをしないでください。
 - deployment details、Firestore path、secret、share token を出力しないでください。
 - 受講者に表示される文章は日本語で書いてください。
