@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from app.repositories.firestore_client import InMemoryFirestoreClient
+from app.repositories.firestore_client import FirestoreClient
 from app.schemas import (
     AnswerStatus,
     AnswerSubmission,
@@ -19,7 +19,7 @@ class CourseRepository:
     collection = "courses"
     revision_collection = "course_revisions"
 
-    def __init__(self, client: InMemoryFirestoreClient) -> None:
+    def __init__(self, client: FirestoreClient) -> None:
         self._client = client
 
     def create(self, course: Course) -> None:
@@ -87,7 +87,7 @@ class CourseRepository:
 class DrillRepository:
     collection = "drill_runs"
 
-    def __init__(self, client: InMemoryFirestoreClient) -> None:
+    def __init__(self, client: FirestoreClient) -> None:
         self._client = client
 
     def create(self, drill_run: DrillRun) -> None:
@@ -127,7 +127,7 @@ class DrillRepository:
 class ShareTokenRepository:
     collection = "share_tokens"
 
-    def __init__(self, client: InMemoryFirestoreClient) -> None:
+    def __init__(self, client: FirestoreClient) -> None:
         self._client = client
 
     def reserve(self, token: str, drill_run_id: str) -> None:
@@ -153,7 +153,7 @@ class ShareTokenRepository:
 class AnswerRepository:
     collection = "answers"
 
-    def __init__(self, client: InMemoryFirestoreClient) -> None:
+    def __init__(self, client: FirestoreClient) -> None:
         self._client = client
 
     def create(
@@ -215,7 +215,7 @@ class AnswerRepository:
 class PatchRepository:
     collection = "patches"
 
-    def __init__(self, client: InMemoryFirestoreClient) -> None:
+    def __init__(self, client: FirestoreClient) -> None:
         self._client = client
 
     def create(self, patch: DocumentPatch) -> None:

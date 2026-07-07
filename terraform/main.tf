@@ -51,6 +51,21 @@ resource "google_service_account" "deploy" {
   ]
 }
 
+resource "google_firestore_database" "app" {
+  project                     = local.project_id
+  name                        = local.firestore_database_id
+  location_id                 = local.firestore_location
+  type                        = "FIRESTORE_NATIVE"
+  concurrency_mode            = "OPTIMISTIC"
+  app_engine_integration_mode = "DISABLED"
+  delete_protection_state     = "DELETE_PROTECTION_ENABLED"
+  deletion_policy             = "ABANDON"
+
+  depends_on = [
+    google_project_service.required["firestore.googleapis.com"],
+  ]
+}
+
 resource "google_iam_workload_identity_pool" "github" {
   project                   = local.project_id
   workload_identity_pool_id = local.github_wif_pool_id
@@ -171,6 +186,16 @@ resource "google_cloud_run_v2_service" "backend" {
       }
 
       env {
+        name  = "KNOWLEDGE_DRILLS_STORAGE_MODE"
+        value = local.backend_storage_mode
+      }
+
+      env {
+        name  = "KNOWLEDGE_DRILLS_FIRESTORE_DATABASE"
+        value = local.firestore_database_id
+      }
+
+      env {
         name  = "KNOWLEDGE_DRILLS_AGENT_MODE"
         value = local.backend_agent_mode
       }
@@ -251,6 +276,16 @@ resource "google_project_iam_member" "backend_vertex_ai_user" {
 
   depends_on = [
     google_project_service.required["aiplatform.googleapis.com"],
+  ]
+}
+
+resource "google_project_iam_member" "backend_firestore_user" {
+  project = local.project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+
+  depends_on = [
+    google_firestore_database.app,
   ]
 }
 
