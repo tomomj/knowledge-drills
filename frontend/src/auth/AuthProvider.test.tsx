@@ -1,8 +1,9 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CurrentUser } from '../api/types'
+import { clearAuthUnauthorizedListeners, notifyAuthUnauthorized } from '../lib/authEvents'
 import type { AuthStateProvider, AuthStateUser } from '../lib/authState'
 import { AuthGate, AuthProvider } from './AuthProvider'
 
@@ -54,6 +55,7 @@ function renderGate({
 
 describe('AuthProvider', () => {
   afterEach(() => {
+    clearAuthUnauthorizedListeners()
     cleanup()
   })
 
@@ -91,5 +93,19 @@ describe('AuthProvider', () => {
 
     expect(await screen.findByText('管理画面')).toBeTruthy()
     expect(confirmCurrentUser).toHaveBeenCalledTimes(2)
+  })
+
+  it('returns to a re-login state when an authenticated request returns 401', async () => {
+    renderGate({ user: firebaseUser })
+
+    expect(await screen.findByText('管理画面')).toBeTruthy()
+
+    act(() => {
+      notifyAuthUnauthorized()
+    })
+
+    expect(screen.queryByText('管理画面')).toBeNull()
+    expect(screen.getByText('ログインの有効期限が切れました。再ログインしてください。')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Google でログイン' })).toBeTruthy()
   })
 })

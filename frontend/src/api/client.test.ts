@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import {
+  addAuthUnauthorizedListener,
+  clearAuthUnauthorizedListeners,
+} from '../lib/authEvents'
 import { resetAuthTokenProvider, setAuthTokenProvider } from '../lib/authToken'
 import { api } from './client'
 
@@ -19,6 +23,7 @@ function requestHeaders(fetchMock: ReturnType<typeof mockFetchJson>): Headers {
 
 describe('api client auth token', () => {
   afterEach(() => {
+    clearAuthUnauthorizedListeners()
     resetAuthTokenProvider()
     vi.unstubAllGlobals()
   })
@@ -39,5 +44,22 @@ describe('api client auth token', () => {
     await api.listCourses()
 
     expect(requestHeaders(fetchMock).get('authorization')).toBeNull()
+  })
+
+  it('notifies auth listeners when an authenticated API returns 401', async () => {
+    const listener = vi.fn()
+    addAuthUnauthorizedListener(listener)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: vi.fn().mockResolvedValue({ code: 'unauthenticated', message: 'expired' }),
+      }),
+    )
+
+    await expect(api.listCourses()).rejects.toMatchObject({ status: 401 })
+
+    expect(listener).toHaveBeenCalledOnce()
   })
 })
