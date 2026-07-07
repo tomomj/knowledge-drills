@@ -63,7 +63,7 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
 - [ ] 4. Frontend auth: Google ログイン、token 付与、route guard を実装する
-- [ ] 4.1 frontend API client に auth token provider を追加する
+- [x] 4.1 frontend API client に auth token provider を追加する
   - React に依存しない token provider を追加し、API client が token 取得後に `Authorization: Bearer` を付ける。
   - ログアウト後や token 取得不能時は管理 API に Authorization header を送らない。
   - 完了条件: API client test で token ありは Bearer header 付き、token なしは header なしになる。
