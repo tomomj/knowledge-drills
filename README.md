@@ -9,7 +9,7 @@ Knowledge CI アプリケーション。
 |---|---|
 | `backend/` | FastAPI（Cloud Run）。アプリの信頼境界: Firestore 更新・schema 検証・diff 生成 |
 | `frontend/` | Vite + React + TypeScript |
-| `agent/` | Google ADK エージェント（ドリル生成 / 採点 / 誤答分析 / パッチ生成）+ eval |
+| [`agent/`](agent/README.md) | Google ADK エージェント（ドリル生成 / 採点 / 誤答分析 / パッチ生成）+ eval |
 | `terraform/` | Google Cloud インフラ（Cloud Run / Artifact Registry / WIF 等） |
 
 ## 開発
@@ -22,12 +22,19 @@ cd agent   && uv run --frozen pytest && uv run --frozen ruff check . && uv run -
 cd frontend && npm test && npm run lint
 ```
 
-CI（`.github/workflows/ci.yml`）は PR ごとに Backend / Frontend / Agent の3ジョブで同じ検証を実行する。
+CI は Backend / Frontend / Agent で workflow を分け、該当ディレクトリに差分がある PR だけで
+実行する。
+
+- `.github/workflows/backend-ci.yml`: `backend/**`
+- `.github/workflows/frontend-ci.yml`: `frontend/**`
+- `.github/workflows/agent-ci.yml`: `agent/**`
+- `.github/workflows/agent-eval.yml`: `agent/**` 差分時に実 Gemini eval を実行する
 
 ## Agent eval をローカルで回す
 
 エージェントの出力品質は `adk eval` で回帰検証する（実 Gemini 呼び出しが発生。
-1エージェントあたり1〜2分・数円程度）。詳細な設計と全コマンドは
+1エージェントあたり1〜2分・数円程度）。CI では `agent/**` 差分時に
+`.github/workflows/agent-eval.yml` が同じ wrapper を実行する。詳細な設計と全コマンドは
 [`agent/evals/README.md`](agent/evals/README.md) を参照。
 
 ```sh
