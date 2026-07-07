@@ -7,6 +7,9 @@ from app.schemas import (
     DocumentPatchResponse,
     DrillGenerationRequest,
     DrillGenerationResponse,
+    DrillQuestion,
+    GradingRequest,
+    GradingResponse,
 )
 
 
@@ -20,6 +23,24 @@ def _question_payload(question_id: str = "q1") -> dict[str, object]:
         "sourceEvidence": [{"sectionHeading": "方針", "excerpt": "## 方針"}],
         "maxScore": 4,
     }
+
+
+def _grading_response_payload(question_id: str = "q1", score: int = 3) -> dict[str, object]:
+    return {
+        "questionId": question_id,
+        "score": score,
+        "maxScore": 4,
+        "correctPoints": ["根拠を示している"],
+        "missingPoints": ["例外条件を補える"],
+        "feedback": "根拠は示せています。",
+        "failureTags": ["missing_exception"],
+    }
+
+
+def _grading_request(question_id: str = "q1", max_score: int = 4) -> GradingRequest:
+    question = _question_payload(question_id)
+    question["maxScore"] = max_score
+    return GradingRequest(question=DrillQuestion.model_validate(question), learner_answer="回答")
 
 
 def test_generate_drill_returns_typed_response() -> None:
@@ -83,6 +104,46 @@ def test_document_patch_invocation_uses_typed_request_and_response() -> None:
     assert response.patched_markdown == "# After"
     assert observed_payloads[0]["courseMarkdown"] == "# Before"
     assert "courseId" not in observed_payloads[0]
+
+
+def test_grade_answer_retries_question_id_mismatch_and_recovers() -> None:
+    calls = [
+        _grading_response_payload("other-question"),
+        _grading_response_payload("q1"),
+    ]
+    client = AgentRuntimeClient(invoker=lambda _task_name, _payload: calls.pop(0))
+
+    response = client.grade_answer(_grading_request("q1"))
+
+    assert isinstance(response, GradingResponse)
+    assert response.question_id == "q1"
+    assert calls == []
+
+
+def test_grade_answer_retries_score_exceeding_question_max_and_recovers() -> None:
+    calls = [
+        _grading_response_payload("q1", score=3),
+        _grading_response_payload("q1", score=2),
+    ]
+    client = AgentRuntimeClient(invoker=lambda _task_name, _payload: calls.pop(0))
+
+    response = client.grade_answer(_grading_request("q1", max_score=2))
+
+    assert response.score == 2
+    assert calls == []
+
+
+def test_grade_answer_context_validation_failure_after_retry_raises() -> None:
+    calls = [
+        _grading_response_payload("wrong-1"),
+        _grading_response_payload("wrong-2"),
+    ]
+    client = AgentRuntimeClient(invoker=lambda _task_name, _payload: calls.pop(0))
+
+    with pytest.raises(AgentInvocationError, match="schema validation failed"):
+        client.grade_answer(_grading_request("q1"))
+
+    assert calls == []
 
 
 def test_agent_invocation_logs_task_latency_and_validation_error(

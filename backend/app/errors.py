@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.clients.agent_runtime_client import AgentInvocationError
 from app.schemas import ErrorResponse
 
 logger = logging.getLogger("app.error")
@@ -61,6 +62,26 @@ def register_exception_handlers(app: FastAPI) -> None:
             content=error_content(
                 "validation_error",
                 "Request validation failed.",
+                request,
+            ),
+        )
+
+    @app.exception_handler(AgentInvocationError)
+    async def agent_invocation_error_handler(
+        request: Request,
+        _exc: AgentInvocationError,
+    ) -> JSONResponse:
+        logger.info(
+            "agent invocation failed request_id=%s path=%s error_type=%s",
+            getattr(request.state, "request_id", "unknown"),
+            request.url.path,
+            AgentInvocationError.__name__,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content=error_content(
+                "agent_invocation_failed",
+                "Agent invocation failed.",
                 request,
             ),
         )

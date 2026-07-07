@@ -1,9 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.clients.agent_runtime_client import AgentRuntimeClient
+from app.clients.adk_agent_invoker import create_adk_invoker
+from app.clients.agent_runtime_client import AgentInvoker, AgentRuntimeClient
 from app.clients.local_agent_invoker import LocalAgentInvoker
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.errors import register_exception_handlers
 from app.repositories.firestore_client import InMemoryFirestoreClient
 from app.repositories.repositories import (
@@ -25,6 +26,12 @@ from app.services.course_service import CourseService
 from app.services.drill_service import DrillService
 from app.services.patch_service import PatchService
 from app.services.share_token_service import ShareTokenService
+
+
+def _create_agent_invoker(settings: Settings) -> AgentInvoker:
+    if settings.agent_mode == "adk":
+        return create_adk_invoker(settings)
+    return LocalAgentInvoker()
 
 
 def create_app() -> FastAPI:
@@ -56,7 +63,7 @@ def create_app() -> FastAPI:
         answer_repository=answer_repository,
         patch_repository=patch_repository,
     )
-    agent_client = AgentRuntimeClient(invoker=LocalAgentInvoker())
+    agent_client = AgentRuntimeClient(invoker=_create_agent_invoker(settings))
     app.state.answer_service = AnswerService(
         drill_repository=drill_repository,
         answer_repository=answer_repository,

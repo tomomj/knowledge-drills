@@ -8,6 +8,7 @@ the response dict is owned by AgentRuntimeClient, not this module.
 import asyncio
 import json
 import logging
+import os
 import uuid
 from collections.abc import Callable, Mapping
 
@@ -27,6 +28,7 @@ from app.clients.agent_runtime_client import (
     AgentPayload,
     AgentResponse,
 )
+from app.config import Settings
 
 logger = logging.getLogger("app.agent")
 
@@ -39,6 +41,12 @@ _TASK_AGENT_FACTORIES: dict[str, Callable[[], Agent]] = {
     "analyze_failures": create_failure_analysis_agent,
     "propose_document_patch": create_document_patch_agent,
 }
+
+_VERTEX_TRUE_VALUES = {"1", "true", "yes"}
+
+
+class AdkAgentConfigurationError(RuntimeError):
+    """Raised when ADK mode is requested without required auth environment."""
 
 
 def _default_runner_factory() -> Mapping[str, Runner]:
@@ -53,6 +61,36 @@ def _default_runner_factory() -> Mapping[str, Runner]:
         )
         for task_name, agent_factory in _TASK_AGENT_FACTORIES.items()
     }
+
+
+def create_adk_invoker(
+    settings: Settings,
+    *,
+    runner_factory: Callable[[], Mapping[str, Runner]] | None = None,
+) -> "AdkAgentInvoker":
+    missing = _missing_auth_environment(os.environ)
+    if missing:
+        missing_vars = ", ".join(missing)
+        raise AdkAgentConfigurationError(
+            f"missing ADK authentication environment variables: {missing_vars}"
+        )
+    return AdkAgentInvoker(
+        timeout_seconds=settings.agent_timeout_seconds,
+        runner_factory=runner_factory,
+    )
+
+
+def _missing_auth_environment(env: Mapping[str, str]) -> list[str]:
+    use_vertex = env.get("GOOGLE_GENAI_USE_VERTEXAI", "").strip().lower() in _VERTEX_TRUE_VALUES
+    if use_vertex:
+        return [
+            name
+            for name in ("GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION")
+            if not env.get(name, "").strip()
+        ]
+    if not env.get("GOOGLE_API_KEY", "").strip():
+        return ["GOOGLE_API_KEY"]
+    return []
 
 
 class AdkAgentInvoker:
@@ -73,7 +111,27 @@ class AdkAgentInvoker:
         if runner is None:
             raise AgentInvocationError(f"unknown agent task: {task_name}")
         logger.info("adk agent invocation started task=%s", task_name)
-        return asyncio.run(self._run_once(runner, task_name, payload))
+        try:
+            return asyncio.run(
+                asyncio.wait_for(
+                    self._run_once(runner, task_name, payload),
+                    timeout=self._timeout_seconds,
+                )
+            )
+        except AgentInvocationError as exc:
+            self._log_invocation_failure(task_name, type(exc).__name__)
+            raise
+        except TimeoutError as exc:
+            self._log_invocation_failure(task_name, type(exc).__name__)
+            raise AgentInvocationError(f"agent invocation timed out task={task_name}") from exc
+        except json.JSONDecodeError as exc:
+            self._log_invocation_failure(task_name, type(exc).__name__)
+            raise AgentInvocationError(
+                f"invalid JSON response from agent task={task_name}"
+            ) from exc
+        except Exception as exc:
+            self._log_invocation_failure(task_name, type(exc).__name__)
+            raise AgentInvocationError(f"agent execution failed task={task_name}") from exc
 
     async def _run_once(
         self, runner: Runner, task_name: str, payload: AgentPayload
@@ -104,3 +162,10 @@ class AdkAgentInvoker:
             raise AgentInvocationError(f"agent returned no final response task={task_name}")
         parsed: AgentResponse = json.loads(final_text)
         return parsed
+
+    def _log_invocation_failure(self, task_name: str, error_type: str) -> None:
+        logger.info(
+            "adk agent invocation failed task=%s error_type=%s",
+            task_name,
+            error_type,
+        )
