@@ -13,12 +13,12 @@ def get_patch_service(request: Request) -> PatchService:
 
 
 @router.get("/{patch_id}", response_model=DocumentPatch)
-async def get_patch(request: Request, patch_id: str) -> DocumentPatch:
+def get_patch(request: Request, patch_id: str) -> DocumentPatch:
     return get_patch_service(request).get_patch(patch_id)
 
 
 @router.post("/{patch_id}/apply", response_model=DocumentPatch)
-async def apply_patch(
+def apply_patch(
     request: Request,
     patch_id: str,
     payload: PatchDecisionRequest,
@@ -30,7 +30,7 @@ async def apply_patch(
 
 
 @router.post("/{patch_id}/reject", response_model=DocumentPatch)
-async def reject_patch(
+def reject_patch(
     request: Request,
     patch_id: str,
     payload: PatchDecisionRequest,

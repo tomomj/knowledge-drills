@@ -18,7 +18,7 @@ def get_analysis_service(request: Request) -> AnalysisService:
 
 
 @router.get("/{drill_run_id}", response_model=DrillAdminResponse)
-async def get_drill_admin(request: Request, drill_run_id: str) -> DrillAdminResponse:
+def get_drill_admin(request: Request, drill_run_id: str) -> DrillAdminResponse:
     return get_drill_service(request).get_admin_drill(drill_run_id)
 
 

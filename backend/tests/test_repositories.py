@@ -25,6 +25,31 @@ def test_course_repository_creates_and_updates_course() -> None:
     assert saved.latest_drill_run_id == "drill-1"
 
 
+def test_course_summary_update_does_not_record_revision() -> None:
+    client = InMemoryFirestoreClient()
+    repository = CourseRepository(client)
+    repository.create(Course(id="course-1", title="講座", markdown="# Body"))
+
+    repository.update_summary(
+        "course-1",
+        latest_drill_run_id="drill-1",
+        latest_drill_status=DrillRunStatus.READY,
+        answer_count=2,
+        latest_patch_id="patch-1",
+        latest_patch_status=PatchStatus.PROPOSED,
+    )
+
+    saved = repository.get("course-1")
+    revisions = repository.list_revisions("course-1")
+    assert saved is not None
+    assert saved.latest_drill_run_id == "drill-1"
+    assert saved.latest_drill_status == "ready"
+    assert saved.answer_count == 2
+    assert saved.latest_patch_id == "patch-1"
+    assert saved.latest_patch_status == "proposed"
+    assert [revision.version for revision in revisions] == [1]
+
+
 def test_share_token_repository_uses_create_only_reservation() -> None:
     client = InMemoryFirestoreClient()
     repository = ShareTokenRepository(client)
