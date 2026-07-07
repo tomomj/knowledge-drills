@@ -98,7 +98,7 @@
   - _Requirements: 1.4, 8.2, 8.3_
   - _Boundary: CD workflow, Frontend Dockerfile_
 
-- [ ] 5.3 deploy documentation と既存 data の owner 移行メモを更新する
+- [x] 5.3 deploy documentation と既存 data の owner 移行メモを更新する
   - Firebase Authentication の Google provider、有効 domain、GitHub repository variables、backend env の設定手順を追加する。
   - 既存 demo Course を維持する場合の owner migration または seed 再作成手順を明記する。
   - 完了条件: deploy 前に必要な Firebase / Cloud Run / GitHub 変数と ownerless Course の扱いをドキュメントから確認できる。
