@@ -11,6 +11,7 @@ def test_backend_runtime_dependencies_include_required_sdks() -> None:
     dependencies = _load_pyproject()["project"]["dependencies"]
 
     assert any(dependency.startswith("fastapi") for dependency in dependencies)
+    assert any(dependency.startswith("firebase-admin") for dependency in dependencies)
     assert any(dependency.startswith("pydantic-settings") for dependency in dependencies)
     assert any(dependency.startswith("google-cloud-firestore") for dependency in dependencies)
     assert any(dependency.startswith("google-cloud-aiplatform") for dependency in dependencies)
