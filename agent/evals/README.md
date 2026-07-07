@@ -1,9 +1,9 @@
 # Agent Evals
 
 4エージェントそれぞれの品質を `adk eval` で回帰検証するための最小 eval セット。
-ADK の `criteria` は各エージェント最大2つに絞る。現行はすべて
-`rubric_based_final_response_quality_v1` 1つだけを使い、その中の `rubrics` で
-具体的な合格条件を定義する。
+現行はすべて `rubric_based_final_response_quality_v1` 1つだけを使い、その中の
+`rubrics` も各エージェント1つの統合 rubric に絞る。PR CI では細かい診断よりも
+安定した green/red 判定を優先する。
 
 ## 構成
 
@@ -43,9 +43,7 @@ rubric は「5,000円上限超過の識別」2点と「事前に部門長の承�
 
 Judge rubric:
 
-- 採点は受講者の回答に実際に書かれている内容だけを根拠にしており、回答に書かれていないことを補って加点していない。
-- `correctPoints` と `missingPoints` が入力 rubric の基準に対応しており、rubric にない基準で加点・減点していない。
-- `score` は受講者が満たした rubric points の合計に一致し、`maxScore` は入力 `question.maxScore` と一致している。
+- 採点品質を総合的に評価する。回答にない内容を補って加点せず、`correctPoints` / `missingPoints` が入力 rubric に対応し、`score` / `maxScore` が rubric points と一致している。
 
 ### `drill_generator`
 
@@ -63,8 +61,7 @@ Judge rubric:
 
 Judge rubric:
 
-- 生成された3問すべてが実務シナリオ型で、用語の定義や暗記を直接尋ねる問題が含まれておらず、受講者に判断理由を書かせる問いになっている。
-- すべての問題・`idealAnswer`・`sourceEvidence` が入力の講座 Markdown に実在する記述に根拠を持ち、講座に書かれていないルールや数値を問うていない。
+- ドリル生成品質を総合的に評価する。3問すべてが実務シナリオ型で、判断理由を書かせる問いになっており、すべての問題・`idealAnswer`・`sourceEvidence` が入力講座に根拠を持つ。
 
 ### `failure_analysis`
 
@@ -83,9 +80,7 @@ Judge rubric:
 
 Judge rubric:
 
-- `failureSignals` のいずれかが、複数の受講者（4人中3人）が交際費の上限超過時に事前に部門長の承認を得るという対応に言及できなかった、という共通誤答傾向を指摘しており、`targetSections` に交際費セクションが含まれている。
-- 回答数が少ない場合に `sampleSize` を正しく報告し、`confidenceNote` で断定を避けて傾向として表現している。
-- 受講者を責める表現がなく、資料の説明不足（`suspectedDocumentGap`）と受講者の理解不足（`likelyCause`）を区別して記述している。
+- 失敗分析品質を総合的に評価する。仕込んだ共通誤答を `failureSignals` として検出し、`targetSections`・`sampleSize`・`confidenceNote` を妥当に出し、資料側の gap と受講者側の理解不足を分けて記述している。
 
 ### `document_patch`
 
@@ -104,8 +99,7 @@ Judge rubric:
 
 Judge rubric:
 
-- `patchedMarkdown` の変更が `failureSignals` の `targetSections` に対応する最小限に留まり、無関係なセクションの内容や見出し構造を書き換えていない。
-- 講座に存在しない社内ルールや数値を新しく作っておらず、既存の記述から安全に明確化できる範囲で修正し、不確かな内容は `riskNotes` に明示している。
+- 講座パッチ品質を総合的に評価する。`patchedMarkdown` は対象セクションへの最小変更に留まり、講座に存在しないルールや数値を作らず、不確かな内容は `riskNotes` に明示している。
 
 ## 実行方法
 
