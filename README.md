@@ -35,20 +35,19 @@ cd agent
 
 # 認証（初回のみ）
 gcloud auth application-default login
-export GOOGLE_GENAI_USE_VERTEXAI=TRUE
-export GOOGLE_CLOUD_PROJECT=<your-project>
-export GOOGLE_CLOUD_LOCATION=us-central1
+cp .env.example .env
+# .env の GOOGLE_CLOUD_PROJECT を、Vertex AI で gemini-2.5-flash-lite を
+# us-central1 から実行できるプロジェクトに変更する
 
-# 例: grading の eval（drill_generator / failure_analysis / document_patch も同形式）
-PYTHONPATH=. uv run --isolated --frozen --group eval adk eval \
-  evals/grading evals/grading/grading.evalset.json \
-  --config_file_path evals/grading/test_config.json \
-  --print_detailed_results
+# 全 eval を実行し、ADK の結果 JSON を読んで失敗時は非ゼロ終了する
+python scripts/run_adk_evals.py
 ```
 
 注意:
 
 - `--isolated` は必須。省くと .venv に eval 依存（numpy 等）が残り、以後の `mypy .` が
-  失敗する（復旧は `cd agent && uv sync --frozen`）
-- `PYTHONPATH=.` も必須（isolated 環境にはプロジェクト自身がインストールされないため）
+  失敗する（復旧は `cd agent && uv sync --frozen`）。`scripts/run_adk_evals.py` は内部で
+  `--isolated` を付けて実行する
+- `adk eval` は eval 失敗時も exit code 0 を返すことがあるため、直接呼ばず
+  `scripts/run_adk_evals.py` を使う
 - 実行結果の詳細 JSON は `agent/evals/*/.adk/eval_history/` に保存される（gitignore 済み）

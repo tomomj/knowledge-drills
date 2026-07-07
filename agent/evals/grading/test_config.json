@@ -1,11 +1,5 @@
 {
   "criteria": {
-    "final_response_match_v2": {
-      "threshold": 0.7,
-      "judge_model_options": {
-        "judge_model": "gemini-2.5-flash-lite"
-      }
-    },
     "rubric_based_final_response_quality_v1": {
       "threshold": 0.6,
       "judge_model_options": {
@@ -22,6 +16,12 @@
           "rubric_id": "grading_rubric_alignment",
           "rubric_content": {
             "text_property": "correctPoints と missingPoints がそれぞれ入力の rubric の基準に対応しており、rubric にない基準で加点・減点していない。"
+          }
+        },
+        {
+          "rubric_id": "grading_score_alignment",
+          "rubric_content": {
+            "text_property": "score は受講者が満たした rubric points の合計に一致し、maxScore は入力 question.maxScore と一致している。"
           }
         }
       ]
