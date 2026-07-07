@@ -6,11 +6,13 @@ from fastapi.testclient import TestClient
 from app.clients.adk_agent_invoker import AdkAgentConfigurationError
 from app.config import get_settings
 from app.main import create_app
+from app.repositories.firestore_client import InMemoryFirestoreClient
 
 
 def _clear_auth_and_mode_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (
         "KNOWLEDGE_DRILLS_AGENT_MODE",
+        "KNOWLEDGE_DRILLS_STORAGE_MODE",
         "GOOGLE_API_KEY",
         "GOOGLE_GENAI_USE_VERTEXAI",
         "GOOGLE_CLOUD_PROJECT",
@@ -54,3 +56,21 @@ def test_create_app_fails_fast_in_adk_mode_when_auth_is_missing(
 
     with pytest.raises(AdkAgentConfigurationError, match="GOOGLE_API_KEY"):
         create_app()
+
+
+def test_create_app_uses_firestore_client_in_firestore_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_auth_and_mode_env(monkeypatch)
+    firestore_client = InMemoryFirestoreClient()
+    monkeypatch.setenv("KNOWLEDGE_DRILLS_STORAGE_MODE", "firestore")
+    monkeypatch.setenv("KNOWLEDGE_DRILLS_FIRESTORE_DATABASE", "knowledge-drills-test")
+    monkeypatch.setattr(
+        "app.main.GoogleFirestoreClient",
+        lambda database: firestore_client,
+    )
+    get_settings.cache_clear()
+
+    app = create_app()
+
+    assert app.state.firestore_client is firestore_client

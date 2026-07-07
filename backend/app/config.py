@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -6,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Knowledge Drills API"
     environment: str = "dev"
+    storage_mode: Literal["memory", "firestore"] = "memory"
+    firestore_database: str = "(default)"
     agent_mode: str = "local"
     agent_timeout_seconds: int = 60
     cors_allowed_origins: str = (

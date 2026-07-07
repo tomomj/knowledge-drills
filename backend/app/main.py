@@ -6,7 +6,11 @@ from app.clients.agent_runtime_client import AgentInvoker, AgentRuntimeClient
 from app.clients.local_agent_invoker import LocalAgentInvoker
 from app.config import Settings, get_settings
 from app.errors import register_exception_handlers
-from app.repositories.firestore_client import InMemoryFirestoreClient
+from app.repositories.firestore_client import (
+    FirestoreClient,
+    GoogleFirestoreClient,
+    InMemoryFirestoreClient,
+)
 from app.repositories.repositories import (
     AnswerRepository,
     CourseRepository,
@@ -34,6 +38,12 @@ def _create_agent_invoker(settings: Settings) -> AgentInvoker:
     return LocalAgentInvoker()
 
 
+def _create_firestore_client(settings: Settings) -> FirestoreClient:
+    if settings.storage_mode == "firestore":
+        return GoogleFirestoreClient(database=settings.firestore_database)
+    return InMemoryFirestoreClient()
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name)
@@ -45,7 +55,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.state.auth_boundary = "mvp_no_auth"
-    firestore_client = InMemoryFirestoreClient()
+    firestore_client = _create_firestore_client(settings)
     course_repository = CourseRepository(firestore_client)
     drill_repository = DrillRepository(firestore_client)
     share_token_repository = ShareTokenRepository(firestore_client)
