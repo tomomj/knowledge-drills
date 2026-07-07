@@ -7,21 +7,9 @@
       },
       "rubrics": [
         {
-          "rubric_id": "grading_no_gap_filling",
+          "rubric_id": "grading_quality_gate",
           "rubric_content": {
-            "text_property": "採点は受講者の回答に実際に書かれている内容だけを根拠にしており、回答に書かれていないことを補って加点していない。"
-          }
-        },
-        {
-          "rubric_id": "grading_rubric_alignment",
-          "rubric_content": {
-            "text_property": "correctPoints と missingPoints がそれぞれ入力の rubric の基準に対応しており、rubric にない基準で加点・減点していない。"
-          }
-        },
-        {
-          "rubric_id": "grading_score_alignment",
-          "rubric_content": {
-            "text_property": "score は受講者が満たした rubric points の合計に一致し、maxScore は入力 question.maxScore と一致している。"
+            "text_property": "採点品質を総合的に評価する。採点は受講者の回答に実際に書かれている内容だけを根拠にし、回答にない内容を補って加点していない。correctPoints と missingPoints は入力 rubric の基準に対応し、rubric にない基準で加点・減点していない。score は受講者が満たした rubric points の合計に一致し、maxScore は入力 question.maxScore と一致している。"
           }
         }
       ]
