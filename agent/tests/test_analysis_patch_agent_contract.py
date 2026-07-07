@@ -19,8 +19,8 @@ def test_failure_analysis_agent_declares_schema_and_constraints() -> None:
     assert isinstance(instruction, str)
     assert "sampleSize" in instruction
     assert "confidenceNote" in instruction
-    assert "do not blame learners" in instruction.lower()
-    assert "do not invent company rules" in instruction.lower()
+    assert "受講者を責めない" in instruction
+    assert "社内ルール" in instruction
 
 
 def test_document_patch_agent_declares_schema_and_constraints() -> None:
@@ -28,7 +28,7 @@ def test_document_patch_agent_declares_schema_and_constraints() -> None:
     instruction = document_patch_agent.instruction
     assert isinstance(instruction, str)
     assert "riskNotes" in instruction
-    assert "smallest useful markdown" in instruction.lower()
+    assert "最小限で有用な Markdown" in instruction
 
 
 def test_failure_signal_requires_core_fields_and_sample_size() -> None:

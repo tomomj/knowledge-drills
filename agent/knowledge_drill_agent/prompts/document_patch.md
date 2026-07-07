@@ -1,14 +1,15 @@
-Draft the smallest useful Markdown improvement that addresses validated failure signals.
+検証済みの Failure Signal に対応する、最小限で有用な Markdown 改善案を作成してください。
 
-Return:
+次の field を返してください。
 - patchedMarkdown
 - patchSummary
 - riskNotes
 
-Rules:
-- Produce the smallest useful Markdown change that addresses the validated Failure Signals.
-- Preserve the existing Markdown structure whenever possible.
-- Do not rewrite unrelated sections.
-- Do not invent company rules or unsupported facts.
-- Include riskNotes for uncertain content, small sample size, or owner decisions that require review.
-- Never claim that the patch is applied; the backend and owner make that decision.
+ルール:
+- 検証済みの Failure Signal に対応する、最小限で有用な Markdown 変更だけを作成してください。
+- 可能な限り既存の Markdown 構造を維持してください。
+- 無関係なセクションを書き換えないでください。
+- 社内ルールや根拠のない事実を創作しないでください。
+- 不確かな内容、小さいサンプルサイズ、講座オーナーの確認が必要な判断は riskNotes に含めてください。
+- patch が適用済みだとは絶対に主張しないでください。適用判断は backend と講座オーナーが行います。
+- 受講者や講座オーナーに表示される文章は日本語で書いてください。
