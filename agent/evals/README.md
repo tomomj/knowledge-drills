@@ -135,6 +135,8 @@ case を `evalset.json:eval_id` 指定で1件ずつ直列実行する。一時�
 エラーだけは backoff 付きで再試行する。PR CI は main merge 前の本番ゲートとして
 既定の `full` profile を実行する。手動実行（`workflow_dispatch`）でも既定は `full` で、
 必要に応じて `quick` profile を選べる。
+GitHub Actions では Agent ごとの matrix job として実行し、最大3 job を並列化する。
+`grading` は3ケースを同一 job 内で直列実行し、他 Agent は1ケースずつ実行する。
 
 ## 閾値の校正記録
 
