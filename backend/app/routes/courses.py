@@ -1,7 +1,8 @@
 from typing import cast
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 
+from app.auth import require_current_user
 from app.errors import AppError
 from app.schemas import (
     AnalysisStartResponse,
@@ -20,7 +21,11 @@ from app.services.analysis_service import AnalysisService
 from app.services.course_service import CourseService
 from app.services.drill_service import DrillService
 
-router = APIRouter(prefix="/api/courses", tags=["courses"])
+router = APIRouter(
+    prefix="/api/courses",
+    tags=["courses"],
+    dependencies=[Depends(require_current_user)],
+)
 
 
 def get_course_service(request: Request) -> CourseService:

@@ -1,11 +1,16 @@
 from typing import cast
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
+from app.auth import require_current_user
 from app.schemas import DocumentPatch, PatchDecisionRequest
 from app.services.patch_service import PatchService
 
-router = APIRouter(prefix="/api/patches", tags=["patches"])
+router = APIRouter(
+    prefix="/api/patches",
+    tags=["patches"],
+    dependencies=[Depends(require_current_user)],
+)
 
 
 def get_patch_service(request: Request) -> PatchService:
