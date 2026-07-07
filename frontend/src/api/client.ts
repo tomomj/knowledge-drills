@@ -16,6 +16,7 @@ import type {
   PatchDecisionPayload,
   SubmitAnswerResponse,
 } from './types'
+import { getAuthToken } from '../lib/authToken'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -32,15 +33,28 @@ export class ApiClientError extends Error {
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = await buildHeaders(init?.headers)
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
+    headers,
   })
   const payload = (await response.json().catch(() => null)) as T | ApiError | null
   if (!response.ok) {
     throw new ApiClientError(response.status, normalizeError(payload))
   }
   return payload as T
+}
+
+async function buildHeaders(initHeaders?: HeadersInit): Promise<Headers> {
+  const headers = new Headers(initHeaders)
+  if (!headers.has('content-type')) {
+    headers.set('content-type', 'application/json')
+  }
+  const authToken = await getAuthToken()
+  if (authToken) {
+    headers.set('authorization', `Bearer ${authToken}`)
+  }
+  return headers
 }
 
 function normalizeError(payload: unknown): ApiError {
