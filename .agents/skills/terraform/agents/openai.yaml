@@ -1,4 +1,4 @@
 interface:
   display_name: "Terraform"
-  short_description: "AWS Terraform の環境別 IaC 規約"
-  default_prompt: "$terraform を使って AWS Terraform の実装またはレビューを行う。"
+  short_description: "GCP Terraform / Cloud Run IaC 規約"
+  default_prompt: "$terraform を使って Knowledge Drills の GCP Terraform を実装またはレビューする。"
