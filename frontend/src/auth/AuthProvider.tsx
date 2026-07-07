@@ -5,10 +5,10 @@ import type { CurrentUser } from '../api/types'
 import { addAuthUnauthorizedListener } from '../lib/authEvents'
 import type { AuthStateProvider, AuthStateUser } from '../lib/authState'
 import {
-  firebaseAuthStateProvider,
-  signInWithGoogle,
-  signOutCurrentUser,
-} from '../lib/firebaseAuth'
+  appAuthStateProvider,
+  appSignInWithGoogle,
+  appSignOutCurrentUser,
+} from '../lib/runtimeAuth'
 import { AuthContext, type AuthContextValue, type AuthStatus, useAuth } from './AuthContext'
 
 const UNAUTHORIZED_MESSAGE = 'ログインの有効期限が切れました。再ログインしてください。'
@@ -23,10 +23,10 @@ export type AuthProviderProps = {
 
 export function AuthProvider({
   children,
-  authStateProvider = firebaseAuthStateProvider,
+  authStateProvider = appAuthStateProvider,
   confirmCurrentUser = api.getCurrentUser,
-  signInWithGoogleAction = signInWithGoogle,
-  signOutAction = signOutCurrentUser,
+  signInWithGoogleAction = appSignInWithGoogle,
+  signOutAction = appSignOutCurrentUser,
 }: AuthProviderProps) {
   const [status, setStatus] = useState<AuthStatus>({ state: 'checking' })
   const [latestFirebaseUser, setLatestFirebaseUser] = useState<AuthStateUser | null>(null)

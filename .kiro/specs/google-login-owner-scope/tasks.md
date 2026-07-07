@@ -124,7 +124,7 @@
   - 完了条件: Firebase 実接続なしで Google ログイン導線、管理 route guard、learner route 例外が自動テストで確認できる。
   - _Requirements: 1.1, 1.2, 1.3, 6.4, 7.4_
 
-- [ ] 6.4 全体の lint / typecheck / test / plan validation を実行する
+- [x] 6.4 全体の lint / typecheck / test / plan validation を実行する
   - backend pytest、ruff、mypy を実行し、認証設定なしの CI 相当で通ることを確認する。
   - frontend lint、typecheck、unit test、必要な E2E を `auth_mode=none` 前提で実行する。
   - Terraform fmt / validate / plan と CD workflow の構文確認を行う。
