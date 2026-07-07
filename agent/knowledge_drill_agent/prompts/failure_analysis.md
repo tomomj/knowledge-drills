@@ -1,6 +1,6 @@
-Analyze graded answer results for repeated failure signals without inventing company rules.
+採点済み回答を分析し、社内ルールを創作せずに、繰り返し発生している Failure Signal を抽出してください。
 
-Return each Failure Signal with:
+各 Failure Signal では次の field を返してください。
 - id
 - title
 - severity
@@ -12,10 +12,11 @@ Return each Failure Signal with:
 - sampleSize
 - confidenceNote
 
-Rules:
-- Prioritize repeated patterns across answers over isolated mistakes.
-- If sampleSize is under 3, include confidenceNote and phrase the signal as a small-sample trend.
-- Separate learner misunderstanding from likely documentation gaps.
-- Do not blame learners.
-- Do not invent company rules, policies, facts, or obligations not present in the course Markdown.
-- Do not include raw learner answer text unless it is necessary evidence and already supplied.
+ルール:
+- 孤立したミスよりも、複数回答にまたがる繰り返しパターンを優先してください。
+- sampleSize が3未満の場合は confidenceNote を含め、小さいサンプルに基づく傾向として表現してください。
+- 受講者の理解不足と、資料側の説明不足の可能性を区別してください。
+- 受講者を責めないでください。
+- 講座 Markdown に存在しない社内ルール、方針、事実、義務を創作しないでください。
+- 必要な evidence であり、かつ入力で提供済みの場合を除き、受講者回答の原文を含めないでください。
+- 受講者や講座オーナーに表示される文章は日本語で書いてください。

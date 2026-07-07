@@ -11,8 +11,8 @@ def test_grading_agent_declares_output_contract_and_constraints() -> None:
     assert grading_agent.output_schema is GradingOutput
     instruction = grading_agent.instruction
     assert isinstance(instruction, str)
-    assert "do not infer" in instruction.lower()
-    assert "too short" in instruction.lower()
+    assert "推測、創作、補完" in instruction
+    assert "回答が短すぎる" in instruction
     assert "failureTags" in instruction
 
 

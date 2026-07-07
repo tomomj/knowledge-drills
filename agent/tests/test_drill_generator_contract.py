@@ -16,7 +16,7 @@ def test_drill_generator_agent_declares_output_contract() -> None:
     assert drill_generator_agent.output_schema is DrillGenerationOutput
     instruction = drill_generator_agent.instruction
     assert isinstance(instruction, str)
-    assert "exactly three" in instruction.lower()
+    assert "必ず3問" in instruction
     assert "sourceEvidence" in instruction
     assert "question" in instruction
 
