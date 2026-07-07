@@ -84,7 +84,7 @@
   - _Requirements: 1.1, 1.2, 6.4_
 
 - [ ] 5. Deploy configuration: production 認証設定を配線する
-- [ ] 5.1 (P) Terraform で backend Cloud Run の Firebase auth env を設定する
+- [x] 5.1 (P) Terraform で backend Cloud Run の Firebase auth env を設定する
   - backend Cloud Run に `KNOWLEDGE_DRILLS_AUTH_MODE=firebase` と Firebase project id を渡す。
   - local の `auth_mode=none` 既定とは別に、production deploy では Firebase mode が有効になることを明示する。
   - 完了条件: Terraform plan 上で backend service の認証 env が確認できる。
