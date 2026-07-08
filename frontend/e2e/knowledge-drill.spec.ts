@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext } from '@playwright/test'
 
-const apiBaseUrl = process.env.E2E_API_BASE_URL ?? 'http://127.0.0.1:8000'
+const backendPort = process.env.E2E_BACKEND_PORT ?? '8000'
+const apiBaseUrl = process.env.E2E_API_BASE_URL ?? `http://127.0.0.1:${backendPort}`
 
 const courseMarkdown = `# Company Routing
 
@@ -101,7 +102,7 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(page.getByText('実行可能')).toBeVisible()
     await expect(page.getByRole('button', { name: '回答を分析する' })).toBeEnabled()
     await expect(page.getByText('E2E Learner').first()).toBeVisible()
-    await expect(page.getByText('採点済み')).toBeVisible()
+    await expect(page.getByText('採点済み', { exact: true })).toBeVisible()
   })
 
   test('回答分析から patch proposed を確認し、Apply で applied にできる', async ({
@@ -117,7 +118,7 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(page.getByRole('heading', { name: '資料修正案のレビュー' })).toBeVisible()
     await expect(page.getByText('提案中')).toBeVisible()
     await expect(page.getByText(/要約：/)).toBeVisible()
-    await expect(page.getByText('例外条件の説明不足')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '例外条件の説明不足' })).toBeVisible()
     await expect(page.getByText('リスクノート')).toBeVisible()
     await expect(page.getByLabel('Diff')).toContainText('### 例外条件')
 

@@ -3,7 +3,15 @@ from typing import cast
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.schemas import Course, DocumentPatch, FailureSeverity, FailureSignal, PatchStatus
+from app.schemas import (
+    AnalysisStepStatus,
+    AnalysisTimelineItem,
+    Course,
+    DocumentPatch,
+    FailureSeverity,
+    FailureSignal,
+    PatchStatus,
+)
 
 
 def _patch(status: PatchStatus = PatchStatus.PROPOSED) -> DocumentPatch:
@@ -17,6 +25,15 @@ def _patch(status: PatchStatus = PatchStatus.PROPOSED) -> DocumentPatch:
         patch_summary="判断基準を追記",
         risk_notes=["既存運用との整合を確認"],
         diff_text="--- base.md\n+++ patched.md\n-# Before\n+# After",
+        analysis_timeline=[
+            AnalysisTimelineItem(
+                id="collect_answers",
+                title="回答データを収集",
+                status=AnalysisStepStatus.COMPLETED,
+                summary="採点済み回答 2 件を収集しました",
+                evidence=["回答総数 2 件"],
+            )
+        ],
         failure_signals=[
             FailureSignal(
                 id="fs_test_001",
@@ -51,6 +68,8 @@ def test_get_patch_returns_patch_detail(client: TestClient) -> None:
     payload = response.json()
     assert payload["status"] == "proposed"
     assert payload["patchSummary"] == "判断基準を追記"
+    assert payload["analysisTimeline"][0]["id"] == "collect_answers"
+    assert payload["analysisTimeline"][0]["summary"] == "採点済み回答 2 件を収集しました"
     assert payload["failureSignals"][0]["sampleSize"] == 2
     assert payload["failureSignals"][0]["confidenceNote"] == "少数回答の傾向です。"
 

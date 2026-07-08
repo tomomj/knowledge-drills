@@ -9,15 +9,20 @@ from app.repositories.repositories import (
     PatchRepository,
 )
 from app.schemas import (
+    AnswerStatus,
+    AnswerSubmission,
     Course,
     CourseCreateRequest,
     CourseDetailResponse,
     CourseListResponse,
+    CourseMetricsResponse,
+    CourseMetricsRun,
     CourseRevisionDiffResponse,
     CourseRevisionListResponse,
     CourseRevisionSummary,
     CourseSummary,
     CourseUpdateRequest,
+    DrillRun,
 )
 from app.utils.diff import build_unified_diff
 
@@ -48,6 +53,7 @@ class CourseService:
             owner_user_id=owner_user_id,
             title=request.title,
             markdown=request.markdown,
+            drill_focus=self._normalize_drill_focus(request.drill_focus),
             version=1,
             updated_at=_utc_now(),
         )
@@ -71,6 +77,7 @@ class CourseService:
             update={
                 "title": request.title,
                 "markdown": request.markdown,
+                "drill_focus": self._normalize_drill_focus(request.drill_focus),
                 "version": course.version + 1,
                 "updated_at": _utc_now(),
             }
@@ -104,6 +111,18 @@ class CourseService:
                 )
                 for revision in revisions
             ]
+        )
+
+    def get_course_metrics(self, course_id: str, owner_user_id: str) -> CourseMetricsResponse:
+        self._get_owned_course_or_404(course_id, owner_user_id)
+        if self._drill_repository is None or self._answer_repository is None:
+            raise RuntimeError("CourseService metrics dependencies are not configured")
+
+        drill_runs = self._drill_repository.list_by_course(course_id)
+        drill_runs.sort(key=lambda drill_run: (drill_run.course_version, drill_run.id))
+        return CourseMetricsResponse(
+            course_id=course_id,
+            runs=[self._build_metrics_run(drill_run) for drill_run in drill_runs],
         )
 
     def diff_revisions(
@@ -187,6 +206,22 @@ class CourseService:
             latest_patch_id=course.latest_patch_id,
         )
 
+    def _build_metrics_run(self, drill_run: DrillRun) -> CourseMetricsRun:
+        if self._answer_repository is None:
+            raise RuntimeError("CourseService metrics dependencies are not configured")
+        answers = self._answer_repository.list_by_drill_run(drill_run.id)
+        graded_answers = [answer for answer in answers if answer.status == AnswerStatus.GRADED]
+        total_scores = [
+            answer.total_score for answer in graded_answers if answer.total_score is not None
+        ]
+        return CourseMetricsRun(
+            drill_run_id=drill_run.id,
+            course_version=drill_run.course_version,
+            answer_count=len(answers),
+            average_score=_average(total_scores),
+            max_score=_drill_max_score(drill_run, graded_answers),
+        )
+
     def _validate_title_and_markdown(self, title: str, markdown: str) -> None:
         if not title.strip():
             raise AppError("course_title_required", "Course title is required.")
@@ -198,6 +233,28 @@ class CourseService:
                 "Course markdown exceeds the MVP character limit.",
             )
 
+    def _normalize_drill_focus(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _average(values: list[int]) -> float | None:
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _drill_max_score(drill_run: DrillRun, graded_answers: list[AnswerSubmission]) -> int | None:
+    question_total = sum(question.max_score for question in drill_run.questions)
+    if question_total > 0:
+        return question_total
+    for answer in graded_answers:
+        if answer.max_score is not None:
+            return answer.max_score
+    return None

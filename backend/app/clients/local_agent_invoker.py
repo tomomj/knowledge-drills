@@ -6,7 +6,17 @@ from app.clients.agent_runtime_client import AgentPayload, AgentResponse
 class LocalAgentInvoker:
     def __call__(self, task_name: str, payload: AgentPayload) -> AgentResponse:
         if task_name == "generate_drill":
-            return {"questions": [_question("q1"), _question("q2"), _question("q3")]}
+            course_markdown = cast(str, payload["courseMarkdown"])
+            drill_focus = payload.get("drillFocus")
+            focus = drill_focus if isinstance(drill_focus, str) and drill_focus else None
+            evidence = _source_evidence_from_markdown(course_markdown)
+            return {
+                "questions": [
+                    _question("q1", evidence, focus),
+                    _question("q2", evidence, focus),
+                    _question("q3", evidence, focus),
+                ]
+            }
         if task_name == "grade_answer":
             question = cast(dict[str, object], payload["question"])
             return {
@@ -45,18 +55,42 @@ class LocalAgentInvoker:
         raise RuntimeError(f"Unknown local agent task: {task_name}")
 
 
-def _question(question_id: str) -> dict[str, object]:
+def _source_evidence_from_markdown(markdown: str) -> dict[str, str]:
+    for line in markdown.splitlines():
+        candidate = line.strip()
+        if candidate.startswith("#"):
+            return {
+                "sectionHeading": candidate.lstrip("#").strip() or candidate,
+                "excerpt": candidate,
+            }
+
+    for line in markdown.splitlines():
+        candidate = line.strip()
+        if candidate:
+            return {"sectionHeading": "本文", "excerpt": candidate}
+
+    return {"sectionHeading": "本文", "excerpt": markdown}
+
+
+def _question(
+    question_id: str,
+    evidence: dict[str, str],
+    drill_focus: str | None,
+) -> dict[str, object]:
+    focus_prefix = f"{drill_focus}について、" if drill_focus else ""
     return {
         "id": question_id,
-        "question": f"{question_id} の業務判断について、根拠と例外条件を書いてください。",
-        "intent": "業務判断の根拠を確認する",
+        "question": (
+            f"{question_id} の業務判断として、"
+            f"{focus_prefix}講座の根拠に基づく対応と判断理由を書いてください。"
+        ),
+        "intent": (
+            f"{drill_focus}に関する業務判断の根拠を確認する"
+            if drill_focus
+            else "業務判断の根拠を確認する"
+        ),
         "rubric": [{"criterion": "根拠と例外条件", "points": 4, "required": True}],
-        "idealAnswer": "資料の判断基準を根拠にし、例外時の確認先も述べる。",
-        "sourceEvidence": [
-            {
-                "sectionHeading": "判断基準",
-                "excerpt": "## 判断基準",
-            }
-        ],
+        "idealAnswer": f"講座の根拠「{evidence['excerpt']}」に基づいて判断する。",
+        "sourceEvidence": [evidence],
         "maxScore": 4,
     }

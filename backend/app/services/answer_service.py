@@ -12,10 +12,10 @@ from app.schemas import (
     AnswerStatus,
     AnswerSubmission,
     DrillRun,
-    DrillRunStatus,
     GradingRequest,
     SubmitAnswerRequest,
 )
+from app.services.drill_status_policy import is_distributable_drill_status
 
 EXPECTED_ANSWER_COUNT = 3
 
@@ -49,7 +49,7 @@ class AnswerService:
         if drill_run_id is None:
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
         drill_run = self._drill_repository.get(drill_run_id)
-        if drill_run is None or drill_run.status != DrillRunStatus.READY:
+        if drill_run is None or not is_distributable_drill_status(drill_run.status):
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
 
         answers_by_question_id = self.validate_submission(drill_run, request)

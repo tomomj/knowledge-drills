@@ -21,7 +21,7 @@ network access are required.
 from collections.abc import AsyncGenerator, Callable
 
 import pytest
-from google.adk.agents import Agent
+from google.adk.agents import Agent, BaseAgent
 from google.adk.models.google_llm import Gemini
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
@@ -64,10 +64,16 @@ LEAF_FACTORIES: dict[str, Callable[[], Agent]] = {
     "document_patch_agent": create_document_patch_agent,
 }
 
-MODULE_LEVEL_LEAVES: dict[str, Agent] = {
+ROOT_SUB_AGENTS: dict[str, BaseAgent] = {
     "drill_generator_agent": drill_generator_agent,
     "grading_agent": grading_agent,
     "failure_analysis_agent": failure_analysis_agent,
+    "document_patch_agent": document_patch_agent,
+}
+
+MODULE_LEVEL_SINGLE_LEAVES: dict[str, Agent] = {
+    "drill_generator_agent": drill_generator_agent,
+    "grading_agent": grading_agent,
     "document_patch_agent": document_patch_agent,
 }
 
@@ -128,35 +134,43 @@ def _function_declaration_names(llm_request: LlmRequest) -> list[str]:
 
 
 def test_single_parent_constraint_premise_on_module_level_leaves() -> None:
-    """Documents the conflict premise: module-level leaves are parent-attached.
+    """Documents the conflict premise: module-level root sub-agents are parent-attached.
 
     Runner construction still succeeds for them in google-adk 2.3.0, so the
     conflict is behavioral (AutoFlow transfer surface), not constructional.
     """
     session_service = _make_session_service()
-    for name, leaf in MODULE_LEVEL_LEAVES.items():
-        assert leaf.parent_agent is root_agent
-        runner = Runner(app_name="premise", agent=leaf, session_service=session_service)
-        assert runner.agent is leaf, name
+    for name, sub_agent in ROOT_SUB_AGENTS.items():
+        assert sub_agent.parent_agent is root_agent
+        runner = Runner(app_name="premise", agent=sub_agent, session_service=session_service)
+        assert runner.agent is sub_agent, name
 
 
 def test_standalone_factories_yield_parentless_agents_with_unchanged_contract() -> None:
     """Factories produce parent-less clones of the registered leaf definitions.
 
     Guards the task boundary: no prompt / schema / name / description content
-    change relative to the module-level (sub_agents-registered) definitions.
+    change relative to the module-level single leaf definitions where they are
+    still registered directly. Failure analysis keeps its single leaf factory
+    for deterministic Runner execution, while the root app can register the
+    configured composed workflow.
     """
     for name, factory in LEAF_FACTORIES.items():
         standalone = factory()
-        registered = MODULE_LEVEL_LEAVES[name]
         assert standalone.parent_agent is None
+        assert standalone.sub_agents == []
+        if name == "failure_analysis_agent":
+            assert standalone.name == name
+            assert standalone.output_schema is not None
+            continue
+
+        registered = MODULE_LEVEL_SINGLE_LEAVES[name]
         assert standalone is not registered
         assert standalone.name == registered.name == name
         assert standalone.description == registered.description
         assert standalone.instruction == registered.instruction
         assert standalone.input_schema is registered.input_schema
         assert standalone.output_schema is registered.output_schema
-        assert standalone.sub_agents == []
 
 
 def test_each_standalone_leaf_mounts_on_individual_runner(

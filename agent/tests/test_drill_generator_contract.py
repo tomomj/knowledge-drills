@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from knowledge_drill_agent.agent import drill_generator_agent
 from knowledge_drill_agent.samples import build_sample_drill_generation_output
 from knowledge_drill_agent.schemas import (
+    DrillGenerationInput,
     DrillGenerationOutput,
     DrillQuestion,
     RubricItem,
@@ -13,12 +14,46 @@ from knowledge_drill_agent.schemas import (
 
 def test_drill_generator_agent_declares_output_contract() -> None:
     assert drill_generator_agent.name == "drill_generator_agent"
+    assert drill_generator_agent.input_schema is DrillGenerationInput
     assert drill_generator_agent.output_schema is DrillGenerationOutput
     instruction = drill_generator_agent.instruction
     assert isinstance(instruction, str)
     assert "必ず3問" in instruction
     assert "sourceEvidence" in instruction
     assert "question" in instruction
+    assert "drillFocus" in instruction
+    assert "出題観点" in instruction
+    assert "完全一致" in instruction
+    assert "教材に実在する内容のみ" in instruction
+
+
+def test_drill_generation_input_accepts_drill_focus_aliases() -> None:
+    camel_payload = DrillGenerationInput.model_validate(
+        {
+            "courseTitle": "講座",
+            "courseMarkdown": "# Body",
+            "drillFocus": "例外条件を重点的に出す",
+        }
+    )
+    focus_payload = DrillGenerationInput.model_validate(
+        {"title": "講座", "markdown": "# Body", "focus": "顧客影響"}
+    )
+    snake_payload = DrillGenerationInput(
+        course_title="講座",
+        course_markdown="# Body",
+        drill_focus="判断基準",
+    )
+
+    assert camel_payload.drill_focus == "例外条件を重点的に出す"
+    assert focus_payload.drill_focus == "顧客影響"
+    assert snake_payload.model_dump(by_alias=True)["drillFocus"] == "判断基準"
+
+    with pytest.raises(ValidationError):
+        DrillGenerationInput(
+            course_title="講座",
+            course_markdown="# Body",
+            drill_focus="あ" * 501,
+        )
 
 
 def test_drill_generation_schema_requires_three_questions() -> None:

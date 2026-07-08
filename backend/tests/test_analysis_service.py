@@ -11,7 +11,7 @@ from app.repositories.repositories import (
     DrillRepository,
     PatchRepository,
 )
-from app.schemas import AnswerStatus, Course, DrillRun, DrillRunStatus
+from app.schemas import AnalysisStepStatus, AnswerStatus, Course, DrillRun, DrillRunStatus
 from app.services.analysis_service import AnalysisService
 
 
@@ -51,7 +51,24 @@ def _proposal_service(
                         "sampleSize": 1,
                         "confidenceNote": "少数回答に基づく傾向",
                     }
-                ]
+                ],
+                "perspectives": [
+                    {
+                        "id": "material_gap",
+                        "title": "教材ギャップ",
+                        "summary": "例が不足している",
+                    },
+                    {
+                        "id": "question_quality",
+                        "title": "設問品質",
+                        "summary": "設問は根拠提示を求めている",
+                    },
+                    {
+                        "id": "learner_pattern",
+                        "title": "つまずきパターン",
+                        "summary": "根拠への言及が抜けている",
+                    },
+                ],
             }
         return {
             "patchedMarkdown": "# After\n",
@@ -93,6 +110,20 @@ def test_start_analysis_sets_drill_to_analyzing_when_graded_answer_exists() -> N
     assert drill_run.status == "analyzing"
     assert saved is not None
     assert saved.status == "analyzing"
+    assert [item.id for item in saved.analysis_timeline] == [
+        "collect_answers",
+        "detect_failure_patterns",
+        "match_course_evidence",
+        "decide_patch_strategy",
+        "create_patch",
+    ]
+    assert saved.analysis_timeline[0].status == AnalysisStepStatus.RUNNING
+    assert [item.status for item in saved.analysis_timeline[1:]] == [
+        AnalysisStepStatus.PENDING,
+        AnalysisStepStatus.PENDING,
+        AnalysisStepStatus.PENDING,
+        AnalysisStepStatus.PENDING,
+    ]
 
 
 def test_start_analysis_requires_at_least_one_graded_answer() -> None:
@@ -210,14 +241,104 @@ def test_run_analysis_persists_patch_and_latest_state() -> None:
     assert saved_drill is not None
     assert saved_course is not None
     assert saved_patch.status == "proposed"
+    assert [item.status for item in saved_patch.analysis_timeline] == [
+        AnalysisStepStatus.COMPLETED,
+        AnalysisStepStatus.COMPLETED,
+        AnalysisStepStatus.COMPLETED,
+        AnalysisStepStatus.COMPLETED,
+        AnalysisStepStatus.COMPLETED,
+    ]
     assert saved_drill.status == "analyzed"
     assert saved_course.latest_patch_id == patch.id
     assert saved_course.latest_patch_status == "proposed"
     assert saved_course.latest_drill_run_id == "drill-1"
     assert saved_course.latest_drill_status == "analyzed"
+    assert [item.status for item in saved_drill.analysis_timeline] == [
+        AnalysisStepStatus.COMPLETED,
+        AnalysisStepStatus.COMPLETED,
+        AnalysisStepStatus.COMPLETED,
+        AnalysisStepStatus.COMPLETED,
+        AnalysisStepStatus.COMPLETED,
+    ]
+    assert saved_drill.analysis_timeline[0].summary == "採点済み回答 1 件を収集しました"
+    assert saved_drill.analysis_timeline[1].evidence == [
+        "教材ギャップ: 例が不足している",
+        "設問品質: 設問は根拠提示を求めている",
+        "つまずきパターン: 根拠への言及が抜けている",
+    ]
 
 
-def test_run_analysis_marks_drill_failed_when_generation_fails() -> None:
+def test_run_analysis_saves_intermediate_timeline_before_agent_calls() -> None:
+    client = InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    patch_repository = PatchRepository(client)
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
+    )
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    answer_repository.create(
+        id="graded-answer",
+        drill_run_id="drill-1",
+        learner_name="受講者1",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+    observed_statuses: list[dict[str, str]] = []
+
+    def invoke(task_name: str, _payload: dict[str, object]) -> dict[str, object]:
+        saved_drill = drill_repository.get("drill-1")
+        assert saved_drill is not None
+        observed_statuses.append(
+            {item.id: item.status.value for item in saved_drill.analysis_timeline}
+        )
+        if task_name == "analyze_failures":
+            return {
+                "failureSignals": [
+                    {
+                        "id": "fs_test_001",
+                        "title": "判断根拠の不足",
+                        "severity": "medium",
+                        "evidence": ["graded answer only"],
+                        "likelyCause": "説明が薄い",
+                        "suspectedDocumentGap": "例が不足",
+                        "targetSections": ["## 方針"],
+                        "recommendedChange": "例を追記",
+                        "sampleSize": 1,
+                    }
+                ]
+            }
+        return {
+            "patchedMarkdown": "# After\n",
+            "patchSummary": "説明を追加",
+            "riskNotes": ["要確認"],
+        }
+
+    service = AnalysisService(
+        drill_repository,
+        answer_repository,
+        course_repository=course_repository,
+        patch_repository=patch_repository,
+        agent_client=AgentRuntimeClient(invoker=invoke),
+    )
+
+    service.run_analysis("drill-1", "owner-1")
+
+    saved_drill = drill_repository.get("drill-1")
+    assert saved_drill is not None
+    assert observed_statuses[0]["collect_answers"] == "completed"
+    assert observed_statuses[0]["detect_failure_patterns"] == "running"
+    assert observed_statuses[1]["detect_failure_patterns"] == "completed"
+    assert observed_statuses[1]["match_course_evidence"] == "completed"
+    assert observed_statuses[1]["decide_patch_strategy"] == "completed"
+    assert observed_statuses[1]["create_patch"] == "running"
+    assert saved_drill.analysis_timeline[1].evidence == ["判断根拠の不足"]
+
+
+def test_run_analysis_marks_running_step_failed_and_restores_ready_when_analysis_fails() -> None:
     client = InMemoryFirestoreClient()
     course_repository = CourseRepository(client)
     drill_repository = DrillRepository(client)
@@ -253,7 +374,13 @@ def test_run_analysis_marks_drill_failed_when_generation_fails() -> None:
     saved_course = course_repository.get("course-1")
     assert saved_drill is not None
     assert saved_course is not None
-    assert saved_drill.status == "failed"
+    assert saved_drill.status == "ready"
     assert saved_drill.error_message == "analysis failed"
     assert saved_course.latest_drill_run_id == "drill-1"
-    assert saved_course.latest_drill_status == "failed"
+    assert saved_course.latest_drill_status == "ready"
+    failed_steps = [
+        item for item in saved_drill.analysis_timeline if item.status == AnalysisStepStatus.FAILED
+    ]
+    assert len(failed_steps) == 1
+    assert failed_steps[0].id == "detect_failure_patterns"
+    assert failed_steps[0].summary == "analysis failed"

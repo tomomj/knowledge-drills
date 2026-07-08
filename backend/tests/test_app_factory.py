@@ -40,7 +40,7 @@ def test_create_app_uses_local_invoker_by_default_without_google_auth(
     with TestClient(app) as client:
         course_response = client.post(
             "/api/courses",
-            json={"title": "講座", "markdown": "# Body"},
+            json={"title": "講座", "markdown": "# Body\n\n## 判断基準\n根拠を確認します。"},
         )
         course_id = course_response.json()["courseId"]
 

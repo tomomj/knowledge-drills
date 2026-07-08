@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from uuid import uuid4
 
 from app.clients.agent_runtime_client import AgentRuntimeClient
@@ -10,6 +11,8 @@ from app.repositories.repositories import (
 )
 from app.schemas import (
     AdminDrillQuestionResponse,
+    AnswerStatus,
+    AnswerSubmission,
     DrillAdminResponse,
     DrillAnswerAdminItem,
     DrillAnswersResponse,
@@ -17,9 +20,13 @@ from app.schemas import (
     DrillQuestion,
     DrillRun,
     DrillRunStatus,
+    DrillScoreSummary,
+    GradingResult,
     LearnerDrillQuestionResponse,
     LearnerDrillResponse,
+    QuestionScoreSummary,
 )
+from app.services.drill_status_policy import is_distributable_drill_status
 from app.services.share_token_service import ShareTokenService
 
 
@@ -50,6 +57,7 @@ class DrillService:
             id=uuid4().hex,
             course_id=course.id,
             course_version=course.version,
+            drill_focus=course.drill_focus,
             status=DrillRunStatus.GENERATING,
         )
         self._share_token_service.create_drill_run_with_reserved_token(drill_run)
@@ -68,9 +76,10 @@ class DrillService:
                 DrillGenerationRequest(
                     course_title=course.title,
                     course_markdown=course.markdown,
+                    drill_focus=course.drill_focus,
                 )
             )
-            self._validate_questions(agent_response.questions)
+            self._validate_questions(agent_response.questions, course.markdown)
         except Exception:
             failed = saved_drill_run.model_copy(
                 update={
@@ -116,18 +125,21 @@ class DrillService:
             course_id=course_id,
         )
 
+        submissions = (
+            self._answer_repository.list_by_drill_run(drill_run.id)
+            if self._answer_repository is not None
+            else []
+        )
         answer_count = self._stored_answer_count(drill_run)
         if answer_count is None:
-            answer_count = (
-                len(self._answer_repository.list_by_drill_run(drill_run.id))
-                if self._answer_repository is not None
-                else 0
-            )
+            answer_count = len(submissions)
+        score_summary = self._build_score_summary(drill_run, submissions)
 
         return DrillAdminResponse(
             id=drill_run.id,
             course_id=drill_run.course_id,
             course_version=drill_run.course_version,
+            drill_focus=drill_run.drill_focus,
             status=drill_run.status,
             questions=[
                 AdminDrillQuestionResponse.from_domain(question) for question in drill_run.questions
@@ -135,7 +147,9 @@ class DrillService:
             rubric_summary=self._build_rubric_summary(drill_run.questions),
             share_url=f"/drills/{drill_run.share_token}" if drill_run.share_token else None,
             answer_count=answer_count,
-            can_analyze=answer_count > 0,
+            score_summary=score_summary,
+            analysis_timeline=drill_run.analysis_timeline,
+            can_analyze=score_summary.graded_answer_count > 0,
             error_message=drill_run.error_message,
         )
 
@@ -209,7 +223,7 @@ class DrillService:
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
 
         drill_run = self._drill_repository.get(drill_run_id)
-        if drill_run is None or drill_run.status != DrillRunStatus.READY:
+        if drill_run is None or not is_distributable_drill_status(drill_run.status):
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
 
         return LearnerDrillResponse(
@@ -221,7 +235,7 @@ class DrillService:
             ],
         )
 
-    def _validate_questions(self, questions: list[DrillQuestion]) -> None:
+    def _validate_questions(self, questions: list[DrillQuestion], course_markdown: str) -> None:
         if len(questions) != 3:
             raise ValueError("drill generation must return exactly three questions")
         for question in questions:
@@ -230,6 +244,12 @@ class DrillService:
                 raise ValueError("rubric points must total max_score")
             if not question.source_evidence:
                 raise ValueError("source evidence is required")
+            for evidence in question.source_evidence:
+                excerpt = evidence.excerpt.strip()
+                if not excerpt:
+                    raise ValueError("source evidence excerpt is required")
+                if excerpt not in course_markdown:
+                    raise ValueError("source evidence excerpt must match course markdown")
 
     def _build_rubric_summary(self, questions: list[DrillQuestion]) -> list[str]:
         return [
@@ -237,8 +257,97 @@ class DrillService:
             for question in questions
         ]
 
+    def _build_score_summary(
+        self,
+        drill_run: DrillRun,
+        answers: list[AnswerSubmission],
+    ) -> DrillScoreSummary:
+        graded_answers = [answer for answer in answers if answer.status == AnswerStatus.GRADED]
+        total_scores = [
+            answer.total_score for answer in graded_answers if answer.total_score is not None
+        ]
+        max_score = sum(question.max_score for question in drill_run.questions)
+
+        return DrillScoreSummary(
+            graded_answer_count=len(graded_answers),
+            average_score=_average(total_scores),
+            max_score=max_score,
+            questions=[
+                self._build_question_score_summary(question, graded_answers)
+                for question in drill_run.questions
+            ],
+        )
+
+    def _build_question_score_summary(
+        self,
+        question: DrillQuestion,
+        graded_answers: list[AnswerSubmission],
+    ) -> QuestionScoreSummary:
+        results = [
+            result
+            for answer in graded_answers
+            for result in answer.grading_results
+            if result.question_id == question.id
+        ]
+        return QuestionScoreSummary(
+            question_id=question.id,
+            average_score=_average(result.score for result in results),
+            max_score=question.max_score,
+            graded_answer_count=len(results),
+            common_missing_points=_top_frequent_strings(
+                (
+                    missing_point
+                    for result in results
+                    for missing_point in result.missing_points
+                ),
+                min_count=2,
+                limit=3,
+            ),
+            failure_tags=_top_failure_tags(results),
+        )
+
     def _stored_answer_count(self, drill_run: DrillRun) -> int | None:
         course = self._course_repository.get(drill_run.course_id)
         if course is None or course.latest_drill_run_id != drill_run.id:
             return None
         return course.answer_count
+
+
+def _average(values: Iterable[int]) -> float | None:
+    materialized = list(values)
+    if not materialized:
+        return None
+    return sum(materialized) / len(materialized)
+
+
+def _top_failure_tags(results: list[GradingResult]) -> list[str]:
+    deduplicated_tags: list[str] = []
+    for result in results:
+        seen_in_result: set[str] = set()
+        for tag in result.failure_tags:
+            if tag not in seen_in_result:
+                deduplicated_tags.append(tag)
+                seen_in_result.add(tag)
+    return _top_frequent_strings(deduplicated_tags, min_count=1, limit=3)
+
+
+def _top_frequent_strings(
+    values: Iterable[str],
+    *,
+    min_count: int,
+    limit: int,
+) -> list[str]:
+    counts: dict[str, int] = {}
+    first_seen: dict[str, int] = {}
+    for index, value in enumerate(values):
+        if value not in first_seen:
+            first_seen[value] = index
+        counts[value] = counts.get(value, 0) + 1
+
+    ranked = [
+        value
+        for value, count in counts.items()
+        if count >= min_count
+    ]
+    ranked.sort(key=lambda value: (-counts[value], first_seen[value]))
+    return ranked[:limit]
