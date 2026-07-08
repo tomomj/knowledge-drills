@@ -7,7 +7,7 @@ service, network access, or credentials are required.
 import asyncio
 import json
 import logging
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from typing import cast
 
 import pytest
@@ -134,6 +134,38 @@ class FakeFailingRunner:
         yield Event(author="unreachable")
 
 
+class FakeFlakyRunner:
+    """Fails for a bounded number of calls, then returns a final response."""
+
+    app_name = "fake-app"
+
+    def __init__(
+        self,
+        session_service: FakeSessionService,
+        failures: list[Exception],
+        response_text: str,
+    ) -> None:
+        self.session_service = session_service
+        self.failures = failures
+        self.response_text = response_text
+        self.calls = 0
+
+    async def run_async(
+        self, *, user_id: str, session_id: str, new_message: types.Content
+    ) -> AsyncGenerator[Event, None]:
+        self.calls += 1
+        if self.failures:
+            raise self.failures.pop(0)
+        yield Event(
+            author="flaky_agent",
+            content=types.Content(role="model", parts=[types.Part(text=self.response_text)]),
+        )
+
+
+class _ResourceExhaustedError(Exception):
+    pass
+
+
 class FakeRunnerHarness:
     """Bundles the fake runners with a counting runner factory."""
 
@@ -163,10 +195,20 @@ def _make_invoker(harness: FakeRunnerHarness) -> AdkAgentInvoker:
     return AdkAgentInvoker(timeout_seconds=5.0, runner_factory=harness.factory)
 
 
-def _make_single_runner_invoker(runner: object, *, timeout_seconds: float = 5.0) -> AdkAgentInvoker:
+def _make_single_runner_invoker(
+    runner: object,
+    *,
+    timeout_seconds: float = 5.0,
+    retry_max_attempts: int = 3,
+    retry_initial_delay_seconds: float = 1.0,
+    sleeper: Callable[[float], None] | None = None,
+) -> AdkAgentInvoker:
     return AdkAgentInvoker(
         timeout_seconds=timeout_seconds,
         runner_factory=lambda: {"generate_drill": cast(Runner, runner)},
+        retry_max_attempts=retry_max_attempts,
+        retry_initial_delay_seconds=retry_initial_delay_seconds,
+        sleeper=sleeper if sleeper is not None else lambda _delay: None,
     )
 
 
@@ -336,6 +378,77 @@ def test_runner_execution_error_is_normalized_without_logging_payload(
     assert any("error_type=RuntimeError" in message for message in messages)
     assert "auth failed with secret detail" not in caplog.text
     assert sentinel not in caplog.text
+
+
+def test_retryable_resource_exhausted_error_is_retried_without_logging_payload(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sentinel = "SECRET_RETRY_PAYLOAD_5df7"
+    delays: list[float] = []
+    runner = FakeFlakyRunner(
+        FakeSessionService(),
+        failures=[_ResourceExhaustedError("quota detail should not leak")],
+        response_text='{"ok": true}',
+    )
+    invoker = _make_single_runner_invoker(
+        runner,
+        retry_initial_delay_seconds=0.25,
+        sleeper=delays.append,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="app.agent"):
+        response = invoker("generate_drill", {"courseMarkdown": sentinel})
+
+    assert response == {"ok": True}
+    assert runner.calls == 2
+    assert delays == [0.25]
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "adk agent invocation retrying task=generate_drill" in message for message in messages
+    )
+    assert any("error_type=_ResourceExhaustedError" in message for message in messages)
+    assert any("attempt=1 max_attempts=3" in message for message in messages)
+    assert "quota detail should not leak" not in caplog.text
+    assert sentinel not in caplog.text
+
+
+def test_retryable_resource_exhausted_error_fails_after_max_attempts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    delays: list[float] = []
+    runner = FakeFlakyRunner(
+        FakeSessionService(),
+        failures=[
+            _ResourceExhaustedError("first transient failure"),
+            _ResourceExhaustedError("second transient failure"),
+        ],
+        response_text='{"ok": true}',
+    )
+    invoker = _make_single_runner_invoker(
+        runner,
+        retry_max_attempts=2,
+        retry_initial_delay_seconds=0.5,
+        sleeper=delays.append,
+    )
+
+    with (
+        caplog.at_level(logging.WARNING, logger="app.agent"),
+        pytest.raises(AgentInvocationError, match="agent execution failed") as exc_info,
+    ):
+        invoker("generate_drill", {"probe": "x"})
+
+    assert exc_info.value.task_name == "generate_drill"
+    assert exc_info.value.error_type == "_ResourceExhaustedError"
+    assert exc_info.value.reason == "transient_error=_ResourceExhaustedError"
+    assert runner.calls == 2
+    assert delays == [0.5]
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "adk agent invocation retrying task=generate_drill" in message for message in messages
+    )
+    assert any("adk agent invocation failed task=generate_drill" in message for message in messages)
+    assert "first transient failure" not in caplog.text
+    assert "second transient failure" not in caplog.text
 
 
 def test_default_runner_factory_builds_four_standalone_runners_with_shared_sessions() -> None:
