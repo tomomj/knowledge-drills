@@ -1,0 +1,2 @@
+# Project-local Codex configuration layer.
+# Rules under .codex/rules/ are loaded only when this repository is trusted.
