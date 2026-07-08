@@ -124,8 +124,8 @@ cd agent
 # 認証は Vertex AI が正道（API キー不要。プロジェクトのモデル実行基盤に一致）
 gcloud auth application-default login   # ローカルの場合。CI では agent-eval.yml の eval 専用 WIF 認証を利用
 cp .env.example .env
-# .env の GOOGLE_CLOUD_PROJECT を、Vertex AI で gemini-2.5-flash-lite を
-# us-central1 から実行できるプロジェクトに変更する
+# .env の GOOGLE_CLOUD_PROJECT を、Vertex AI で gemini-3.1-flash-lite を
+# global endpoint から実行できるプロジェクトに変更する
 # （代替: AI Studio を使うなら GOOGLE_API_KEY=... でも動く）
 
 python scripts/run_adk_evals.py
