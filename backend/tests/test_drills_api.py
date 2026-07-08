@@ -267,6 +267,47 @@ def test_generate_drill_api_creates_ready_run_from_course(client: TestClient) ->
     assert course_after.json()["latestDrillRunId"] == payload["drillRunId"]
 
 
+def test_generate_drill_api_returns_failed_run_for_invalid_source_evidence(
+    client: TestClient,
+) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.drill_service = DrillService(
+        course_repository=app.state.course_repository,
+        drill_repository=app.state.drill_repository,
+        share_token_service=ShareTokenService(
+            drill_repository=app.state.drill_repository,
+            share_token_repository=app.state.share_token_repository,
+            token_generator=lambda: "failed-token",
+        ),
+        agent_client=AgentRuntimeClient(invoker=lambda _task_name, _payload: _agent_response()),
+        answer_repository=app.state.answer_repository,
+        share_token_repository=app.state.share_token_repository,
+    )
+    course_response = client.post(
+        "/api/courses",
+        json={"title": "講座", "markdown": "# Body"},
+    )
+    course_id = course_response.json()["courseId"]
+
+    response = client.post(f"/api/courses/{course_id}/drill-runs")
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["drillRunId"]
+    assert payload["shareUrl"] == "/drills/failed-token"
+
+    admin_response = client.get(f"/api/courses/{course_id}/drill-runs/{payload['drillRunId']}")
+    assert admin_response.status_code == 200
+    admin_payload = admin_response.json()
+    assert admin_payload["status"] == "failed"
+    assert admin_payload["questions"] == []
+    assert admin_payload["errorMessage"] == "drill generation failed"
+
+    learner_response = client.get("/api/drills/failed-token")
+    assert learner_response.status_code == 404
+    assert learner_response.json()["code"] == "invalid_share_token"
+
+
 @pytest.mark.parametrize("path", ["/api/drills/share-token", "/api/learn/share-token"])
 @pytest.mark.parametrize(
     "status",
