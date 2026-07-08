@@ -9,7 +9,7 @@
         {
           "rubric_id": "fa_quality_gate",
           "rubric_content": {
-            "text_property": "失敗分析品質を総合的に評価する。failureSignals のいずれかが、入力の採点結果で複数の受講者に共通して現れている誤答傾向（複数受講者の missingPoints や failureTags が一致している不足点）を正しく指摘しており、targetSections にその不足点に対応する講座セクションが含まれている。sampleSize が入力の回答者数と一致し、回答数が少ない場合は confidenceNote で断定を避けて傾向として表現している。受講者を責める表現がなく、資料の説明不足（suspectedDocumentGap）と受講者の理解不足（likelyCause）を区別して記述している。"
+            "text_property": "失敗分析品質を総合的に評価する。failureSignals のいずれかが、入力の採点結果で複数の受講者に共通して現れている誤答傾向（複数受講者の missingPoints や failureTags が一致している不足点）を正しく指摘しており、targetSections にその不足点に対応する講座セクションが含まれている。sampleSize が入力の回答者数と一致し、回答数が少ない場合は confidenceNote で断定を避けて傾向として表現している。受講者を責める表現がなく、資料の説明不足（suspectedDocumentGap）と受講者の理解不足（likelyCause）を区別して記述している。出力に perspectives と reviewNotes が含まれ、reviewNotes は evidence_critic または critic_reviewer の根拠レビューを表示用要約として説明し、timelineStep に match_course_evidence または decide_patch_strategy を使っている。Chain-of-thought、プロンプト本文、内部推論文を含めていない。"
           }
         }
       ]

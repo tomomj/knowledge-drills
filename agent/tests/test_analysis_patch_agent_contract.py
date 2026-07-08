@@ -1,5 +1,8 @@
+from typing import Any, cast
+
 import pytest
-from google.adk.agents import Agent, ParallelAgent, SequentialAgent
+from google.adk.agents import Agent, LoopAgent, ParallelAgent, SequentialAgent
+from google.adk.tools.exit_loop_tool import exit_loop
 from pydantic import ValidationError
 
 from knowledge_drill_agent.agent import (
@@ -14,10 +17,14 @@ from knowledge_drill_agent.samples import (
 )
 from knowledge_drill_agent.schemas import (
     AnalysisPerspective,
+    AnalysisReviewNote,
+    CriticReviewOutput,
     DocumentPatchOutput,
+    EvidenceReviewOutput,
     FailureAnalysisInput,
     FailureAnalysisOutput,
     FailureSignal,
+    ReviewedFinding,
 )
 
 
@@ -41,38 +48,59 @@ def test_composite_failure_analysis_agent_runs_lenses_then_synthesis() -> None:
     assert isinstance(composite, SequentialAgent)
     assert composite.name == "failure_analysis_agent"
     assert composite.parent_agent is None
-    assert len(composite.sub_agents) == 2
+    assert len(composite.sub_agents) == 3
 
-    lens_parallel = composite.sub_agents[0]
-    synthesis_agent = composite.sub_agents[1]
-    assert isinstance(lens_parallel, ParallelAgent)
-    assert isinstance(synthesis_agent, Agent)
-    assert len(lens_parallel.sub_agents) == 3
+    analyst_parallel = composite.sub_agents[0]
+    review_loop = composite.sub_agents[1]
+    finalizer = composite.sub_agents[2]
+    assert isinstance(analyst_parallel, ParallelAgent)
+    assert analyst_parallel.name == "analyst_parallel"
+    assert isinstance(review_loop, LoopAgent)
+    assert review_loop.name == "review_loop"
+    assert review_loop.max_iterations == 3
+    assert isinstance(finalizer, Agent)
+    assert len(analyst_parallel.sub_agents) == 3
 
-    lens_agents = lens_parallel.sub_agents
-    assert {agent.name for agent in lens_agents} == {
-        "failure_material_gap_lens",
-        "failure_question_quality_lens",
-        "failure_learner_pattern_lens",
+    analyst_agents = analyst_parallel.sub_agents
+    assert {agent.name for agent in analyst_agents} == {
+        "failure_misconception_analyst",
+        "failure_document_gap_analyst",
+        "failure_question_quality_analyst",
     }
-    assert {agent.output_key for agent in lens_agents if isinstance(agent, Agent)} == {
-        "material_gap_perspective",
-        "question_quality_perspective",
-        "learner_pattern_perspective",
+    assert {agent.output_key for agent in analyst_agents if isinstance(agent, Agent)} == {
+        "misconception_findings",
+        "doc_gap_findings",
+        "question_quality_findings",
     }
-    for lens_agent in lens_agents:
-        assert isinstance(lens_agent, Agent)
-        assert lens_agent.model == "gemini-contract-probe"
-        assert lens_agent.input_schema is FailureAnalysisInput
-        assert lens_agent.output_schema is None
+    for analyst_agent in analyst_agents:
+        assert isinstance(analyst_agent, Agent)
+        assert analyst_agent.model == "gemini-contract-probe"
+        assert analyst_agent.input_schema is FailureAnalysisInput
+        assert analyst_agent.output_schema is None
 
-    assert synthesis_agent.model == "gemini-contract-probe"
-    assert synthesis_agent.input_schema is FailureAnalysisInput
-    assert synthesis_agent.output_schema is FailureAnalysisOutput
-    assert isinstance(synthesis_agent.instruction, str)
-    assert "material_gap_perspective" in synthesis_agent.instruction
-    assert "question_quality_perspective" in synthesis_agent.instruction
-    assert "learner_pattern_perspective" in synthesis_agent.instruction
+    assert len(review_loop.sub_agents) == 2
+    evidence_critic = review_loop.sub_agents[0]
+    critic_reviewer = review_loop.sub_agents[1]
+    assert isinstance(evidence_critic, Agent)
+    assert isinstance(critic_reviewer, Agent)
+    assert evidence_critic.name == "evidence_critic"
+    assert evidence_critic.output_key == "evidence_review"
+    assert evidence_critic.output_schema is EvidenceReviewOutput
+    assert critic_reviewer.name == "critic_reviewer"
+    assert critic_reviewer.output_key == "critic_review"
+    assert critic_reviewer.output_schema is CriticReviewOutput
+    assert exit_loop in critic_reviewer.tools
+
+    assert finalizer.name == "failure_analysis_finalizer"
+    assert finalizer.model == "gemini-contract-probe"
+    assert finalizer.input_schema is FailureAnalysisInput
+    assert finalizer.output_schema is FailureAnalysisOutput
+    assert finalizer.output_key is None
+    assert isinstance(finalizer.instruction, str)
+    assert "misconception_findings" in finalizer.instruction
+    assert "doc_gap_findings" in finalizer.instruction
+    assert "question_quality_findings" in finalizer.instruction
+    assert "approvedFindingIds" in finalizer.instruction
 
 
 def test_configured_failure_analysis_agent_switches_modes() -> None:
@@ -145,6 +173,66 @@ def test_failure_analysis_output_accepts_optional_perspectives() -> None:
     assert output_with_perspectives.model_dump(by_alias=True)["perspectives"][0]["summary"] == (
         "例外条件の説明不足が見られます"
     )
+
+
+def test_failure_analysis_review_loop_schemas_use_camel_case_contracts() -> None:
+    accepted = ReviewedFinding(
+        finding_id="finding-1",
+        source="document_gap_analyst",
+        summary="例外条件の教材説明が薄い",
+        rationale="採点結果で例外条件への言及不足が複数ある",
+        evidence=["2 件の回答で例外条件に触れていない"],
+    )
+    evidence_review = EvidenceReviewOutput(
+        accepted_findings=[accepted],
+        rejected_findings=[],
+        finalizer_guidance=["finding-1 だけを Failure Signal の根拠にする"],
+        risks=["少数回答のため confidenceNote を残す"],
+        revision_notes=["reviewer 指摘に基づき evidence を採点結果に限定した"],
+    )
+    critic_review = CriticReviewOutput(
+        verdict="approved",
+        issues=[],
+        revision_instructions=[],
+        approved_finding_ids=["finding-1"],
+        risk_notes=["未承認 finding は採用しない"],
+    )
+    review_note = AnalysisReviewNote(
+        id="critic-review-1",
+        source="critic_reviewer",
+        timeline_step="decide_patch_strategy",
+        title="採用所見のレビュー",
+        summary="finding-1 の根拠は採用可能",
+        evidence=["approvedFindingIds: finding-1"],
+    )
+    output = FailureAnalysisOutput(
+        failure_signals=[
+            FailureSignal(
+                title="例外条件の説明不足",
+                severity="medium",
+                evidence=["2 件の回答で例外条件に触れていない"],
+                likely_cause="例外条件の説明が短い",
+                suspected_document_gap="判断基準の例外条件が不足",
+                target_sections=["## 判断基準"],
+                recommended_change="例外条件の判断例を追加する",
+                sample_size=2,
+            )
+        ],
+        review_notes=[review_note],
+    )
+
+    assert evidence_review.model_dump(by_alias=True)["acceptedFindings"][0]["findingId"] == (
+        "finding-1"
+    )
+    assert critic_review.model_dump(by_alias=True)["approvedFindingIds"] == ["finding-1"]
+    assert output.model_dump(by_alias=True)["reviewNotes"][0]["timelineStep"] == (
+        "decide_patch_strategy"
+    )
+
+
+def test_critic_review_rejects_unknown_verdict() -> None:
+    with pytest.raises(ValidationError):
+        CriticReviewOutput(verdict=cast(Any, "rejected"))
 
 
 def test_local_analysis_and_patch_samples_are_schema_valid() -> None:

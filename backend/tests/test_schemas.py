@@ -3,6 +3,9 @@ from pydantic import ValidationError
 
 from app.schemas import (
     AdminDrillQuestionResponse,
+    AnalysisReviewNote,
+    AnalysisReviewSource,
+    AnalysisReviewTimelineStep,
     AnalysisStepStatus,
     AnalysisTimelineItem,
     AnswerStatus,
@@ -257,3 +260,35 @@ def test_failure_analysis_response_accepts_optional_perspectives() -> None:
     )
 
     assert response.perspectives[0].summary == "例外条件の説明不足が見られます"
+
+
+def test_failure_analysis_response_accepts_optional_review_notes() -> None:
+    existing_response = FailureAnalysisResponse(failure_signals=[])
+    response = FailureAnalysisResponse.model_validate(
+        {
+            "failureSignals": [],
+            "reviewNotes": [
+                {
+                    "id": "review-note-1",
+                    "source": "critic_reviewer",
+                    "timelineStep": "decide_patch_strategy",
+                    "title": "採用所見のレビュー",
+                    "summary": "approvedFindingIds に含まれる所見だけを採用できます",
+                    "evidence": ["approvedFindingIds: finding-1"],
+                }
+            ],
+        }
+    )
+
+    assert existing_response.review_notes == []
+    assert response.review_notes[0] == AnalysisReviewNote(
+        id="review-note-1",
+        source=AnalysisReviewSource.CRITIC_REVIEWER,
+        timeline_step=AnalysisReviewTimelineStep.DECIDE_PATCH_STRATEGY,
+        title="採用所見のレビュー",
+        summary="approvedFindingIds に含まれる所見だけを採用できます",
+        evidence=["approvedFindingIds: finding-1"],
+    )
+    assert response.model_dump(by_alias=True)["reviewNotes"][0]["timelineStep"] == (
+        "decide_patch_strategy"
+    )
