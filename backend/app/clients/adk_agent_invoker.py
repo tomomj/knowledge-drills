@@ -109,7 +109,12 @@ class AdkAgentInvoker:
     def __call__(self, task_name: str, payload: AgentPayload) -> AgentResponse:
         runner = self._runners.get(task_name)
         if runner is None:
-            raise AgentInvocationError(f"unknown agent task: {task_name}")
+            raise AgentInvocationError(
+                f"unknown agent task: {task_name}",
+                task_name=task_name,
+                error_type="UnknownTask",
+                reason="unknown agent task",
+            )
         logger.info("adk agent invocation started task=%s", task_name)
         try:
             return asyncio.run(
@@ -119,19 +124,39 @@ class AdkAgentInvoker:
                 )
             )
         except AgentInvocationError as exc:
-            self._log_invocation_failure(task_name, type(exc).__name__)
+            self._log_invocation_failure(
+                task_name,
+                exc.error_type or type(exc).__name__,
+                exc.reason or "agent invocation failed",
+            )
             raise
         except TimeoutError as exc:
-            self._log_invocation_failure(task_name, type(exc).__name__)
-            raise AgentInvocationError(f"agent invocation timed out task={task_name}") from exc
-        except json.JSONDecodeError as exc:
-            self._log_invocation_failure(task_name, type(exc).__name__)
+            reason = f"timeout_seconds={self._timeout_seconds:g}"
+            self._log_invocation_failure(task_name, type(exc).__name__, reason)
             raise AgentInvocationError(
-                f"invalid JSON response from agent task={task_name}"
+                f"agent invocation timed out task={task_name}",
+                task_name=task_name,
+                error_type=type(exc).__name__,
+                reason=reason,
+            ) from exc
+        except json.JSONDecodeError as exc:
+            reason = f"{exc.msg} line={exc.lineno} column={exc.colno}"
+            self._log_invocation_failure(task_name, type(exc).__name__, reason)
+            raise AgentInvocationError(
+                f"invalid JSON response from agent task={task_name}",
+                task_name=task_name,
+                error_type=type(exc).__name__,
+                reason=reason,
             ) from exc
         except Exception as exc:
-            self._log_invocation_failure(task_name, type(exc).__name__)
-            raise AgentInvocationError(f"agent execution failed task={task_name}") from exc
+            reason = "agent execution raised"
+            self._log_invocation_failure(task_name, type(exc).__name__, reason)
+            raise AgentInvocationError(
+                f"agent execution failed task={task_name}",
+                task_name=task_name,
+                error_type=type(exc).__name__,
+                reason=reason,
+            ) from exc
 
     async def _run_once(
         self, runner: Runner, task_name: str, payload: AgentPayload
@@ -159,13 +184,19 @@ class AdkAgentInvoker:
                 if text is not None:
                     final_text = text
         if final_text is None:
-            raise AgentInvocationError(f"agent returned no final response task={task_name}")
+            raise AgentInvocationError(
+                f"agent returned no final response task={task_name}",
+                task_name=task_name,
+                error_type="NoFinalResponse",
+                reason="agent returned no final response",
+            )
         parsed: AgentResponse = json.loads(final_text)
         return parsed
 
-    def _log_invocation_failure(self, task_name: str, error_type: str) -> None:
-        logger.info(
-            "adk agent invocation failed task=%s error_type=%s",
+    def _log_invocation_failure(self, task_name: str, error_type: str, reason: str) -> None:
+        logger.warning(
+            "adk agent invocation failed task=%s error_type=%s reason=%s",
             task_name,
             error_type,
+            reason,
         )

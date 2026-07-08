@@ -85,11 +85,15 @@ def test_agent_invocation_error_returns_502_without_payload_and_app_continues(
     )
     course_id = course_response.json()["courseId"]
 
-    with caplog.at_level(logging.INFO, logger="app.error"):
+    with caplog.at_level(logging.ERROR, logger="app.error"):
         response = client.post(f"/api/courses/{course_id}/drill-runs")
 
     assert response.status_code == 502
     assert response.json()["code"] == "agent_invocation_failed"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("agent invocation failed" in message for message in messages)
+    assert any("error_type=AgentInvocationError" in message for message in messages)
+    assert all(record.levelno >= logging.ERROR for record in caplog.records)
     assert sentinel not in str(response.json())
     assert sentinel not in caplog.text
 

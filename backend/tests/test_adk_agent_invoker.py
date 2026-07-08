@@ -279,12 +279,22 @@ def test_timeout_is_normalized_to_agent_invocation_error(
     assert sentinel not in caplog.text
 
 
-def test_missing_final_response_is_normalized_to_agent_invocation_error() -> None:
+def test_missing_final_response_is_normalized_to_agent_invocation_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     runner = FakeNoFinalRunner(FakeSessionService())
     invoker = _make_single_runner_invoker(runner)
 
-    with pytest.raises(AgentInvocationError, match="no final response"):
+    with (
+        caplog.at_level(logging.WARNING, logger="app.agent"),
+        pytest.raises(AgentInvocationError, match="no final response"),
+    ):
         invoker("generate_drill", {"probe": "x"})
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("task=generate_drill" in message for message in messages)
+    assert any("error_type=NoFinalResponse" in message for message in messages)
+    assert any("reason=agent returned no final response" in message for message in messages)
 
 
 def test_invalid_json_response_is_normalized_to_agent_invocation_error(

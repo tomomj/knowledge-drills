@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -24,6 +25,8 @@ from app.schemas import (
     PatchStatus,
 )
 from app.utils.diff import build_unified_diff
+
+logger = logging.getLogger("app.analysis")
 
 ANALYSIS_FAILED_MESSAGE = "analysis failed"
 ANALYSIS_STEPS: tuple[tuple[str, str], ...] = (
@@ -157,8 +160,16 @@ class AnalysisService:
                 drill_run,
                 owner_user_id,
             )
-        except Exception:
+        except Exception as exc:
             latest_drill_run = self._drill_repository.get(drill_run.id) or drill_run
+            running_step_id = _running_step_id(latest_drill_run.analysis_timeline)
+            logger.warning(
+                "analysis failed course_id=%s drill_run_id=%s step=%s error_type=%s",
+                latest_drill_run.course_id,
+                latest_drill_run.id,
+                running_step_id or "unknown",
+                type(exc).__name__,
+            )
             failed_timeline = _fail_running_step(latest_drill_run.analysis_timeline)
             failed = drill_run.model_copy(
                 update={
@@ -369,9 +380,7 @@ def _replace_timeline_item(
     if not timeline:
         timeline = _initial_timeline(step_id)
     completed_at = (
-        _utc_now()
-        if status in {AnalysisStepStatus.COMPLETED, AnalysisStepStatus.FAILED}
-        else None
+        _utc_now() if status in {AnalysisStepStatus.COMPLETED, AnalysisStepStatus.FAILED} else None
     )
     return [
         item.model_copy(
@@ -399,6 +408,13 @@ def _fail_running_step(timeline: list[AnalysisTimelineItem]) -> list[AnalysisTim
                 evidence=[],
             )
     return timeline
+
+
+def _running_step_id(timeline: list[AnalysisTimelineItem]) -> str | None:
+    for item in timeline:
+        if item.status == AnalysisStepStatus.RUNNING:
+            return item.id
+    return None
 
 
 def _unique_strings(values: Iterable[str]) -> list[str]:
