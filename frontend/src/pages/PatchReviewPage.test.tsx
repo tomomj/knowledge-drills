@@ -106,7 +106,11 @@ describe('PatchReviewPage', () => {
           title: '回答を収集',
           status: 'completed',
           summary: '採点済み回答 2 件を確認しました。',
-          evidence: ['受講者A: 根拠不足', '受講者B: 例外条件不足'],
+          evidence: [
+            '採用レビュー: finding-1 のみ採用 (approvedFindingIds: finding-1)',
+            '受講者A: 根拠不足',
+            '受講者B: 例外条件不足',
+          ],
           completedAt: '2026-07-08T10:00:00Z',
         },
       ],
@@ -117,6 +121,7 @@ describe('PatchReviewPage', () => {
     await screen.findByText('回答を収集')
     expect(screen.getByText('分析タイムライン')).toBeTruthy()
     expect(screen.getByText('採点済み回答 2 件を確認しました。')).toBeTruthy()
+    expect(screen.getByText('採用レビュー: finding-1 のみ採用 (approvedFindingIds: finding-1)')).toBeTruthy()
     expect(screen.getByText('受講者A: 根拠不足')).toBeTruthy()
 
     const summary = screen.getByText(/要約：判断基準を追記/)

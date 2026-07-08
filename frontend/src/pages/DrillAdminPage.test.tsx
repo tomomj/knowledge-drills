@@ -154,10 +154,18 @@ function runningDrill(): DrillAdmin {
       {
         id: 'collect_answers',
         title: '回答を収集',
-        status: 'running',
-        summary: '採点済み回答 1 件を分析しています。',
+        status: 'completed',
+        summary: '採点済み回答 1 件を収集しました。',
         evidence: ['受講者A: 3 / 4 点'],
-        completedAt: null,
+        completedAt: '2026-07-08T10:00:00Z',
+      },
+      {
+        id: 'decide_patch_strategy',
+        title: '改善方針を判断',
+        status: 'completed',
+        summary: '教材修正方針を選定しました。',
+        evidence: ['採用レビュー: finding-1 のみ採用 (approvedFindingIds: finding-1)'],
+        completedAt: '2026-07-08T10:00:01Z',
       },
     ],
   }
@@ -243,7 +251,8 @@ describe('DrillAdminPage', () => {
       await vi.advanceTimersByTimeAsync(1000)
     })
     expect(screen.getByText('回答を収集')).toBeTruthy()
-    expect(screen.getByText('採点済み回答 1 件を分析しています。')).toBeTruthy()
+    expect(screen.getByText('採点済み回答 1 件を収集しました。')).toBeTruthy()
+    expect(screen.getByText('採用レビュー: finding-1 のみ採用 (approvedFindingIds: finding-1)')).toBeTruthy()
 
     await act(async () => {
       analysis.resolve({ patchId: 'patch-1' })
