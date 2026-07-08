@@ -195,6 +195,10 @@ describe('DrillAdminPage', () => {
     expect(screen.getByText('回答数')).toBeTruthy()
     expect(screen.getAllByText('判断理由を書いてください。').length).toBeGreaterThan(0)
     expect(screen.getByText('根拠')).toBeTruthy()
+    expect(screen.getByText('模範解答')).toBeTruthy()
+    expect(screen.getByText('根拠に基づき判断する。')).toBeTruthy()
+    expect(screen.getByText('教材の根拠')).toBeTruthy()
+    expect(screen.getByText('## 方針')).toBeTruthy()
     expect(screen.getByText('例外条件を重点的に確認')).toBeTruthy()
     expect(screen.getByText('採点済み回答')).toBeTruthy()
     expect(screen.getAllByText('3.0 / 4 点').length).toBeGreaterThan(0)
@@ -302,4 +306,4 @@ describe('DrillAdminPage', () => {
     expect(screen.getByText('1 / 2 件')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /受講者B/ })).toBeNull()
   })
-})
+}
