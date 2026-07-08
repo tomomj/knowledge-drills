@@ -15,6 +15,18 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["UV_NATIVE_TLS=true", "uv", "run"],
+    decision = "allow",
+    justification = "Routine uv run commands in this repository may set UV_NATIVE_TLS for local TLS compatibility.",
+    match = [
+        "UV_NATIVE_TLS=true uv run --frozen pytest",
+        "UV_NATIVE_TLS=true uv run --frozen ruff check .",
+        "UV_NATIVE_TLS=true uv run --frozen mypy .",
+        "UV_NATIVE_TLS=true uv run --frozen uvicorn app.main:app --host 127.0.0.1 --port 8000",
+    ],
+)
+
+prefix_rule(
     pattern = ["uv", "sync"],
     decision = "allow",
     justification = "Backend and agent dependency sync are expected setup commands for this repository.",
