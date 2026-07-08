@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from google.adk.agents import Agent, BaseAgent, LoopAgent, ParallelAgent, SequentialAgent
-from google.adk.tools.exit_loop_tool import exit_loop
 
 from knowledge_drill_agent.config import AnalysisMode, get_agent_settings
 from knowledge_drill_agent.schemas import (
@@ -151,7 +150,6 @@ def create_composite_failure_analysis_agent(model: str | None = None) -> BaseAge
         input_schema=FailureAnalysisInput,
         output_schema=CriticReviewOutput,
         output_key="critic_review",
-        tools=[exit_loop],
     )
     review_loop = LoopAgent(
         name="review_loop",
