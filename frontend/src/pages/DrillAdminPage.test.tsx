@@ -306,4 +306,4 @@ describe('DrillAdminPage', () => {
     expect(screen.getByText('1 / 2 件')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /受講者B/ })).toBeNull()
   })
-}
+})
