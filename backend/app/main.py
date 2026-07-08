@@ -32,6 +32,7 @@ from app.routes.users import router as users_router
 from app.services.analysis_service import AnalysisService
 from app.services.answer_service import AnswerService
 from app.services.course_service import CourseService
+from app.services.demo_seed_service import DemoSeedService
 from app.services.drill_service import DrillService
 from app.services.patch_service import PatchService
 from app.services.share_token_service import ShareTokenService
@@ -82,6 +83,15 @@ def create_app() -> FastAPI:
         drill_repository=drill_repository,
         answer_repository=answer_repository,
         patch_repository=patch_repository,
+        share_token_repository=share_token_repository,
+    )
+    app.state.demo_seed_service = DemoSeedService(
+        course_repository=course_repository,
+        drill_repository=drill_repository,
+        share_token_repository=share_token_repository,
+        answer_repository=answer_repository,
+        patch_repository=patch_repository,
+        user_repository=user_repository,
     )
     agent_client = AgentRuntimeClient(invoker=_create_agent_invoker(settings))
     app.state.answer_service = AnswerService(

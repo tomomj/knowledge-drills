@@ -23,6 +23,7 @@ const currentUser: CurrentUser = {
   photoUrl: 'https://example.test/owner.png',
   createdAt: '2026-07-07T00:00:00+00:00',
   lastLoginAt: '2026-07-07T00:00:00+00:00',
+  demoSeededAt: null,
 }
 
 function authStateProvider(user: AuthStateUser | null): AuthStateProvider {
