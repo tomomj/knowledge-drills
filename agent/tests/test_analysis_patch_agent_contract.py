@@ -2,7 +2,6 @@ from typing import Any, cast
 
 import pytest
 from google.adk.agents import Agent, LoopAgent, ParallelAgent, SequentialAgent
-from google.adk.tools.exit_loop_tool import exit_loop
 from pydantic import ValidationError
 
 from knowledge_drill_agent.agent import (
@@ -89,7 +88,7 @@ def test_composite_failure_analysis_agent_runs_lenses_then_synthesis() -> None:
     assert critic_reviewer.name == "critic_reviewer"
     assert critic_reviewer.output_key == "critic_review"
     assert critic_reviewer.output_schema is CriticReviewOutput
-    assert exit_loop in critic_reviewer.tools
+    assert critic_reviewer.tools == []
 
     assert finalizer.name == "failure_analysis_finalizer"
     assert finalizer.model == "gemini-contract-probe"
