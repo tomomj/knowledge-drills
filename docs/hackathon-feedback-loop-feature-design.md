@@ -1,8 +1,12 @@
 # ハッカソン向け改善ループ機能 詳細設計
 
-Status: Draft v0.2  
-Date: 2026-07-07  
+Status: Draft v0.3（参考資料）
+Date: 2026-07-08
 Scope: 出題観点入力、根拠付きドリル生成、分析 Agent 実行タイムライン、改善証拠の表示、ハッカソン戦略、マルチエージェント構成方針
+
+> 注: 実装仕様の正は `.kiro/specs/hackathon-feedback-loop/`（requirements / design / tasks）である。
+> 本 doc は UI 文言・プロンプト方針・ハッカソン戦略の背景資料であり、矛盾する場合は spec を優先する。
+> 特に「分析失敗時の DrillRun.status」は spec 側で `failed` ではなく `ready` へ戻す方針に変更済み。
 
 ## 1. 目的
 
@@ -510,8 +514,9 @@ def _update_timeline(
 エラー時:
 
 - 実行中 step を `failed` にする
-- `DrillRun.status = failed`
-- `errorMessage = analysis failed`
+- `errorMessage = analysis failed` を記録する
+- `DrillRun.status = ready` へ戻す（share URL を無効化しない。受講者はドリル取得・回答を継続でき、オーナーは再分析できる）
+- learner 向けの取得・回答は status が `ready` / `analyzing` / `analyzed` のとき許可する（spec design.md の配布可否契約に従う）
 
 ### 7.4 Repository
 
