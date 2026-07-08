@@ -1,8 +1,17 @@
-import type { AnalysisStepStatus, AnalysisTimelineItem } from '../../api/types'
+export type AnalysisStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+
+export type AnalysisTimelineItemView = {
+  id: string
+  title: string
+  status: AnalysisStepStatus
+  summary: string | null
+  evidence: string[]
+  completedAt: string | null
+}
 
 type AnalysisTimelineProps = {
   title: string
-  items: AnalysisTimelineItem[]
+  items: AnalysisTimelineItemView[]
 }
 
 type ChipTone = 'accent' | 'error' | 'muted' | 'success' | 'warning'

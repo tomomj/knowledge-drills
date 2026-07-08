@@ -1,10 +1,9 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import type { AnalysisTimelineItem } from '../../api/types'
-import { AnalysisTimeline } from './AnalysisTimeline'
+import { AnalysisTimeline, type AnalysisTimelineItemView } from './AnalysisTimeline'
 
-const items: AnalysisTimelineItem[] = [
+const items: AnalysisTimelineItemView[] = [
   {
     id: 'collect_answers',
     title: '回答を収集',
