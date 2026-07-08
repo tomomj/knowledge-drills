@@ -48,7 +48,7 @@ agent/
 ## Eval 運用
 
 - 実モデル eval は `python scripts/run_adk_evals.py` を使う。`adk eval` を直接呼ぶと、失敗時も exit code 0 になることがある。
-- `scripts/run_adk_evals.py` は `.env` を読み、`uv run --isolated --frozen --group eval adk eval ...` を実行し、`.adk/eval_history/*.evalset_result.json` を読んで失敗判定する。
+- `scripts/run_adk_evals.py` は `.env` を読み、`uv run --native-tls --isolated --frozen --group eval adk eval ...` を実行し、`.adk/eval_history/*.evalset_result.json` を読んで失敗判定する。
 - `agent/.env.example` の標準は Vertex AI `GOOGLE_CLOUD_LOCATION=us-central1` と `KNOWLEDGE_DRILL_AGENT_MODEL=gemini-2.5-flash-lite`。
 - `google-adk[eval]` は eval group のみ。通常 `.venv` を汚さないため、eval は必ず isolated 実行にする。
 - PR CI は認証なしを維持する。credential-free guard は `tests/test_evals_assets.py`。
@@ -60,9 +60,9 @@ agent/
 
 ```bash
 cd agent
-uv run --frozen pytest
-uv run --frozen ruff check .
-uv run --frozen mypy .
+uv run --native-tls --frozen pytest
+uv run --native-tls --frozen ruff check .
+uv run --native-tls --frozen mypy .
 ```
 
 実 Gemini eval を確認する:

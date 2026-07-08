@@ -32,8 +32,8 @@ Knowledge CI アプリケーション。
 個別に確認する場合は次を使う。これらは外部接続・認証情報なしで成功することを前提にしている。
 
 ```sh
-cd backend && uv run --frozen pytest && uv run --frozen ruff check . && uv run --frozen mypy .
-cd agent   && uv run --frozen pytest && uv run --frozen ruff check . && uv run --frozen mypy .
+cd backend && uv run --native-tls --frozen pytest && uv run --native-tls --frozen ruff check . && uv run --native-tls --frozen mypy .
+cd agent   && uv run --native-tls --frozen pytest && uv run --native-tls --frozen ruff check . && uv run --native-tls --frozen mypy .
 cd frontend && npm test && npm run lint && npm run typecheck && npm run build
 ```
 
@@ -51,8 +51,8 @@ terraform plan
 ```
 
 Codex の project-local command rules は `.codex/rules/default.rules` に置く。この repository が
-trusted のときだけ読み込まれ、通常の `uv` / `npm` / `make` / Terraform 確認コマンドを許可し、
-`terraform apply` / `destroy` は拒否する。
+trusted のときだけ読み込まれ、通常の `uv run --native-tls` / `npm` / `make` /
+Terraform 確認コマンドを許可し、`terraform apply` / `destroy` は拒否する。
 
 CI は Backend / Frontend / Agent Eval で workflow を分け、該当ディレクトリに差分がある PR だけで
 実行する。

@@ -213,9 +213,9 @@ Ruff に format と import sorting を寄せる。Black、isort、flake8 を重�
 
 ```bash
 cd backend
-uv run --frozen ruff check .
-uv run --frozen mypy .
-uv run --frozen pytest
+uv run --native-tls --frozen ruff check .
+uv run --native-tls --frozen mypy .
+uv run --native-tls --frozen pytest
 ```
 
 依存関係が未 install、`uv` が未設定、外部 service credentials がないなどで実行できない場合は、実行不可理由と次に確認すべき事項を明示する。

@@ -161,6 +161,7 @@ def _run_eval_case(
         command = [
             "uv",
             "run",
+            "--native-tls",
             "--isolated",
             "--frozen",
             "--group",

@@ -1,6 +1,7 @@
 """Credential-free guards for the eval assets under evals/.
 
-Real-model execution happens only via `uv run --group eval adk eval ...`;
+Real-model execution happens only via
+`uv run --native-tls --isolated --frozen --group eval adk eval ...`;
 these tests only verify the assets stay loadable and within the agreed
 budget of one integrated LLM-judge rubric per agent.
 """
