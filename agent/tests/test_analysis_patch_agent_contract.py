@@ -22,6 +22,7 @@ from knowledge_drill_agent.schemas import (
     EvidenceReviewOutput,
     FailureAnalysisInput,
     FailureAnalysisOutput,
+    FailureSeverity,
     FailureSignal,
     ReviewedFinding,
 )
@@ -39,6 +40,7 @@ def test_failure_analysis_agent_declares_schema_and_constraints() -> None:
     assert "社内ルール" in instruction
     assert "perspectives" in instruction
     assert "教材ギャップ" in instruction
+    assert "severity は low / medium / high" in instruction
 
 
 def test_composite_failure_analysis_agent_runs_lenses_then_synthesis() -> None:
@@ -100,6 +102,7 @@ def test_composite_failure_analysis_agent_runs_lenses_then_synthesis() -> None:
     assert "doc_gap_findings" in finalizer.instruction
     assert "question_quality_findings" in finalizer.instruction
     assert "approvedFindingIds" in finalizer.instruction
+    assert "severity は low / medium / high" in finalizer.instruction
 
 
 def test_configured_failure_analysis_agent_switches_modes() -> None:
@@ -132,7 +135,7 @@ def test_failure_signal_requires_core_fields_and_sample_size() -> None:
     with pytest.raises(ValidationError):
         FailureSignal(
             title="判断基準の混同",
-            severity="medium",
+            severity=FailureSeverity.MEDIUM,
             evidence=[],
             likely_cause="説明が薄い",
             suspected_document_gap="例が不足",
@@ -142,12 +145,34 @@ def test_failure_signal_requires_core_fields_and_sample_size() -> None:
         )
 
 
+def test_failure_signal_rejects_unknown_severity() -> None:
+    with pytest.raises(ValidationError):
+        FailureSignal(
+            title="判断基準の混同",
+            severity=cast(Any, "critical"),
+            evidence=["2 件の回答で例外条件に触れていない"],
+            likely_cause="説明が薄い",
+            suspected_document_gap="例が不足",
+            target_sections=["## 方針"],
+            recommended_change="例を追記",
+            sample_size=2,
+        )
+
+
+def test_failure_analysis_output_schema_constrains_failure_severity() -> None:
+    schema = FailureAnalysisOutput.model_json_schema()
+    severity_ref = schema["$defs"]["FailureSignal"]["properties"]["severity"]["$ref"]
+    severity_def = severity_ref.rsplit("/", maxsplit=1)[-1]
+
+    assert set(schema["$defs"][severity_def]["enum"]) == {item.value for item in FailureSeverity}
+
+
 def test_failure_analysis_output_accepts_optional_perspectives() -> None:
     existing_output = FailureAnalysisOutput(
         failure_signals=[
             FailureSignal(
                 title="判断基準の混同",
-                severity="medium",
+                severity=FailureSeverity.MEDIUM,
                 evidence=["2 件の回答で例外条件に触れていない"],
                 likely_cause="条件分岐の説明が不足している",
                 suspected_document_gap="例外時の判断基準が薄い",
@@ -208,7 +233,7 @@ def test_failure_analysis_review_loop_schemas_use_camel_case_contracts() -> None
         failure_signals=[
             FailureSignal(
                 title="例外条件の説明不足",
-                severity="medium",
+                severity=FailureSeverity.MEDIUM,
                 evidence=["2 件の回答で例外条件に触れていない"],
                 likely_cause="例外条件の説明が短い",
                 suspected_document_gap="判断基準の例外条件が不足",
