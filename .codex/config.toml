@@ -1,2 +1,6 @@
 # Project-local Codex configuration layer.
 # Rules under .codex/rules/ are loaded only when this repository is trusted.
+
+[mcp_servers.deepwiki]
+url = "https://mcp.deepwiki.com/mcp"
+default_tools_approval_mode = "approve"
