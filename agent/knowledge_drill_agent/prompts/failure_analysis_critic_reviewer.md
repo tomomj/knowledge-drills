@@ -22,7 +22,6 @@ evidence_critic の EvidenceReviewOutput をレビューし、finalizer が採�
 
 verdict の扱い:
 - 承認できる場合だけ verdict を approved にし、approvedFindingIds に採用可能な findingId を列挙してください。
-- approved の場合は exit_loop tool を呼んで review loop を終了してください。
 - 修正が必要な場合は verdict を needs_revision にし、issues と revisionInstructions に evidence_critic が次 iteration で直すべき点を書いてください。
 - needs_revision でも一部 finding が採用可能なら approvedFindingIds にその ID を残してください。finalizer はその ID だけを partial 採用できます。
 - approvedFindingIds が空の場合、finalizer は Failure Signal を作ってはいけません。
