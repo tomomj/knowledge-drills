@@ -127,36 +127,43 @@ describe('CourseEditorPage', () => {
     })
   })
 
-  it('shows before after metrics when at least two scored runs exist', async () => {
+  it('shows score progression for all scored runs using score-rate deltas', async () => {
     mocks.getCourse.mockResolvedValueOnce({
       id: 'course-1',
       title: '講座',
       markdown: '# Body',
       drillFocus: null,
-      version: 2,
-      latestDrillRunId: 'drill-2',
-      latestPatchId: null,
+      version: 3,
+      latestDrillRunId: 'drill-3',
+      latestPatchId: 'patch-1',
     })
     mocks.getCourseMetrics.mockResolvedValueOnce({
       courseId: 'course-1',
       runs: [
         {
+          drillRunId: 'drill-3',
+          courseVersion: 3,
+          answerCount: 5,
+          averageScore: 3,
+          maxScore: 5,
+        },
+        {
           drillRunId: 'drill-1',
           courseVersion: 1,
           answerCount: 3,
-          averageScore: 2.5,
+          averageScore: 2,
           maxScore: 4,
         },
         {
           drillRunId: 'drill-2',
           courseVersion: 2,
           answerCount: 4,
-          averageScore: 3.5,
+          averageScore: 3,
           maxScore: 4,
         },
         {
-          drillRunId: 'drill-3',
-          courseVersion: 3,
+          drillRunId: 'drill-4',
+          courseVersion: 4,
           answerCount: 0,
           averageScore: null,
           maxScore: null,
@@ -172,16 +179,29 @@ describe('CourseEditorPage', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('Before / After')
+    await screen.findByText('スコアの推移')
     const metricsCard = screen.getByLabelText('改善メトリクス')
+    expect(within(metricsCard).getByRole('img', { name: 'バージョンごとのスコア率の推移' })).toBeTruthy()
     expect(within(metricsCard).getByText('v1')).toBeTruthy()
     expect(within(metricsCard).getByText('v2')).toBeTruthy()
-    expect(within(metricsCard).getByText('2.5 / 4 点')).toBeTruthy()
-    expect(within(metricsCard).getByText('3.5 / 4 点')).toBeTruthy()
-    expect(within(metricsCard).getByText('+1.0 点')).toBeTruthy()
+    expect(within(metricsCard).getByText('v3')).toBeTruthy()
+    expect(within(metricsCard).getByText('2.0 / 4 点')).toBeTruthy()
+    expect(within(metricsCard).getByText('3.0 / 4 点')).toBeTruthy()
+    expect(within(metricsCard).getByText('3.0 / 5 点')).toBeTruthy()
+    expect(within(metricsCard).getByText('回答 3 件')).toBeTruthy()
+    expect(within(metricsCard).getByText('+25.0 pp')).toBeTruthy()
+    expect(within(metricsCard).getByText('-15.0 pp')).toBeTruthy()
+    expect(within(metricsCard).getByText('+10.0 pp')).toBeTruthy()
+
+    const cardText = metricsCard.textContent ?? ''
+    expect(cardText.indexOf('v1')).toBeLessThan(cardText.indexOf('v2'))
+    expect(cardText.indexOf('v2')).toBeLessThan(cardText.indexOf('v3'))
+    expect(screen.getByRole('link', { name: 'レビュー →' }).getAttribute('href')).toBe(
+      '/patches/patch-1',
+    )
   })
 
-  it('hides before after metrics when fewer than two scored runs exist', async () => {
+  it('filters unscored and invalid runs out of score progression', async () => {
     mocks.getCourse.mockResolvedValueOnce({
       id: 'course-1',
       title: '講座',
@@ -207,6 +227,74 @@ describe('CourseEditorPage', () => {
           answerCount: 0,
           averageScore: null,
           maxScore: null,
+        },
+        {
+          drillRunId: 'drill-3',
+          courseVersion: 3,
+          answerCount: 2,
+          averageScore: null,
+          maxScore: 4,
+        },
+        {
+          drillRunId: 'drill-4',
+          courseVersion: 4,
+          answerCount: 2,
+          averageScore: 2,
+          maxScore: 0,
+        },
+        {
+          drillRunId: 'drill-5',
+          courseVersion: 5,
+          answerCount: 2,
+          averageScore: 3,
+          maxScore: 4,
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/courses/course-1']}>
+        <Routes>
+          <Route path="/courses/:courseId" element={<CourseEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('スコアの推移')
+    const metricsCard = screen.getByLabelText('改善メトリクス')
+    expect(within(metricsCard).getByText('v1')).toBeTruthy()
+    expect(within(metricsCard).getByText('v5')).toBeTruthy()
+    expect(within(metricsCard).queryByText('v2')).toBeNull()
+    expect(within(metricsCard).queryByText('v3')).toBeNull()
+    expect(within(metricsCard).queryByText('v4')).toBeNull()
+  })
+
+  it('hides score progression when fewer than two eligible runs exist', async () => {
+    mocks.getCourse.mockResolvedValueOnce({
+      id: 'course-1',
+      title: '講座',
+      markdown: '# Body',
+      drillFocus: null,
+      version: 2,
+      latestDrillRunId: 'drill-2',
+      latestPatchId: null,
+    })
+    mocks.getCourseMetrics.mockResolvedValueOnce({
+      courseId: 'course-1',
+      runs: [
+        {
+          drillRunId: 'drill-1',
+          courseVersion: 1,
+          answerCount: 3,
+          averageScore: 2.5,
+          maxScore: 4,
+        },
+        {
+          drillRunId: 'drill-2',
+          courseVersion: 2,
+          answerCount: 2,
+          averageScore: 2,
+          maxScore: 0,
         },
       ],
     })
@@ -223,6 +311,78 @@ describe('CourseEditorPage', () => {
       const field = screen.getByLabelText('講座タイトル') as HTMLInputElement
       expect(field.value).toBe('講座')
     })
-    expect(screen.queryByText('Before / After')).toBeNull()
+    expect(screen.queryByText('スコアの推移')).toBeNull()
+  })
+
+  it('continues showing the editor when metrics loading fails', async () => {
+    mocks.getCourse.mockResolvedValueOnce({
+      id: 'course-1',
+      title: '講座',
+      markdown: '# Body',
+      drillFocus: null,
+      version: 2,
+      latestDrillRunId: 'drill-2',
+      latestPatchId: null,
+    })
+    mocks.getCourseMetrics.mockRejectedValueOnce(new Error('metrics failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/courses/course-1']}>
+        <Routes>
+          <Route path="/courses/:courseId" element={<CourseEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      const field = screen.getByLabelText('講座タイトル') as HTMLInputElement
+      expect(field.value).toBe('講座')
+    })
+    expect(screen.queryByText('スコアの推移')).toBeNull()
+  })
+
+  it('uses warning tone when the total score rate goes down', async () => {
+    mocks.getCourse.mockResolvedValueOnce({
+      id: 'course-1',
+      title: '講座',
+      markdown: '# Body',
+      drillFocus: null,
+      version: 2,
+      latestDrillRunId: 'drill-2',
+      latestPatchId: null,
+    })
+    mocks.getCourseMetrics.mockResolvedValueOnce({
+      courseId: 'course-1',
+      runs: [
+        {
+          drillRunId: 'drill-1',
+          courseVersion: 1,
+          answerCount: 3,
+          averageScore: 3,
+          maxScore: 4,
+        },
+        {
+          drillRunId: 'drill-2',
+          courseVersion: 2,
+          answerCount: 4,
+          averageScore: 2,
+          maxScore: 4,
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/courses/course-1']}>
+        <Routes>
+          <Route path="/courses/:courseId" element={<CourseEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('スコアの推移')
+    const metricsCard = screen.getByLabelText('改善メトリクス')
+    const totalDelta = metricsCard.querySelector('.card__head .chip')
+    expect(totalDelta?.textContent).toBe('-25.0 pp')
+    expect(totalDelta?.className).toContain('chip--warning')
   })
 })

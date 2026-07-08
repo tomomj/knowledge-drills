@@ -1,0 +1,22 @@
+{
+  "feature_name": "score-progression-ui",
+  "created_at": "2026-07-08T12:11:55Z",
+  "updated_at": "2026-07-08T12:50:30Z",
+  "language": "ja",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}

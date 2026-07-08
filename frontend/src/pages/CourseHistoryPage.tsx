@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { api, ApiClientError } from '../api/client'
-import type { CourseRevisionDiff, CourseRevisionSummary } from '../api/types'
+import type {
+  CourseMetricsResponse,
+  CourseMetricsRun,
+  CourseRevisionDiff,
+  CourseRevisionSummary,
+} from '../api/types'
 import { AppShell } from '../components/common/AppShell'
 import { Breadcrumbs } from '../components/common/Breadcrumbs'
 import { DiffViewer } from '../components/common/DiffViewer'
@@ -10,7 +15,7 @@ import { StatusBanner } from '../components/common/StatusBanner'
 
 type PageState =
   | { status: 'loading' }
-  | { status: 'ready'; revisions: CourseRevisionSummary[] }
+  | { status: 'ready'; revisions: CourseRevisionSummary[]; versionScores: Map<number, VersionScore> }
   | { status: 'failed'; message: string }
 
 type DiffState =
@@ -33,9 +38,16 @@ export function CourseHistoryPage() {
         return
       }
       try {
-        const response = await api.listCourseRevisions(courseId)
+        const [response, metrics] = await Promise.all([
+          api.listCourseRevisions(courseId),
+          loadCourseMetrics(courseId),
+        ])
         if (active) {
-          setState({ status: 'ready', revisions: response.revisions })
+          setState({
+            status: 'ready',
+            revisions: response.revisions,
+            versionScores: buildVersionScoreMap(metrics),
+          })
           setSelectedVersion(response.revisions[0]?.version ?? null)
         }
       } catch (error) {
@@ -76,6 +88,7 @@ export function CourseHistoryPage() {
   }, [courseId, selectedVersion])
 
   const revisions = state.status === 'ready' ? state.revisions : []
+  const versionScores = state.status === 'ready' ? state.versionScores : new Map<number, VersionScore>()
 
   return (
     <AppShell>
@@ -107,20 +120,26 @@ export function CourseHistoryPage() {
         {state.status === 'ready' ? (
           <section className="history-grid">
             <div className="card select-list" aria-label="バージョン一覧">
-              {revisions.map((revision) => (
-                <button
-                  type="button"
-                  key={revision.version}
-                  className={`select-row${revision.version === selectedVersion ? ' select-row--selected' : ''}`}
-                  onClick={() => setSelectedVersion(revision.version)}
-                  aria-pressed={revision.version === selectedVersion}
-                >
-                  <span className="select-row__label">v{revision.version}</span>
-                  <span className="select-row__meta">
-                    {revision.updatedAt ? formatDateTime(revision.updatedAt) : '-'}
-                  </span>
-                </button>
-              ))}
+              {revisions.map((revision) => {
+                const meta = formatVersionMeta(
+                  versionScores.get(revision.version) ?? null,
+                  revision.updatedAt,
+                )
+                return (
+                  <button
+                    type="button"
+                    key={revision.version}
+                    className={`select-row${
+                      revision.version === selectedVersion ? ' select-row--selected' : ''
+                    }`}
+                    onClick={() => setSelectedVersion(revision.version)}
+                    aria-pressed={revision.version === selectedVersion}
+                  >
+                    <span className="select-row__label">v{revision.version}</span>
+                    <span className="select-row__meta">{meta || '-'}</span>
+                  </button>
+                )
+              })}
             </div>
 
             <div className="history-detail">
@@ -148,6 +167,65 @@ export function CourseHistoryPage() {
       </main>
     </AppShell>
   )
+}
+
+type ScoredMetricsRun = CourseMetricsRun & {
+  averageScore: number
+  maxScore: number
+}
+
+type VersionScore = {
+  averageScore: number
+  maxScore: number
+}
+
+async function loadCourseMetrics(courseId: string): Promise<CourseMetricsResponse | null> {
+  try {
+    return await api.getCourseMetrics(courseId)
+  } catch {
+    return null
+  }
+}
+
+function buildVersionScoreMap(metrics: CourseMetricsResponse | null): Map<number, VersionScore> {
+  const versionScores = new Map<number, VersionScore>()
+  for (const run of metrics?.runs ?? []) {
+    if (isScoredMetricsRun(run)) {
+      versionScores.set(run.courseVersion, {
+        averageScore: run.averageScore,
+        maxScore: run.maxScore,
+      })
+    }
+  }
+  return versionScores
+}
+
+function isScoredMetricsRun(run: CourseMetricsRun): run is ScoredMetricsRun {
+  return (
+    run.answerCount > 0 &&
+    run.averageScore !== null &&
+    run.maxScore !== null &&
+    run.maxScore > 0
+  )
+}
+
+function formatVersionMeta(score: VersionScore | null, updatedAt: string | null): string {
+  const parts: string[] = []
+  if (score) {
+    parts.push(`平均 ${formatMetricScore(score.averageScore)} / ${formatMetricMaxScore(score.maxScore)} 点`)
+  }
+  if (updatedAt) {
+    parts.push(formatDateTime(updatedAt))
+  }
+  return parts.join(' · ')
+}
+
+function formatMetricScore(score: number): string {
+  return score.toFixed(1)
+}
+
+function formatMetricMaxScore(score: number): string {
+  return Number.isInteger(score) ? String(score) : score.toFixed(1)
 }
 
 function formatDateTime(isoString: string): string {
