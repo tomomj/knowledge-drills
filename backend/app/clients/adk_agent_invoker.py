@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
 from collections.abc import Callable, Mapping
 
@@ -43,6 +44,16 @@ _TASK_AGENT_FACTORIES: dict[str, Callable[[], BaseAgent]] = {
 }
 
 _VERTEX_TRUE_VALUES = {"1", "true", "yes"}
+_RETRYABLE_ERROR_NAMES = {
+    "_ResourceExhaustedError",
+    "ResourceExhausted",
+    "TooManyRequests",
+    "ServiceUnavailable",
+    "InternalServerError",
+    "DeadlineExceeded",
+}
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+_MAX_RETRY_DELAY_SECONDS: float = 8.0
 
 
 class AdkAgentConfigurationError(RuntimeError):
@@ -101,8 +112,14 @@ class AdkAgentInvoker:
         *,
         timeout_seconds: float,
         runner_factory: Callable[[], Mapping[str, Runner]] | None = None,
+        retry_max_attempts: int = 3,
+        retry_initial_delay_seconds: float = 1.0,
+        sleeper: Callable[[float], None] = time.sleep,
     ) -> None:
-        self._timeout_seconds = timeout_seconds
+        self._timeout_seconds: float = timeout_seconds
+        self._retry_max_attempts: int = max(1, retry_max_attempts)
+        self._retry_initial_delay_seconds: float = retry_initial_delay_seconds
+        self._sleeper: Callable[[float], None] = sleeper
         factory = runner_factory if runner_factory is not None else _default_runner_factory
         self._runners: Mapping[str, Runner] = factory()
 
@@ -116,47 +133,66 @@ class AdkAgentInvoker:
                 reason="unknown agent task",
             )
         logger.info("adk agent invocation started task=%s", task_name)
-        try:
-            return asyncio.run(
-                asyncio.wait_for(
-                    self._run_once(runner, task_name, payload),
-                    timeout=self._timeout_seconds,
+
+        for attempt in range(1, self._retry_max_attempts + 1):
+            try:
+                return asyncio.run(
+                    asyncio.wait_for(
+                        self._run_once(runner, task_name, payload),
+                        timeout=self._timeout_seconds,
+                    )
                 )
-            )
-        except AgentInvocationError as exc:
-            self._log_invocation_failure(
-                task_name,
-                exc.error_type or type(exc).__name__,
-                exc.reason or "agent invocation failed",
-            )
-            raise
-        except TimeoutError as exc:
-            reason = f"timeout_seconds={self._timeout_seconds:g}"
-            self._log_invocation_failure(task_name, type(exc).__name__, reason)
-            raise AgentInvocationError(
-                f"agent invocation timed out task={task_name}",
-                task_name=task_name,
-                error_type=type(exc).__name__,
-                reason=reason,
-            ) from exc
-        except json.JSONDecodeError as exc:
-            reason = f"{exc.msg} line={exc.lineno} column={exc.colno}"
-            self._log_invocation_failure(task_name, type(exc).__name__, reason)
-            raise AgentInvocationError(
-                f"invalid JSON response from agent task={task_name}",
-                task_name=task_name,
-                error_type=type(exc).__name__,
-                reason=reason,
-            ) from exc
-        except Exception as exc:
-            reason = "agent execution raised"
-            self._log_invocation_failure(task_name, type(exc).__name__, reason)
-            raise AgentInvocationError(
-                f"agent execution failed task={task_name}",
-                task_name=task_name,
-                error_type=type(exc).__name__,
-                reason=reason,
-            ) from exc
+            except AgentInvocationError as exc:
+                self._log_invocation_failure(
+                    task_name,
+                    exc.error_type or type(exc).__name__,
+                    exc.reason or "agent invocation failed",
+                )
+                raise
+            except TimeoutError as exc:
+                reason = f"timeout_seconds={self._timeout_seconds:g}"
+                self._log_invocation_failure(task_name, type(exc).__name__, reason)
+                raise AgentInvocationError(
+                    f"agent invocation timed out task={task_name}",
+                    task_name=task_name,
+                    error_type=type(exc).__name__,
+                    reason=reason,
+                ) from exc
+            except json.JSONDecodeError as exc:
+                reason = f"{exc.msg} line={exc.lineno} column={exc.colno}"
+                self._log_invocation_failure(task_name, type(exc).__name__, reason)
+                raise AgentInvocationError(
+                    f"invalid JSON response from agent task={task_name}",
+                    task_name=task_name,
+                    error_type=type(exc).__name__,
+                    reason=reason,
+                ) from exc
+            except Exception as exc:
+                error_type = type(exc).__name__
+                reason = _agent_exception_reason(exc)
+                if _is_retryable_agent_exception(exc) and attempt < self._retry_max_attempts:
+                    delay_seconds = self._retry_delay_seconds(attempt)
+                    logger.warning(
+                        "adk agent invocation retrying task=%s error_type=%s reason=%s "
+                        "attempt=%s max_attempts=%s next_delay_seconds=%.2f",
+                        task_name,
+                        error_type,
+                        reason,
+                        attempt,
+                        self._retry_max_attempts,
+                        delay_seconds,
+                    )
+                    self._sleeper(delay_seconds)
+                    continue
+                self._log_invocation_failure(task_name, error_type, reason)
+                raise AgentInvocationError(
+                    f"agent execution failed task={task_name}",
+                    task_name=task_name,
+                    error_type=error_type,
+                    reason=reason,
+                ) from exc
+
+        raise AssertionError("unreachable agent retry loop state")
 
     async def _run_once(
         self, runner: Runner, task_name: str, payload: AgentPayload
@@ -200,3 +236,52 @@ class AdkAgentInvoker:
             error_type,
             reason,
         )
+
+    def _retry_delay_seconds(self, attempt: int) -> float:
+        delay = float(self._retry_initial_delay_seconds * (2 ** (attempt - 1)))
+        if delay > _MAX_RETRY_DELAY_SECONDS:
+            return _MAX_RETRY_DELAY_SECONDS
+        return delay
+
+
+def _is_retryable_agent_exception(exc: Exception) -> bool:
+    status_code = _exception_status_code(exc)
+    if status_code in _RETRYABLE_STATUS_CODES:
+        return True
+    return type(exc).__name__ in _RETRYABLE_ERROR_NAMES
+
+
+def _agent_exception_reason(exc: Exception) -> str:
+    parts: list[str] = []
+    status_code = _exception_status_code(exc)
+    if status_code is not None:
+        parts.append(f"status_code={status_code}")
+    if type(exc).__name__ in _RETRYABLE_ERROR_NAMES:
+        parts.append(f"transient_error={type(exc).__name__}")
+    message = _google_exception_message(exc)
+    if message:
+        parts.append(f"message={message}")
+    return " ".join(parts) or "agent execution raised"
+
+
+def _exception_status_code(exc: Exception) -> int | None:
+    for attr_name in ("code", "status_code"):
+        value = getattr(exc, attr_name, None)
+        if callable(value):
+            value = value()
+        if isinstance(value, int):
+            return value
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    return None
+
+
+def _google_exception_message(exc: Exception) -> str | None:
+    if not type(exc).__module__.startswith("google."):
+        return None
+    message = " ".join(str(exc).split())
+    if not message:
+        return None
+    return message[:240]

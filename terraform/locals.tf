@@ -30,7 +30,7 @@ locals {
   backend_firebase_project_id      = local.project_id
   backend_storage_mode             = "firestore"
   backend_agent_mode               = "adk"
-  backend_agent_model              = "gemini-2.5-flash-lite"
+  backend_agent_model              = "gemini-3.1-flash-lite"
   backend_agent_timeout_seconds    = "120"
   backend_agent_trace_exporter     = "gcp"
   backend_agent_trace_service_name = "${local.project_name}-${local.environment}-backend"
@@ -38,7 +38,7 @@ locals {
     "deployment.environment=${local.environment}",
     "service.namespace=${local.project_name}",
   ])
-  backend_vertex_location = "us-central1"
+  backend_vertex_location = "global"
   firestore_database_id   = "${local.project_name}-${local.environment}"
   firestore_location      = local.region
 
