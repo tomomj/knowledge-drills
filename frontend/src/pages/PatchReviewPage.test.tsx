@@ -126,6 +126,15 @@ describe('PatchReviewPage', () => {
     expect(timeline.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('hides analysis timeline when it is empty', async () => {
+    mocks.getPatch.mockResolvedValueOnce({ ...patch, analysisTimeline: [] })
+
+    renderPatch()
+
+    await waitFor(() => expect(screen.getByText('提案中')).toBeTruthy())
+    expect(screen.queryByText('分析タイムライン')).toBeNull()
+  })
+
   it('disables apply for stale patch', async () => {
     mocks.getPatch.mockResolvedValueOnce({ ...patch, status: 'stale' })
 

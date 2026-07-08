@@ -43,7 +43,24 @@ class LocalAgentInvoker:
                         "sampleSize": 1,
                         "confidenceNote": "少数回答の傾向です。",
                     }
-                ]
+                ],
+                "perspectives": [
+                    {
+                        "id": "material_gap",
+                        "title": "教材ギャップ",
+                        "summary": "判断基準の例外条件が見つけにくい",
+                    },
+                    {
+                        "id": "question_quality",
+                        "title": "設問品質",
+                        "summary": "設問は根拠説明を求めている",
+                    },
+                    {
+                        "id": "learner_pattern",
+                        "title": "つまずきパターン",
+                        "summary": "例外条件への言及が抜けやすい",
+                    },
+                ],
             }
         if task_name == "propose_document_patch":
             base_markdown = cast(str, payload["courseMarkdown"])

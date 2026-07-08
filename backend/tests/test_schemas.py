@@ -103,6 +103,26 @@ def test_failure_signal_carries_sample_size_and_confidence_note() -> None:
     assert payload["failureSignals"][0]["likelyCause"] == "条件分岐の説明が不足している"
     assert payload["failureSignals"][0]["suspectedDocumentGap"] == "例外時の判断基準が薄い"
     assert payload["failureSignals"][0]["confidenceNote"] == "少数回答に基づく傾向"
+    assert payload["perspectives"] == []
+
+
+def test_analysis_timeline_uses_camel_case_and_defaults() -> None:
+    item = AnalysisTimelineItem(
+        id="collect_answers",
+        title="回答収集",
+        status=AnalysisStepStatus.RUNNING,
+    )
+
+    payload = item.model_dump(by_alias=True)
+
+    assert payload == {
+        "id": "collect_answers",
+        "title": "回答収集",
+        "status": "running",
+        "summary": None,
+        "evidence": [],
+        "completedAt": None,
+    }
 
 
 def test_document_patch_and_answer_submission_domain_models() -> None:

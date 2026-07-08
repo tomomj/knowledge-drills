@@ -74,7 +74,7 @@ class DrillGenerationInput(AgentModel):
     drill_focus: str | None = Field(
         default=None,
         max_length=500,
-        validation_alias=AliasChoices("drillFocus", "focus"),
+        validation_alias=AliasChoices("drillFocus", "focus", "drill_focus"),
         serialization_alias="drillFocus",
     )
 

@@ -376,6 +376,10 @@ def test_run_analysis_marks_running_step_failed_and_restores_ready_when_analysis
     assert saved_course is not None
     assert saved_drill.status == "ready"
     assert saved_drill.error_message == "analysis failed"
+    assert [item.status for item in saved_drill.analysis_timeline[:2]] == [
+        "completed",
+        "failed",
+    ]
     assert saved_course.latest_drill_run_id == "drill-1"
     assert saved_course.latest_drill_status == "ready"
     failed_steps = [

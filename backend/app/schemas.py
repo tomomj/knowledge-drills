@@ -442,7 +442,12 @@ class DrillGenerationRequest(ApiModel):
         validation_alias=AliasChoices("courseMarkdown", "markdown"),
         serialization_alias="courseMarkdown",
     )
-    drill_focus: str | None = Field(default=None, max_length=500)
+    drill_focus: str | None = Field(
+        default=None,
+        max_length=500,
+        validation_alias=AliasChoices("drillFocus", "focus", "drill_focus"),
+        serialization_alias="drillFocus",
+    )
 
 
 class DrillGenerationResponse(ApiModel):

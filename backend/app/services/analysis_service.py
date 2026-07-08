@@ -33,7 +33,6 @@ ANALYSIS_STEPS: tuple[tuple[str, str], ...] = (
     ("create_patch", "修正案を作成"),
 )
 
-
 class AnalysisService:
     def __init__(
         self,
@@ -144,10 +143,15 @@ class AnalysisService:
             risk_notes=patch_response.risk_notes,
             diff_text=build_unified_diff(course.markdown, patch_response.patched_markdown),
             failure_signals=failure_analysis.failure_signals,
+            analysis_timeline=drill_run.analysis_timeline,
         )
 
     def run_analysis(self, drill_run_id: str, owner_user_id: str) -> DocumentPatch:
-        if self._course_repository is None or self._patch_repository is None:
+        if (
+            self._course_repository is None
+            or self._patch_repository is None
+            or self._agent_client is None
+        ):
             raise RuntimeError("AnalysisService dependencies are not configured")
 
         drill_run = self.start_analysis(drill_run_id, owner_user_id)

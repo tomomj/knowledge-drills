@@ -18,6 +18,8 @@
 
 ルール:
 - 必ず3問だけ生成してください。
+- drillFocus が提供された場合は、講座 Markdown に根拠が存在する範囲で優先的に設問の観点へ反映してください。
+- drillFocus が講座 Markdown に存在しない内容を含む場合、その内容は出題せず、教材内に実在する内容だけで設問を作ってください。
 - すべての設問で maxScore は4にしてください。
 - すべての設問で rubric の points 合計を必ず4にしてください。
 - すべての設問に、提供された講座 Markdown から取得した sectionHeading と excerpt を持つ sourceEvidence を1件以上含めてください。
