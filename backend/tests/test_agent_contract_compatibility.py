@@ -2,12 +2,15 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+from knowledge_drill_agent.schemas import FailureAnalysisOutput as AgentFailureAnalysisOutput
+
 from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.schemas import (
     DocumentPatchResponse,
     DrillGenerationRequest,
     DrillGenerationResponse,
     FailureAnalysisResponse,
+    FailureSeverity,
     GradingRequest,
     GradingResponse,
 )
@@ -38,6 +41,14 @@ def test_agent_sample_outputs_validate_against_backend_agent_schemas() -> None:
     GradingResponse.model_validate(_load_sample("grading.json"))
     FailureAnalysisResponse.model_validate(_load_sample("failure_analysis.json"))
     DocumentPatchResponse.model_validate(_load_sample("document_patch.json"))
+
+
+def test_agent_failure_analysis_severity_schema_matches_backend_enum() -> None:
+    schema = AgentFailureAnalysisOutput.model_json_schema()
+    severity_ref = schema["$defs"]["FailureSignal"]["properties"]["severity"]["$ref"]
+    severity_def = severity_ref.rsplit("/", maxsplit=1)[-1]
+
+    assert set(schema["$defs"][severity_def]["enum"]) == {item.value for item in FailureSeverity}
 
 
 def test_agent_invocation_payload_excludes_forbidden_operational_fields() -> None:

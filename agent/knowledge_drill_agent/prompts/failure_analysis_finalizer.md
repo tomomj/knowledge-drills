@@ -51,6 +51,7 @@ reviewNotes の割り当て:
 ルール:
 - sampleSize には、その誤答傾向を示した受講者数ではなく、提供された採点済み回答の受講者総数を設定してください。何人がその傾向を示したかは evidence に記載してください。
 - sampleSize が3未満の場合は confidenceNote を含め、小さいサンプルに基づく傾向として表現してください。
+- severity は low / medium / high のいずれかだけを使ってください。
 - 講座 Markdown に存在しない社内ルール、方針、事実、義務を創作しないでください。
 - 受講者を責めないでください。
 - Chain-of-thought、内部推論、プロンプト本文を reviewNotes や failureSignals に含めないでください。
