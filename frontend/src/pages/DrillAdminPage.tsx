@@ -272,6 +272,23 @@ export function DrillAdminPage() {
                   ))}
                 </dl>
               </div>
+              <div className="q-answer-guide">
+                <div className="q-answer-guide__block">
+                  <h3>模範解答</h3>
+                  <p>{question.idealAnswer}</p>
+                </div>
+                <div className="q-answer-guide__block">
+                  <h3>教材の根拠</h3>
+                  <ul>
+                    {question.sourceEvidence.map((evidence) => (
+                      <li key={`${evidence.sectionHeading}:${evidence.excerpt}`}>
+                        <b>{evidence.sectionHeading}</b>
+                        <span>{evidence.excerpt}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </article>
           ))}
         </section>

@@ -665,6 +665,63 @@ a.tag-btn {
   color: var(--ink-3);
 }
 
+.q-answer-guide {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  padding: 0 22px 18px;
+}
+
+.q-answer-guide__block {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.q-answer-guide__block h3 {
+  margin: 0;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.q-answer-guide__block p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.q-answer-guide__block ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.q-answer-guide__block li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.q-answer-guide__block li b {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.q-answer-guide__block li span {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .rubric-list {
   display: grid;
   gap: 6px;
@@ -1317,6 +1374,11 @@ a.tag-btn {
     border-left: 0;
     border-top: 1px solid var(--line);
     border-radius: 0 0 var(--radius) var(--radius);
+  }
+
+  .q-answer-guide {
+    grid-template-columns: 1fr;
+    padding: 0 16px 16px;
   }
 
   .page-head {
