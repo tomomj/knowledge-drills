@@ -139,10 +139,11 @@ def test_generate_drill_marks_run_failed_when_source_evidence_is_not_in_course(
         }
     )
 
-    with pytest.raises(ValueError, match="source evidence excerpt"):
-        service.generate_drill("course-1", "owner-1")
+    drill_run = service.generate_drill("course-1", "owner-1")
 
     saved_runs = drill_repository.list_by_course("course-1")
+    assert drill_run.id == saved_runs[0].id
+    assert drill_run.status == "failed"
     assert saved_runs[0].status == "failed"
     assert saved_runs[0].questions == []
     assert saved_runs[0].error_message == "drill generation failed"
@@ -162,10 +163,11 @@ def test_generate_drill_marks_run_failed_when_agent_output_is_invalid() -> None:
         }
     )
 
-    with pytest.raises(ValueError, match="rubric points"):
-        service.generate_drill("course-1", "owner-1")
+    drill_run = service.generate_drill("course-1", "owner-1")
 
     saved_runs = drill_repository.list_by_course("course-1")
+    assert drill_run.id == saved_runs[0].id
+    assert drill_run.status == "failed"
     assert saved_runs[0].status == "failed"
     assert saved_runs[0].error_message == "drill generation failed"
     course = course_repository.get("course-1")
