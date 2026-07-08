@@ -13,6 +13,7 @@ const currentUser: CurrentUser = {
   photoUrl: null,
   createdAt: '2026-07-07T00:00:00+00:00',
   lastLoginAt: '2026-07-07T00:00:00+00:00',
+  demoSeededAt: null,
 }
 
 const firebaseUser: AuthStateUser = {

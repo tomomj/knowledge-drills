@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -19,7 +20,10 @@ from app.schemas import (
 )
 from app.services.analysis_service import AnalysisService
 from app.services.course_service import CourseService
+from app.services.demo_seed_service import DemoSeedService
 from app.services.drill_service import DrillService
+
+logger = logging.getLogger("app.courses")
 
 router = APIRouter(
     prefix="/api/courses",
@@ -40,6 +44,10 @@ def get_analysis_service(request: Request) -> AnalysisService:
     return cast(AnalysisService, request.app.state.analysis_service)
 
 
+def get_demo_seed_service(request: Request) -> DemoSeedService:
+    return cast(DemoSeedService, request.app.state.demo_seed_service)
+
+
 @router.post("", response_model=CourseCreateResponse, status_code=status.HTTP_201_CREATED)
 def create_course(
     request: Request,
@@ -55,6 +63,10 @@ def list_courses(
     request: Request,
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
 ) -> CourseListResponse:
+    try:
+        get_demo_seed_service(request).ensure_seeded(current_user.uid)
+    except Exception:
+        logger.warning("demo course seed failed owner_user_id=%s", current_user.uid, exc_info=True)
     return get_course_service(request).list_courses(current_user.uid)
 
 
@@ -75,6 +87,15 @@ def update_course(
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
 ) -> CourseDetailResponse:
     return get_course_service(request).update_course(course_id, payload, current_user.uid)
+
+
+@router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_course(
+    request: Request,
+    course_id: str,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
+) -> None:
+    get_course_service(request).delete_course(course_id, current_user.uid)
 
 
 @router.get("/{course_id}/metrics", response_model=CourseMetricsResponse)

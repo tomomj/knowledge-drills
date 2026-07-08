@@ -11,6 +11,7 @@ from app.repositories.repositories import (
 from app.schemas import (
     AnswerStatus,
     AnswerSubmission,
+    CourseScoreTrendPoint,
     DrillRun,
     GradingRequest,
     SubmitAnswerRequest,
@@ -94,6 +95,8 @@ class AnswerService:
             }
         )
         self._answer_repository.update(graded)
+        if self._course_repository is not None:
+            self._update_course_score_trend(drill_run)
         return graded
 
     def validate_submission(
@@ -123,3 +126,40 @@ class AnswerService:
             )
 
         return answers_by_question_id
+
+    def _update_course_score_trend(self, drill_run: DrillRun) -> None:
+        if self._answer_repository is None or self._course_repository is None:
+            return
+        graded_answers = [
+            answer
+            for answer in self._answer_repository.list_by_drill_run(drill_run.id)
+            if answer.status == AnswerStatus.GRADED
+        ]
+        total_scores = [
+            answer.total_score for answer in graded_answers if answer.total_score is not None
+        ]
+        average_score = _average(total_scores)
+        if average_score is None:
+            return
+        max_score = sum(question.max_score for question in drill_run.questions)
+        if max_score <= 0:
+            for answer in graded_answers:
+                if answer.max_score is not None:
+                    max_score = answer.max_score
+                    break
+        if max_score <= 0:
+            return
+        self._course_repository.update_score_trend_point(
+            drill_run.course_id,
+            CourseScoreTrendPoint(
+                course_version=drill_run.course_version,
+                average_score=average_score,
+                max_score=max_score,
+            ),
+        )
+
+
+def _average(values: list[int]) -> float | None:
+    if not values:
+        return None
+    return sum(values) / len(values)

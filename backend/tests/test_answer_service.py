@@ -225,6 +225,10 @@ def test_submit_answer_increments_course_answer_count() -> None:
     course = course_repository.get("course-1")
     assert course is not None
     assert course.answer_count == 1
+    assert course.score_trend is not None
+    assert course.score_trend[0].course_version == 1
+    assert course.score_trend[0].average_score == 12.0
+    assert course.score_trend[0].max_score == 12
 
 
 def test_submit_answer_marks_failed_when_grading_fails() -> None:

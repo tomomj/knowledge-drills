@@ -26,6 +26,7 @@ class UserService:
             photo_url=user.photo_url,
             created_at=existing.created_at if existing is not None else now,
             last_login_at=now,
+            demo_seeded_at=existing.demo_seeded_at if existing is not None else None,
         )
         self._user_repository.upsert(profile)
         return profile
