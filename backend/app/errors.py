@@ -69,13 +69,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AgentInvocationError)
     async def agent_invocation_error_handler(
         request: Request,
-        _exc: AgentInvocationError,
+        exc: AgentInvocationError,
     ) -> JSONResponse:
-        logger.info(
-            "agent invocation failed request_id=%s path=%s error_type=%s",
+        logger.error(
+            "agent invocation failed request_id=%s path=%s task=%s error_type=%s reason=%s",
             getattr(request.state, "request_id", "unknown"),
             request.url.path,
-            AgentInvocationError.__name__,
+            exc.task_name or "unknown",
+            exc.error_type or AgentInvocationError.__name__,
+            exc.reason or "unspecified",
         )
         return JSONResponse(
             status_code=status.HTTP_502_BAD_GATEWAY,

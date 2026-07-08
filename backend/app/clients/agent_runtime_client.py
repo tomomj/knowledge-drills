@@ -24,7 +24,18 @@ logger = logging.getLogger("app.agent")
 
 
 class AgentInvocationError(Exception):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        task_name: str | None = None,
+        error_type: str | None = None,
+        reason: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.task_name = task_name
+        self.error_type = error_type
+        self.reason = reason
 
 
 class AgentRuntimeClient:
@@ -92,7 +103,27 @@ class AgentRuntimeClient:
             )
             return response
 
-        raise AgentInvocationError(f"schema validation failed for {task_name}: {last_error}")
+        error_type = (
+            "ValidationError"
+            if isinstance(last_error, ValidationError)
+            else "ContextValidationError"
+        )
+        reason = _validation_failure_reason(last_error)
+        logger.warning(
+            "agent response validation failed permanently task=%s attempts=%s "
+            "error_type=%s reason=%s latency_ms=%.2f",
+            task_name,
+            2,
+            error_type,
+            reason,
+            (perf_counter() - started_at) * 1000,
+        )
+        raise AgentInvocationError(
+            f"schema validation failed for {task_name}",
+            task_name=task_name,
+            error_type=error_type,
+            reason=reason,
+        )
 
     def _validate_grading_response(
         self,
@@ -104,3 +135,24 @@ class AgentRuntimeClient:
         if response.score > request.question.max_score:
             return "score exceeds request question maxScore"
         return None
+
+
+def _validation_failure_reason(error: ValidationError | str | None) -> str:
+    if isinstance(error, ValidationError):
+        details = error.errors(include_input=False)
+        parts: list[str] = []
+        for detail in details[:3]:
+            loc_value = detail.get("loc", ())
+            if isinstance(loc_value, (list, tuple)):
+                loc = ".".join(str(segment) for segment in loc_value)
+            else:
+                loc = str(loc_value)
+            error_kind = str(detail.get("type", "unknown"))
+            parts.append(f"{loc or '<root>'}:{error_kind}")
+        remaining_count = len(details) - len(parts)
+        if remaining_count > 0:
+            parts.append(f"+{remaining_count} more")
+        return ",".join(parts) or "validation error"
+    if isinstance(error, str) and error:
+        return error
+    return "unknown validation error"
