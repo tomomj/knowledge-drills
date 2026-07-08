@@ -1,7 +1,8 @@
 # スコア推移表示 UI 設計
 
-Status: Draft v0.1（2026-07-08）
+Status: Draft v0.2（2026-07-08）
 Scope: Course Editor のスコア推移カード、Course History のバージョン別平均点表示
+SDD source: 実装仕様の正は `.kiro/specs/score-progression-ui/requirements.md`（承認後は design/tasks を含む）とし、この doc は背景資料として扱う。
 
 ## 1. 背景と課題
 
@@ -28,17 +29,20 @@ Scope: Course Editor のスコア推移カード、Course History のバージ�
 ### 3.1 表示イメージ
 
 ```text
-スコアの推移                        [+1.7 点]
+スコアの推移                        [+42.5 pp]
 （SVG スパークライン: 点と折れ線）
-v1 2.1 / 4 点   +1.3 →  v2 3.4 / 4 点   +0.4 →  v3 3.8 / 4 点
+v1 2.1 / 4 点   +32.5 pp →  v2 3.4 / 4 点   +10.0 pp →  v3 3.8 / 4 点
 回答 4 件                回答 4 件                回答 5 件
 ```
 
 - カード見出しを `Before / After` から `スコアの推移` に変更
-- 右上 chip は総デルタ（最後 − 最初）。正なら `chip--success`、負なら `chip--warning`
+- 右上 chip は総スコア率デルタ（最後の `averageScore / maxScore` − 最初の
+  `averageScore / maxScore`）。正なら `chip--success`、負なら `chip--warning`
+- 各 run の点数表記は raw 値（`averageScore / maxScore 点`）を維持するが、
+  デルタ・chip tone・スパークラインはすべてスコア率（`averageScore / maxScore`）基準に揃える
 - scored run（`answerCount > 0` かつ `averageScore` / `maxScore` が非 null）**全件**を
   `courseVersion` 昇順（同一 version は元の配列順）に横並び表示
-- 各ステップ間に区間デルタ（`+1.3 →`）を挟む
+- 各ステップ間に区間スコア率デルタ（`+32.5 pp →`）を挟む
 - scored run が 2 件未満のときは現行同様カード自体を表示しない
 - scored run が 2 件のときは実質現行の Before / After と同じ見え方に退化する
 
@@ -47,7 +51,7 @@ v1 2.1 / 4 点   +1.3 →  v2 3.4 / 4 点   +0.4 →  v3 3.8 / 4 点
 `frontend/src/pages/CourseEditorPage.tsx` のみ変更。
 
 - `MetricsComparison` 型（`before` / `after` / `delta`）を
-  `ScoreProgression` 型（`runs: ScoredMetricsRun[]` / `totalDelta: number`）に置換
+  `ScoreProgression` 型（`runs: ScoredMetricsRun[]` / `totalRateDelta: number`）に置換
 - `buildMetricsComparison` を `buildScoreProgression` に置換。
   filter / sort ロジックは現行を流用し、最初と最後の抽出をやめて全件返す
 - `MetricsComparisonCard` / `MetricRunColumn` を `ScoreProgressionCard` に置換
@@ -59,7 +63,7 @@ v1 2.1 / 4 点   +1.3 →  v2 3.4 / 4 点   +0.4 →  v3 3.8 / 4 点
   - y 座標は `averageScore / maxScore` の比率で正規化
     （run ごとに `maxScore` が異なっても破綻しない）
   - `polyline` + 各点 `circle`。色は CSS の `currentColor`（`var(--accent)`）
-  - `role="img"` + `aria-label="バージョンごとの平均点の推移"`
+  - `role="img"` + `aria-label="バージョンごとのスコア率の推移"`
 
 ### 3.3 CSS（`frontend/src/app/App.css`）
 
@@ -96,7 +100,8 @@ v1    平均 2.1 / 4 点 · 2026/07/03 18:00
 - metrics 取得失敗は履歴表示を壊さない（catch して `null`。
   Course Editor の `loadCourseMetrics` と同じ扱い）
 - `courseVersion -> { averageScore, maxScore }` の Map を組み立てる。
-  同一 version に複数の scored run がある場合は**後の run（最新）で上書き**
+  同一 version に複数の scored run がある場合は**metrics 応答内で後に現れる run**で上書きする。
+  API 契約上 `createdAt` 等の時系列情報はないため、時系列上の最新 run であるとは推測しない
 - `select-row__meta` の文字列を
   `[平均 X.X / N 点, 日時].filter(Boolean).join(' · ')` で合成する（CSS 変更不要）
 
@@ -105,9 +110,10 @@ v1    平均 2.1 / 4 点 · 2026/07/03 18:00
 ### CourseEditorPage.test.tsx
 
 - 既存「shows before after metrics」を「スコアの推移」表示に更新
-  （タイトル文言、v1 / v2、`2.5 / 4 点`、`+1.0 点` は継続して検証）
+  （タイトル文言、v1 / v2、`2.5 / 4 点`、スコア率デルタは継続して検証）
 - 追加: scored run 3 件（v1 2.1 → v2 3.4 → v3 3.8）で
-  全バージョン・区間デルタ（`+1.3` / `+0.4`）・総デルタ（`+1.7 点`）が表示される
+  全バージョン・区間スコア率デルタ（`+32.5 pp` / `+10.0 pp`）・総スコア率デルタ
+  （`+42.5 pp`）が表示される
 - 追加: 未採点 run（`answerCount: 0`）は推移から除外される
 - 既存「hides」テストは文言だけ `スコアの推移` に更新
 
