@@ -466,16 +466,60 @@
 
 .metrics-card__body {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
-  gap: 12px;
+  gap: 14px;
+}
+
+.metrics-sparkline {
+  display: block;
+  width: 100%;
+  height: 72px;
+  color: var(--accent);
+  overflow: visible;
+}
+
+.metrics-sparkline__area {
+  fill: var(--accent-soft);
+  opacity: 0.7;
+}
+
+.metrics-sparkline__line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.metrics-sparkline__point {
+  fill: var(--surface);
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.metrics-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.metrics-flow__segment {
+  display: flex;
+  flex: 1 1 132px;
+  align-items: center;
+  gap: 8px;
+  min-width: min(100%, 132px);
 }
 
 .metrics-card__run {
   display: grid;
+  flex: 1 1 104px;
   gap: 4px;
-  min-width: 0;
-  padding: 10px 0;
-  border-top: 1px solid var(--line);
+  min-width: 104px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
 }
 
 .metrics-card__run strong {
@@ -501,6 +545,27 @@
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.metrics-flow__delta {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.metrics-flow__delta--up {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.metrics-flow__delta--down {
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .next-step {
