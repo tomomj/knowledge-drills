@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterable
 from uuid import uuid4
 
@@ -28,6 +29,12 @@ from app.schemas import (
 )
 from app.services.drill_status_policy import is_distributable_drill_status
 from app.services.share_token_service import ShareTokenService
+
+logger = logging.getLogger("app.drill")
+
+
+class DrillGenerationValidationError(ValueError):
+    pass
 
 
 class DrillService:
@@ -80,20 +87,16 @@ class DrillService:
                 )
             )
             self._validate_questions(agent_response.questions, course.markdown)
-        except Exception:
-            failed = saved_drill_run.model_copy(
-                update={
-                    "status": DrillRunStatus.FAILED,
-                    "error_message": "drill generation failed",
-                }
-            )
-            self._drill_repository.update(failed)
-            self._course_repository.update_summary(
+        except DrillGenerationValidationError as exc:
+            logger.info(
+                "drill generation validation failed course_id=%s drill_run_id=%s reason=%s",
                 course.id,
-                latest_drill_run_id=failed.id,
-                latest_drill_status=failed.status,
-                answer_count=0,
+                saved_drill_run.id,
+                str(exc),
             )
+            return self._mark_generation_failed(saved_drill_run, course.id)
+        except Exception:
+            self._mark_generation_failed(saved_drill_run, course.id)
             raise
 
         ready = saved_drill_run.model_copy(
@@ -237,19 +240,41 @@ class DrillService:
 
     def _validate_questions(self, questions: list[DrillQuestion], course_markdown: str) -> None:
         if len(questions) != 3:
-            raise ValueError("drill generation must return exactly three questions")
+            raise DrillGenerationValidationError(
+                "drill generation must return exactly three questions"
+            )
         for question in questions:
             rubric_total = sum(item.points for item in question.rubric)
             if rubric_total != question.max_score:
-                raise ValueError("rubric points must total max_score")
+                raise DrillGenerationValidationError("rubric points must total max_score")
             if not question.source_evidence:
-                raise ValueError("source evidence is required")
+                raise DrillGenerationValidationError("source evidence is required")
             for evidence in question.source_evidence:
                 excerpt = evidence.excerpt.strip()
                 if not excerpt:
-                    raise ValueError("source evidence excerpt is required")
+                    raise DrillGenerationValidationError(
+                        "source evidence excerpt is required"
+                    )
                 if excerpt not in course_markdown:
-                    raise ValueError("source evidence excerpt must match course markdown")
+                    raise DrillGenerationValidationError(
+                        "source evidence excerpt must match course markdown"
+                    )
+
+    def _mark_generation_failed(self, drill_run: DrillRun, course_id: str) -> DrillRun:
+        failed = drill_run.model_copy(
+            update={
+                "status": DrillRunStatus.FAILED,
+                "error_message": "drill generation failed",
+            }
+        )
+        self._drill_repository.update(failed)
+        self._course_repository.update_summary(
+            course_id,
+            latest_drill_run_id=failed.id,
+            latest_drill_status=failed.status,
+            answer_count=0,
+        )
+        return failed
 
     def _build_rubric_summary(self, questions: list[DrillQuestion]) -> list[str]:
         return [
