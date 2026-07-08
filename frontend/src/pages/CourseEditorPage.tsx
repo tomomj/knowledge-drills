@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { api, ApiClientError } from '../api/client'
-import type { CourseDetail } from '../api/types'
+import type { CourseDetail, CourseMetricsResponse, CourseMetricsRun } from '../api/types'
 import { AppShell } from '../components/common/AppShell'
 import { Breadcrumbs } from '../components/common/Breadcrumbs'
 import { StatusBanner } from '../components/common/StatusBanner'
 
 const MARKDOWN_LIMIT = 20_000
+const DRILL_FOCUS_LIMIT = 500
 
 type PageState =
   | { status: 'idle' }
@@ -22,7 +23,9 @@ export function CourseEditorPage() {
   const { courseId } = useParams()
   const [title, setTitle] = useState('')
   const [markdown, setMarkdown] = useState('')
+  const [drillFocus, setDrillFocus] = useState('')
   const [course, setCourse] = useState<CourseDetail | null>(null)
+  const [metrics, setMetrics] = useState<CourseMetricsResponse | null>(null)
   const [state, setState] = useState<PageState>({ status: 'idle' })
 
   useEffect(() => {
@@ -32,16 +35,24 @@ export function CourseEditorPage() {
         setCourse(null)
         setTitle('')
         setMarkdown('')
+        setDrillFocus('')
+        setMetrics(null)
         setState({ status: 'idle' })
         return
       }
+      setMetrics(null)
       setState({ status: 'saving' })
       try {
-        const loaded = await api.getCourse(courseId)
+        const [loaded, loadedMetrics] = await Promise.all([
+          api.getCourse(courseId),
+          loadCourseMetrics(courseId),
+        ])
         if (active) {
           setCourse(loaded)
+          setMetrics(loadedMetrics)
           setTitle(loaded.title)
           setMarkdown(loaded.markdown)
+          setDrillFocus(loaded.drillFocus ?? '')
           const saveMessage = saveMessageFromLocationState(location.state)
           setState(saveMessage ? { status: 'ready', message: saveMessage } : { status: 'idle' })
         }
@@ -57,7 +68,8 @@ export function CourseEditorPage() {
     }
   }, [courseId, location.state])
 
-  const validationError = validateCourse(title, markdown)
+  const validationError = validateCourse(title, markdown, drillFocus)
+  const metricsComparison = buildMetricsComparison(metrics)
 
   async function saveCourse() {
     if (validationError) {
@@ -67,13 +79,14 @@ export function CourseEditorPage() {
     setState({ status: 'saving' })
     try {
       const saved = course
-        ? await api.updateCourse(course.id, { title, markdown })
-        : await api.createCourse({ title, markdown }).then((created) =>
+        ? await api.updateCourse(course.id, { title, markdown, drillFocus })
+        : await api.createCourse({ title, markdown, drillFocus }).then((created) =>
             api.getCourse(created.courseId),
           )
       setCourse(saved)
       setTitle(saved.title)
       setMarkdown(saved.markdown)
+      setDrillFocus(saved.drillFocus ?? '')
       setState({ status: 'ready', message: '保存しました。' })
       if (!course) {
         navigate(`/courses/${saved.id}`, {
@@ -171,6 +184,21 @@ export function CourseEditorPage() {
                   onChange={(event) => setMarkdown(event.target.value)}
                 />
               </label>
+              <label className="field">
+                <span className="field__label">
+                  出題観点
+                  <span className="field__hint">
+                    任意・{drillFocus.length.toLocaleString()} /{' '}
+                    {DRILL_FOCUS_LIMIT.toLocaleString()} 文字
+                  </span>
+                </span>
+                <textarea
+                  className="editor-md editor-md--compact"
+                  value={drillFocus}
+                  placeholder="例: 例外条件や判断理由を重点的に確認"
+                  onChange={(event) => setDrillFocus(event.target.value)}
+                />
+              </label>
             </div>
           </div>
 
@@ -232,6 +260,7 @@ export function CourseEditorPage() {
                 </dl>
               </div>
             </div>
+            {metricsComparison ? <MetricsComparisonCard comparison={metricsComparison} /> : null}
             <div className="next-step">
               <b>次のステップ</b>
               資料を保存したら「ドリルを生成」で確認テストを作成し、共有 URL を受講者に配布します。
@@ -240,6 +269,47 @@ export function CourseEditorPage() {
         </section>
       </main>
     </AppShell>
+  )
+}
+
+type ScoredMetricsRun = CourseMetricsRun & {
+  averageScore: number
+  maxScore: number
+}
+
+type MetricsComparison = {
+  before: ScoredMetricsRun
+  after: ScoredMetricsRun
+  delta: number
+}
+
+function MetricsComparisonCard({ comparison }: { comparison: MetricsComparison }) {
+  return (
+    <article className="card metrics-card" aria-label="改善メトリクス">
+      <div className="card__head">
+        <h2>Before / After</h2>
+        <span className={`chip chip--${comparison.delta >= 0 ? 'success' : 'warning'}`}>
+          {formatScoreDelta(comparison.delta)}
+        </span>
+      </div>
+      <div className="card__body metrics-card__body">
+        <MetricRunColumn label="Before" run={comparison.before} />
+        <MetricRunColumn label="After" run={comparison.after} />
+      </div>
+    </article>
+  )
+}
+
+function MetricRunColumn({ label, run }: { label: string; run: ScoredMetricsRun }) {
+  return (
+    <div className="metrics-card__run">
+      <span className="metrics-card__label">{label}</span>
+      <strong>v{run.courseVersion}</strong>
+      <span>
+        {formatMetricScore(run.averageScore)} / {run.maxScore} 点
+      </span>
+      <small>回答 {run.answerCount} 件</small>
+    </div>
   )
 }
 
@@ -255,7 +325,47 @@ function saveMessageFromLocationState(state: unknown): string | null {
   return null
 }
 
-function validateCourse(title: string, markdown: string): string | null {
+async function loadCourseMetrics(courseId: string): Promise<CourseMetricsResponse | null> {
+  try {
+    return await api.getCourseMetrics(courseId)
+  } catch {
+    return null
+  }
+}
+
+function buildMetricsComparison(metrics: CourseMetricsResponse | null): MetricsComparison | null {
+  const scoredRuns = (metrics?.runs ?? [])
+    .map((run, index) => ({ run, index }))
+    .filter((entry): entry is { run: ScoredMetricsRun; index: number } =>
+      isScoredMetricsRun(entry.run),
+    )
+    .sort((left, right) => {
+      const versionDiff = left.run.courseVersion - right.run.courseVersion
+      return versionDiff !== 0 ? versionDiff : left.index - right.index
+    })
+
+  if (scoredRuns.length < 2) {
+    return null
+  }
+
+  const before = scoredRuns[0].run
+  const after = scoredRuns[scoredRuns.length - 1].run
+  return { before, after, delta: after.averageScore - before.averageScore }
+}
+
+function isScoredMetricsRun(run: CourseMetricsRun): run is ScoredMetricsRun {
+  return run.answerCount > 0 && run.averageScore !== null && run.maxScore !== null
+}
+
+function formatMetricScore(score: number): string {
+  return score.toFixed(1)
+}
+
+function formatScoreDelta(delta: number): string {
+  return `${delta > 0 ? '+' : ''}${delta.toFixed(1)} 点`
+}
+
+function validateCourse(title: string, markdown: string, drillFocus: string): string | null {
   if (!title.trim()) {
     return 'タイトルが必要です。'
   }
@@ -264,6 +374,9 @@ function validateCourse(title: string, markdown: string): string | null {
   }
   if (markdown.length > MARKDOWN_LIMIT) {
     return 'Markdown 本文が MVP の文字数上限を超えています。'
+  }
+  if (drillFocus.length > DRILL_FOCUS_LIMIT) {
+    return '出題観点は 500 文字以内で入力してください。'
   }
   return null
 }

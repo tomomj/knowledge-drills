@@ -71,11 +71,20 @@ class FailureSeverity(StrEnum):
     HIGH = "high"
 
 
+class AnalysisStepStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 class Course(ApiModel):
     id: str
     owner_user_id: str | None = None
     title: str
     markdown: str
+    drill_focus: str | None = Field(default=None, max_length=500)
     version: int = 1
     updated_at: str | None = None
     latest_drill_run_id: str | None = None
@@ -88,17 +97,20 @@ class Course(ApiModel):
 class CourseCreateRequest(ApiModel):
     title: str
     markdown: str
+    drill_focus: str | None = Field(default=None, max_length=500)
 
 
 class CourseUpdateRequest(ApiModel):
     title: str
     markdown: str
+    drill_focus: str | None = Field(default=None, max_length=500)
 
 
 class CourseDetailResponse(ApiModel):
     id: str
     title: str
     markdown: str
+    drill_focus: str | None = Field(default=None, max_length=500)
     version: int
     updated_at: str | None = None
     latest_drill_run_id: str | None = None
@@ -130,6 +142,7 @@ class CourseRevision(ApiModel):
     version: int
     title: str
     markdown: str
+    drill_focus: str | None = Field(default=None, max_length=500)
     updated_at: str | None = None
 
 
@@ -158,6 +171,15 @@ class RubricItem(ApiModel):
 class SourceEvidence(ApiModel):
     section_heading: str
     excerpt: str
+
+
+class AnalysisTimelineItem(ApiModel):
+    id: str
+    title: str
+    status: AnalysisStepStatus
+    summary: str | None = None
+    evidence: list[str] = Field(default_factory=list)
+    completed_at: str | None = None
 
 
 class DrillQuestion(ApiModel):
@@ -194,8 +216,10 @@ class DrillRun(ApiModel):
     id: str
     course_id: str
     course_version: int = 1
+    drill_focus: str | None = Field(default=None, max_length=500)
     status: DrillRunStatus
     questions: list[DrillQuestion] = Field(default_factory=list)
+    analysis_timeline: list[AnalysisTimelineItem] = Field(default_factory=list)
     share_token: str | None = None
     error_message: str | None = None
 
@@ -289,6 +313,12 @@ class FailureSignal(ApiModel):
         return self.suspected_document_gap
 
 
+class AnalysisPerspective(ApiModel):
+    id: str
+    title: str
+    summary: str
+
+
 class DocumentPatch(ApiModel):
     id: str
     course_id: str
@@ -300,6 +330,7 @@ class DocumentPatch(ApiModel):
     risk_notes: list[str] = Field(default_factory=list)
     diff_text: str
     failure_signals: list[FailureSignal] = Field(default_factory=list)
+    analysis_timeline: list[AnalysisTimelineItem] = Field(default_factory=list)
     owner_feedback: str | None = None
 
 
@@ -335,15 +366,34 @@ class LearnerDrillQuestionResponse(ApiModel):
         )
 
 
+class QuestionScoreSummary(ApiModel):
+    question_id: str
+    average_score: float | None = None
+    max_score: int
+    graded_answer_count: int
+    common_missing_points: list[str] = Field(default_factory=list)
+    failure_tags: list[str] = Field(default_factory=list)
+
+
+class DrillScoreSummary(ApiModel):
+    graded_answer_count: int
+    average_score: float | None = None
+    max_score: int
+    questions: list[QuestionScoreSummary] = Field(default_factory=list)
+
+
 class DrillAdminResponse(ApiModel):
     id: str
     course_id: str
     course_version: int = 1
+    drill_focus: str | None = Field(default=None, max_length=500)
     status: DrillRunStatus
     questions: list[AdminDrillQuestionResponse]
     rubric_summary: list[str]
     share_url: str | None
     answer_count: int
+    score_summary: DrillScoreSummary | None = None
+    analysis_timeline: list[AnalysisTimelineItem] = Field(default_factory=list)
     can_analyze: bool
     error_message: str | None = None
 
@@ -369,6 +419,19 @@ class LearnerDrillResponse(ApiModel):
     questions: list[LearnerDrillQuestionResponse]
 
 
+class CourseMetricsRun(ApiModel):
+    drill_run_id: str
+    course_version: int
+    answer_count: int
+    average_score: float | None = None
+    max_score: int | None = None
+
+
+class CourseMetricsResponse(ApiModel):
+    course_id: str
+    runs: list[CourseMetricsRun]
+
+
 class DrillGenerationRequest(ApiModel):
     course_id: str | None = Field(default=None, exclude=True)
     course_title: str = Field(
@@ -379,6 +442,7 @@ class DrillGenerationRequest(ApiModel):
         validation_alias=AliasChoices("courseMarkdown", "markdown"),
         serialization_alias="courseMarkdown",
     )
+    drill_focus: str | None = Field(default=None, max_length=500)
 
 
 class DrillGenerationResponse(ApiModel):
@@ -410,6 +474,7 @@ class FailureAnalysisRequest(ApiModel):
 
 class FailureAnalysisResponse(ApiModel):
     failure_signals: list[FailureSignal]
+    perspectives: list[AnalysisPerspective] = Field(default_factory=list)
 
 
 class DocumentPatchRequest(ApiModel):

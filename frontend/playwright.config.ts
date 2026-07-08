@@ -10,6 +10,8 @@ const backendPort = Number(process.env.E2E_BACKEND_PORT ?? 8000)
 const frontendBaseUrl =
   process.env.E2E_FRONTEND_BASE_URL ?? `http://127.0.0.1:${frontendPort}`
 const apiBaseUrl = process.env.E2E_API_BASE_URL ?? `http://127.0.0.1:${backendPort}`
+const backendCorsAllowedOrigins =
+  process.env.KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS ?? frontendBaseUrl
 const localBrowserChannel =
   process.env.PLAYWRIGHT_BROWSER_CHANNEL ?? (process.platform === 'darwin' ? 'chrome' : undefined)
 
@@ -29,6 +31,9 @@ export default defineConfig({
     {
       command: `uv run --native-tls --frozen uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}`,
       cwd: backendDir,
+      env: {
+        KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS: backendCorsAllowedOrigins,
+      },
       url: `${apiBaseUrl}/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,

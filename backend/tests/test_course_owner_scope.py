@@ -145,6 +145,7 @@ def test_course_detail_update_revisions_and_diff_are_owner_scoped() -> None:
         )
         blocked_revisions = client.get(f"/api/courses/{course_id}/revisions")
         blocked_diff = client.get(f"/api/courses/{course_id}/revisions/diff?from=1&to=2")
+        blocked_metrics = client.get(f"/api/courses/{course_id}/metrics")
 
         saved = client.app.state.course_repository.get(course_id)  # type: ignore[attr-defined]
 
@@ -152,10 +153,12 @@ def test_course_detail_update_revisions_and_diff_are_owner_scoped() -> None:
     assert blocked_update.status_code == 404
     assert blocked_revisions.status_code == 404
     assert blocked_diff.status_code == 404
+    assert blocked_metrics.status_code == 404
     assert blocked_detail.json()["code"] == "course_not_found"
     assert blocked_update.json()["code"] == "course_not_found"
     assert blocked_revisions.json()["code"] == "course_not_found"
     assert blocked_diff.json()["code"] == "course_not_found"
+    assert blocked_metrics.json()["code"] == "course_not_found"
     assert saved is not None
     assert saved.title == "Owner 1 Course"
     assert saved.markdown == "# v2"

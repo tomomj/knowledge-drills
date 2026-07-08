@@ -1,4 +1,9 @@
-採点済み回答を分析し、社内ルールを創作せずに、繰り返し発生している Failure Signal を抽出してください。
+採点済み回答と3つの視点メモを統合し、社内ルールを創作せずに、繰り返し発生している Failure Signal を抽出してください。
+
+参照できる視点メモ:
+- 教材ギャップ: {material_gap_perspective}
+- 設問品質: {question_quality_perspective}
+- つまずきパターン: {learner_pattern_perspective}
 
 最終出力では次の field を返してください。
 - failureSignals
@@ -16,7 +21,7 @@
 - sampleSize
 - confidenceNote
 
-perspectives には、可能な限り次の3件の観点別所見を返してください。
+perspectives は次の3件を返してください。
 - id: material_gap, title: 教材ギャップ, summary: 教材ギャップ視点の1行要約
 - id: question_quality, title: 設問品質, summary: 設問品質視点の1行要約
 - id: learner_pattern, title: つまずきパターン, summary: つまずきパターン視点の1行要約
@@ -27,6 +32,7 @@ perspectives には、可能な限り次の3件の観点別所見を返してく
 - sampleSize が3未満の場合は confidenceNote を含め、小さいサンプルに基づく傾向として表現してください。
 - 受講者の理解不足と、資料側の説明不足の可能性を区別してください。
 - 受講者を責めないでください。
+- 設問品質に主因があり教材変更が危険な場合は、recommendedChange と risk が分かる控えめな表現にしてください。
 - 講座 Markdown に存在しない社内ルール、方針、事実、義務を創作しないでください。
 - 必要な evidence であり、かつ入力で提供済みの場合を除き、受講者回答の原文を含めないでください。
 - 受講者や講座オーナーに表示される文章は日本語で書いてください。

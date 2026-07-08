@@ -18,6 +18,7 @@ const patch: DocumentPatch = {
   riskNotes: ['既存運用との整合を確認'],
   diffText: '--- base.md\n+++ patched.md\n-# Before\n+# After',
   ownerFeedback: null,
+  analysisTimeline: [],
   failureSignals: [
     {
       id: 'fs_test_001',
@@ -93,6 +94,36 @@ describe('PatchReviewPage', () => {
     expect(screen.getByText(/少数回答の傾向です。/)).toBeTruthy()
     expect(screen.getByText('既存運用との整合を確認')).toBeTruthy()
     expect(screen.getByText(/--- base.md/)).toBeTruthy()
+    expect(screen.queryByText('分析タイムライン')).toBeNull()
+  })
+
+  it('renders analysis timeline between patch summary and failure signals', async () => {
+    mocks.getPatch.mockResolvedValueOnce({
+      ...patch,
+      analysisTimeline: [
+        {
+          id: 'collect_answers',
+          title: '回答を収集',
+          status: 'completed',
+          summary: '採点済み回答 2 件を確認しました。',
+          evidence: ['受講者A: 根拠不足', '受講者B: 例外条件不足'],
+          completedAt: '2026-07-08T10:00:00Z',
+        },
+      ],
+    })
+
+    renderPatch()
+
+    await screen.findByText('回答を収集')
+    expect(screen.getByText('分析タイムライン')).toBeTruthy()
+    expect(screen.getByText('採点済み回答 2 件を確認しました。')).toBeTruthy()
+    expect(screen.getByText('受講者A: 根拠不足')).toBeTruthy()
+
+    const summary = screen.getByText(/要約：判断基準を追記/)
+    const timeline = screen.getByText('分析タイムライン')
+    const signal = screen.getByText('根拠不足')
+    expect(summary.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(timeline.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('disables apply for stale patch', async () => {
