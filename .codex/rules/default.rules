@@ -1,0 +1,125 @@
+# Allow routine Knowledge Drills development commands outside the sandbox.
+# This file is project-local: Codex loads it only when this repository's
+# .codex layer is trusted.
+
+prefix_rule(
+    pattern = ["uv", "run"],
+    decision = "allow",
+    justification = "Routine Python checks and dev servers for this repository use uv run.",
+    match = [
+        "uv run --frozen pytest",
+        "uv run --frozen ruff check .",
+        "uv run --frozen mypy .",
+        "uv run --frozen uvicorn app.main:app --host 127.0.0.1 --port 8000",
+    ],
+)
+
+prefix_rule(
+    pattern = ["uv", "sync"],
+    decision = "allow",
+    justification = "Backend and agent dependency sync are expected setup commands for this repository.",
+    match = [
+        "uv sync",
+        "uv sync --frozen",
+    ],
+)
+
+prefix_rule(
+    pattern = ["npm", "run"],
+    decision = "allow",
+    justification = "Frontend scripts are defined in frontend/package.json and are expected local checks.",
+    match = [
+        "npm run dev",
+        "npm run lint",
+        "npm run typecheck",
+        "npm run build",
+        "npm run depcheck",
+        "npm run test:e2e",
+    ],
+)
+
+prefix_rule(
+    pattern = ["npm", "test"],
+    decision = "allow",
+    justification = "Frontend unit tests are an expected local check.",
+    match = [
+        "npm test",
+    ],
+)
+
+prefix_rule(
+    pattern = ["npm", ["ci", "install"]],
+    decision = "allow",
+    justification = "Frontend dependency installation is expected for this repository.",
+    match = [
+        "npm ci",
+        "npm install",
+    ],
+)
+
+prefix_rule(
+    pattern = ["make", [
+        "help",
+        "dev",
+        "dev-backend",
+        "dev-frontend",
+        "serve-backend",
+        "install",
+        "install-backend",
+        "install-agent",
+        "install-frontend",
+        "check",
+        "test",
+        "test-backend",
+        "test-agent",
+        "test-frontend",
+        "lint",
+        "lint-backend",
+        "lint-agent",
+        "lint-frontend",
+        "typecheck",
+        "typecheck-backend",
+        "typecheck-agent",
+        "typecheck-frontend",
+        "format",
+        "format-backend",
+        "format-agent",
+        "build-frontend",
+    ]],
+    decision = "allow",
+    justification = "The root Makefile owns routine development commands for this repository.",
+    match = [
+        "make check",
+        "make test",
+        "make lint",
+        "make typecheck",
+        "make dev",
+        "make build-frontend",
+    ],
+    not_match = [
+        "make unknown-target",
+    ],
+)
+
+prefix_rule(
+    pattern = ["terraform", ["fmt", "init", "validate", "plan"]],
+    decision = "allow",
+    justification = "Terraform fmt/init/validate/plan are allowed inspection or preparation commands for this repository.",
+    match = [
+        "terraform fmt",
+        "terraform init",
+        "terraform init -reconfigure",
+        "terraform validate",
+        "terraform plan",
+    ],
+)
+
+prefix_rule(
+    pattern = ["terraform", ["apply", "destroy"]],
+    decision = "forbidden",
+    justification = "Terraform apply/destroy changes infrastructure state; run these manually outside Codex when needed.",
+    match = [
+        "terraform apply",
+        "terraform destroy",
+    ],
+)

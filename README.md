@@ -14,20 +14,51 @@ Knowledge CI アプリケーション。
 
 ## 開発
 
-各パッケージの検証コマンド（すべて外部接続・認証情報なしで成功する）:
+通常の開発操作はリポジトリ直下の `Makefile` から実行する。
+
+| 目的 | コマンド |
+|---|---|
+| backend / frontend の dev server 起動 | `make dev` |
+| backend の dev server 起動 | `make dev-backend` |
+| frontend の dev server 起動 | `make dev-frontend` |
+| 依存関係のインストール | `make install` |
+| lint / typecheck / test | `make check` |
+| test | `make test` |
+| lint | `make lint` |
+| typecheck | `make typecheck` |
+| format | `make format` |
+| frontend build | `make build-frontend` |
+
+個別に確認する場合は次を使う。これらは外部接続・認証情報なしで成功することを前提にしている。
 
 ```sh
 cd backend && uv run --frozen pytest && uv run --frozen ruff check . && uv run --frozen mypy .
 cd agent   && uv run --frozen pytest && uv run --frozen ruff check . && uv run --frozen mypy .
-cd frontend && npm test && npm run lint
+cd frontend && npm test && npm run lint && npm run typecheck && npm run build
 ```
 
-CI は Backend / Frontend / Agent で workflow を分け、該当ディレクトリに差分がある PR だけで
+frontend は `npm` と `package-lock.json` を使う。主な npm scripts は `dev`、`test`、
+`test:e2e`、`typecheck`、`build`、`lint`、`depcheck`、`knip`、`preview`。
+
+Terraform は `terraform/` で管理する。通常の確認は `fmt`、`validate`、`plan` までとし、
+`apply` はインフラ状態を変更するため明示的な実行判断を必要とする。
+
+```sh
+cd terraform
+terraform fmt
+terraform validate
+terraform plan
+```
+
+Codex の project-local command rules は `.codex/rules/default.rules` に置く。この repository が
+trusted のときだけ読み込まれ、通常の `uv` / `npm` / `make` / Terraform 確認コマンドを許可し、
+`terraform apply` / `destroy` は拒否する。
+
+CI は Backend / Frontend / Agent Eval で workflow を分け、該当ディレクトリに差分がある PR だけで
 実行する。
 
-- `.github/workflows/backend-ci.yml`: `backend/**`
+- `.github/workflows/backend-ci.yml`: `backend/**` / `agent/**` の通常 CI
 - `.github/workflows/frontend-ci.yml`: `frontend/**`
-- `.github/workflows/agent-ci.yml`: `agent/**`
 - `.github/workflows/agent-eval.yml`: `agent/**` 差分時に eval 専用 WIF で実 Gemini eval を実行する
 
 `agent-eval.yml` は deploy 用 service account ではなく、Terraform が作成する
