@@ -81,6 +81,29 @@ def test_schema_validation_failure_after_retry_raises_reason() -> None:
         client.generate_drill(DrillGenerationRequest(course_title="講座", course_markdown="# Body"))
 
 
+def test_schema_validation_failure_after_retry_logs_warning_without_response_payload(
+    caplog: LogCaptureFixture,
+) -> None:
+    sentinel = "SECRET_AGENT_RESPONSE_8c74"
+    client = AgentRuntimeClient(
+        invoker=lambda _task_name, _payload: {"questions": [{"question": sentinel}]}
+    )
+
+    with (
+        caplog.at_level("WARNING", logger="app.agent"),
+        pytest.raises(AgentInvocationError, match="schema validation failed"),
+    ):
+        client.generate_drill(DrillGenerationRequest(course_title="講座", course_markdown="# Body"))
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "agent response validation failed permanently task=generate_drill" in message
+        for message in messages
+    )
+    assert any("error_type=ValidationError" in message for message in messages)
+    assert sentinel not in caplog.text
+
+
 def test_document_patch_invocation_uses_typed_request_and_response() -> None:
     observed_payloads: list[dict[str, object]] = []
 

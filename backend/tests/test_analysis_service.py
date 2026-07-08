@@ -1,3 +1,4 @@
+import logging
 from typing import cast
 
 import pytest
@@ -374,7 +375,9 @@ def test_run_analysis_saves_intermediate_timeline_before_agent_calls() -> None:
     assert saved_drill.analysis_timeline[1].evidence == ["判断根拠の不足"]
 
 
-def test_run_analysis_marks_running_step_failed_and_restores_ready_when_analysis_fails() -> None:
+def test_run_analysis_marks_running_step_failed_and_restores_ready_when_analysis_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     client = InMemoryFirestoreClient()
     course_repository = CourseRepository(client)
     drill_repository = DrillRepository(client)
@@ -403,7 +406,10 @@ def test_run_analysis_marks_running_step_failed_and_restores_ready_when_analysis
         ),
     )
 
-    with pytest.raises(AgentInvocationError):
+    with (
+        caplog.at_level(logging.WARNING, logger="app.analysis"),
+        pytest.raises(AgentInvocationError),
+    ):
         service.run_analysis("drill-1", "owner-1")
 
     saved_drill = drill_repository.get("drill-1")
@@ -420,3 +426,9 @@ def test_run_analysis_marks_running_step_failed_and_restores_ready_when_analysis
     assert len(failed_steps) == 1
     assert failed_steps[0].id == "detect_failure_patterns"
     assert failed_steps[0].summary == "analysis failed"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "analysis failed course_id=course-1 drill_run_id=drill-1" in message for message in messages
+    )
+    assert any("step=detect_failure_patterns" in message for message in messages)
+    assert any("error_type=AgentInvocationError" in message for message in messages)
