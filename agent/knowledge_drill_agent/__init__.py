@@ -1,4 +1,6 @@
 from knowledge_drill_agent.agent import (
+    create_composite_failure_analysis_agent,
+    create_configured_failure_analysis_agent,
     create_document_patch_agent,
     create_drill_generator_agent,
     create_failure_analysis_agent,
@@ -11,6 +13,8 @@ from knowledge_drill_agent.agent import (
 )
 
 __all__ = [
+    "create_composite_failure_analysis_agent",
+    "create_configured_failure_analysis_agent",
     "create_document_patch_agent",
     "create_drill_generator_agent",
     "create_failure_analysis_agent",

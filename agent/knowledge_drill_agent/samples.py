@@ -1,4 +1,5 @@
 from knowledge_drill_agent.schemas import (
+    AnalysisPerspective,
     DocumentPatchOutput,
     DrillGenerationOutput,
     DrillQuestion,
@@ -56,7 +57,24 @@ def build_sample_failure_analysis_output() -> FailureAnalysisOutput:
                 sample_size=2,
                 confidence_note="少数回答に基づく傾向として扱う",
             )
-        ]
+        ],
+        perspectives=[
+            AnalysisPerspective(
+                id="material_gap",
+                title="教材ギャップ",
+                summary="判断基準の具体例が不足している可能性がある",
+            ),
+            AnalysisPerspective(
+                id="question_quality",
+                title="設問品質",
+                summary="設問は根拠提示を求めているが、教材側の例が薄い",
+            ),
+            AnalysisPerspective(
+                id="learner_pattern",
+                title="つまずきパターン",
+                summary="複数回答で判断根拠への言及が抜けている",
+            ),
+        ],
     )
 
 

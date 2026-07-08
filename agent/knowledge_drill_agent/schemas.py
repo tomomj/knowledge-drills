@@ -71,6 +71,12 @@ class DrillGenerationInput(AgentModel):
         validation_alias=AliasChoices("courseMarkdown", "markdown"),
         serialization_alias="courseMarkdown",
     )
+    drill_focus: str | None = Field(
+        default=None,
+        max_length=500,
+        validation_alias=AliasChoices("drillFocus", "focus"),
+        serialization_alias="drillFocus",
+    )
 
 
 class DrillGenerationOutput(AgentModel):
@@ -143,8 +149,15 @@ class FailureAnalysisInput(AgentModel):
     grading_results: list[GradingOutput]
 
 
+class AnalysisPerspective(AgentModel):
+    id: str
+    title: str
+    summary: str
+
+
 class FailureAnalysisOutput(AgentModel):
     failure_signals: list[FailureSignal] = Field(min_length=1)
+    perspectives: list[AnalysisPerspective] = Field(default_factory=list)
 
 
 class DocumentPatchInput(AgentModel):
