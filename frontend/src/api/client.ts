@@ -5,6 +5,7 @@ import type {
   CourseCreateResponse,
   CourseDetail,
   CourseListResponse,
+  CourseMetricsResponse,
   CoursePayload,
   CourseRevisionDiff,
   CourseRevisionListResponse,
@@ -92,6 +93,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
+  getCourseMetrics: (courseId: string) =>
+    requestJson<CourseMetricsResponse>(`/api/courses/${courseId}/metrics`),
   listCourseRevisions: (courseId: string) =>
     requestJson<CourseRevisionListResponse>(`/api/courses/${courseId}/revisions`),
   diffCourseRevisions: (courseId: string, fromVersion: number, toVersion: number) =>

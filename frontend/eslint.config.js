@@ -4,12 +4,13 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 
-const noRestrictedImports = (patterns) => [
+const noRestrictedImports = (patterns, options = {}) => [
   'error',
   {
     patterns: patterns.map((pattern) => ({
       group: [pattern],
       message: 'Frontend の依存方向ルールに反しています。',
+      allowTypeImports: options.allowTypeImports ?? false,
     })),
   },
 ]
@@ -57,12 +58,15 @@ export default tseslint.config(
   {
     files: ['src/components/**/*.{ts,tsx}'],
     rules: {
-      'no-restricted-imports': noRestrictedImports([
-        '../api/*',
-        '../../api/*',
-        '@/api/*',
-        'src/api/*',
-      ]),
+      'no-restricted-imports': noRestrictedImports(
+        [
+          '../api/*',
+          '../../api/*',
+          '@/api/*',
+          'src/api/*',
+        ],
+        { allowTypeImports: true },
+      ),
     },
   },
   {

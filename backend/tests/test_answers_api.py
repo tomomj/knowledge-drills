@@ -24,13 +24,15 @@ def _question(question_id: str) -> DrillQuestion:
 def _configure_ready_drill_and_answer_service(
     client: TestClient,
     agent_response: dict[str, object],
+    *,
+    status: DrillRunStatus = DrillRunStatus.READY,
 ) -> None:
     app = cast(FastAPI, client.app)
     app.state.drill_repository.create(
         DrillRun(
             id="drill-1",
             course_id="course-1",
-            status=DrillRunStatus.READY,
+            status=status,
             questions=[
                 _question("q1"),
                 _question("q2"),
@@ -104,6 +106,76 @@ def test_submit_answer_returns_minimal_feedback_without_private_fields(
     ]
     assert "rubric" not in str(payload)
     assert "idealAnswer" not in str(payload)
+
+
+@pytest.mark.parametrize("status", [DrillRunStatus.ANALYZING, DrillRunStatus.ANALYZED])
+def test_submit_answer_accepts_analysis_lifecycle_statuses(
+    client: TestClient,
+    status: DrillRunStatus,
+) -> None:
+    _configure_ready_drill_and_answer_service(
+        client,
+        {
+            "questionId": "q1",
+            "score": 3,
+            "maxScore": 4,
+            "correctPoints": ["判断できている"],
+            "missingPoints": ["根拠が不足"],
+            "feedback": "根拠を添えてください。",
+            "failureTags": ["missing_evidence"],
+        },
+        status=status,
+    )
+
+    response = client.post(
+        "/api/drills/share-token/answers",
+        json={
+            "learnerName": "受講者",
+            "answers": [
+                {"questionId": "q1", "answerText": "回答1"},
+                {"questionId": "q2", "answerText": "回答2"},
+                {"questionId": "q3", "answerText": "回答3"},
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "graded"
+
+
+@pytest.mark.parametrize("status", [DrillRunStatus.GENERATING, DrillRunStatus.FAILED])
+def test_submit_answer_rejects_non_distributable_status(
+    client: TestClient,
+    status: DrillRunStatus,
+) -> None:
+    _configure_ready_drill_and_answer_service(
+        client,
+        {
+            "questionId": "q1",
+            "score": 3,
+            "maxScore": 4,
+            "correctPoints": ["判断できている"],
+            "missingPoints": ["根拠が不足"],
+            "feedback": "根拠を添えてください。",
+            "failureTags": ["missing_evidence"],
+        },
+        status=status,
+    )
+
+    response = client.post(
+        "/api/drills/share-token/answers",
+        json={
+            "learnerName": "受講者",
+            "answers": [
+                {"questionId": "q1", "answerText": "回答1"},
+                {"questionId": "q2", "answerText": "回答2"},
+                {"questionId": "q3", "answerText": "回答3"},
+            ],
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "invalid_share_token"
 
 
 def test_submit_answer_invalid_token_returns_404(client: TestClient) -> None:

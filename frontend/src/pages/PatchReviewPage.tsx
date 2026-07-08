@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { api, ApiClientError } from '../api/client'
 import type { DocumentPatch, FailureSignal, PatchStatus } from '../api/types'
 import { AppShell } from '../components/common/AppShell'
+import { AnalysisTimeline } from '../components/common/AnalysisTimeline'
 import { Breadcrumbs } from '../components/common/Breadcrumbs'
 import { DiffViewer } from '../components/common/DiffViewer'
 import { StatusBanner } from '../components/common/StatusBanner'
@@ -154,6 +155,8 @@ export function PatchReviewPage() {
         {patch ? (
           <section className="patch-grid">
             <div className="patch-col">
+              <AnalysisTimeline title="分析タイムライン" items={patch.analysisTimeline} />
+
               {patch.failureSignals.map((signal) => (
                 <FailureSignalItem key={signal.id} signal={signal} />
               ))}

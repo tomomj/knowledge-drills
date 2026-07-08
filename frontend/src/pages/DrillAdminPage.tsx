@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, ApiClientError } from '../api/client'
 import type { DrillAdmin, DrillAnswer, DrillStatus } from '../api/types'
 import { AppShell } from '../components/common/AppShell'
+import { AnalysisTimeline } from '../components/common/AnalysisTimeline'
 import { Breadcrumbs } from '../components/common/Breadcrumbs'
 import { StatusBanner } from '../components/common/StatusBanner'
 
@@ -15,6 +16,10 @@ type PageState =
 type AnswersState =
   | { status: 'loading' }
   | { status: 'ready'; answers: DrillAnswer[] }
+  | { status: 'failed'; message: string }
+
+type AnalysisState =
+  | { status: 'loading' }
   | { status: 'failed'; message: string }
 
 const ANSWER_STATUS_CHIPS: Record<DrillAnswer['status'], { label: string; tone: string }> = {
@@ -35,7 +40,7 @@ export function DrillAdminPage() {
   const { courseId, drillRunId } = useParams()
   const navigate = useNavigate()
   const [state, setState] = useState<PageState>({ status: 'loading' })
-  const [analysisState, setAnalysisState] = useState<PageState | null>(null)
+  const [analysisState, setAnalysisState] = useState<AnalysisState | null>(null)
   const [answersState, setAnswersState] = useState<AnswersState>({ status: 'loading' })
   const [selectedAnswerId, setSelectedAnswerId] = useState<string | null>(null)
   const [answerQuery, setAnswerQuery] = useState('')
@@ -75,6 +80,31 @@ export function DrillAdminPage() {
       active = false
     }
   }, [courseId, drillRunId])
+
+  useEffect(() => {
+    if (analysisState?.status !== 'loading' || !courseId || !drillRunId) {
+      return
+    }
+
+    let active = true
+    const timer = window.setInterval(() => {
+      void api
+        .getDrill(courseId, drillRunId)
+        .then((drill) => {
+          if (active) {
+            setState({ status: 'ready', drill })
+          }
+        })
+        .catch(() => {
+          // polling 中の一時失敗では最後に成功した timeline 表示を維持する
+        })
+    }, 1000)
+
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [analysisState?.status, courseId, drillRunId])
 
   if (state.status === 'loading') {
     return (
@@ -196,6 +226,10 @@ export function DrillAdminPage() {
           </div>
         </section>
 
+        <ScoreSummaryPanel drill={drill} />
+
+        <AnalysisTimeline title="分析タイムライン" items={drill.analysisTimeline} />
+
         <div className="card">
           <div className="card__body share-row">
             <span className="share-row__label">共有 URL</span>
@@ -268,6 +302,81 @@ export function DrillAdminPage() {
         </section>
       </main>
     </AppShell>
+  )
+}
+
+type ScoreSummaryPanelProps = {
+  drill: DrillAdmin
+}
+
+function ScoreSummaryPanel({ drill }: ScoreSummaryPanelProps) {
+  const summary = drill.scoreSummary
+  const gradedAnswerCount = summary?.gradedAnswerCount ?? 0
+  const maxScore = summary?.maxScore ?? totalMaxScore(drill)
+
+  return (
+    <section className="card score-summary" aria-labelledby="score-summary-title">
+      <div className="card__head">
+        <h2 id="score-summary-title">分析前の採点状況</h2>
+      </div>
+      <div className="card__body score-summary__body">
+        <dl className="score-summary__stats">
+          <div>
+            <dt>出題観点</dt>
+            <dd>{drill.drillFocus ?? '未設定'}</dd>
+          </div>
+          <div>
+            <dt>採点済み回答</dt>
+            <dd>{gradedAnswerCount} 件</dd>
+          </div>
+          <div>
+            <dt>平均点</dt>
+            <dd>
+              {formatScore(summary?.averageScore ?? null)} / {maxScore} 点
+            </dd>
+          </div>
+        </dl>
+
+        {gradedAnswerCount === 0 ? (
+          <StatusBanner tone="info">採点済み回答がまだありません</StatusBanner>
+        ) : null}
+
+        {summary && summary.questions.length > 0 && gradedAnswerCount > 0 ? (
+          <ul className="score-summary__questions" aria-label="設問別の採点状況">
+            {summary.questions.map((question) => {
+              const tags = [
+                ...question.commonMissingPoints.map((point) => ({
+                  label: '欠落',
+                  value: point,
+                })),
+                ...question.failureTags.map((tag) => ({ label: 'タグ', value: tag })),
+              ]
+
+              return (
+                <li key={question.questionId}>
+                  <div className="score-summary__question-head">
+                    <span className="q-num">{question.questionId}</span>
+                    <span>
+                      {formatScore(question.averageScore)} / {question.maxScore} 点
+                    </span>
+                    <span>{question.gradedAnswerCount} 件</span>
+                  </div>
+                  {tags.length > 0 ? (
+                    <div className="score-summary__tags">
+                      {tags.map((tag) => (
+                        <span key={`${question.questionId}-${tag.label}-${tag.value}`}>
+                          {tag.label}: {tag.value}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        ) : null}
+      </div>
+    </section>
   )
 }
 
@@ -397,4 +506,12 @@ function analysisErrorMessage(error: unknown): string {
     return error.error.message
   }
   return '分析に失敗しました。再試行してください。'
+}
+
+function formatScore(value: number | null): string {
+  return value === null ? '未計測' : value.toFixed(1)
+}
+
+function totalMaxScore(drill: DrillAdmin): number {
+  return drill.questions.reduce((total, question) => total + question.maxScore, 0)
 }

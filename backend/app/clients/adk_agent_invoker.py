@@ -12,14 +12,14 @@ import os
 import uuid
 from collections.abc import Callable, Mapping
 
-from google.adk.agents import Agent
+from google.adk.agents import BaseAgent
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 from knowledge_drill_agent.agent import (
+    create_configured_failure_analysis_agent,
     create_document_patch_agent,
     create_drill_generator_agent,
-    create_failure_analysis_agent,
     create_grading_agent,
 )
 
@@ -35,10 +35,10 @@ logger = logging.getLogger("app.agent")
 _APP_NAME = "knowledge-drills"
 _USER_ID = "backend"
 
-_TASK_AGENT_FACTORIES: dict[str, Callable[[], Agent]] = {
+_TASK_AGENT_FACTORIES: dict[str, Callable[[], BaseAgent]] = {
     "generate_drill": create_drill_generator_agent,
     "grade_answer": create_grading_agent,
-    "analyze_failures": create_failure_analysis_agent,
+    "analyze_failures": create_configured_failure_analysis_agent,
     "propose_document_patch": create_document_patch_agent,
 }
 

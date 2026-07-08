@@ -115,6 +115,7 @@ class CourseRepository:
             version=course.version,
             title=course.title,
             markdown=course.markdown,
+            drill_focus=course.drill_focus,
             updated_at=course.updated_at,
         )
         self._client.set_document(

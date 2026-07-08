@@ -6,6 +6,7 @@ import {
 } from '../lib/authEvents'
 import { resetAuthTokenProvider, setAuthTokenProvider } from '../lib/authToken'
 import { api } from './client'
+import type { CourseMetricsResponse } from './types'
 
 function mockFetchJson(payload: unknown) {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -61,5 +62,25 @@ describe('api client auth token', () => {
     await expect(api.listCourses()).rejects.toMatchObject({ status: 401 })
 
     expect(listener).toHaveBeenCalledOnce()
+  })
+
+  it('requests course metrics for a course', async () => {
+    const metrics: CourseMetricsResponse = {
+      courseId: 'course-1',
+      runs: [
+        {
+          drillRunId: 'drill-1',
+          courseVersion: 1,
+          answerCount: 2,
+          averageScore: 3.5,
+          maxScore: 4,
+        },
+      ],
+    }
+    const fetchMock = mockFetchJson(metrics)
+
+    await expect(api.getCourseMetrics('course-1')).resolves.toEqual(metrics)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/courses/course-1/metrics', expect.any(Object))
   })
 })

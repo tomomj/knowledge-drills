@@ -9,6 +9,7 @@ export type CourseDetail = {
   id: string
   title: string
   markdown: string
+  drillFocus: string | null
   version: number
   latestDrillRunId: string | null
   latestPatchId: string | null
@@ -49,6 +50,7 @@ export type CourseRevisionDiff = {
 export type CoursePayload = {
   title: string
   markdown: string
+  drillFocus?: string | null
 }
 
 export type CourseCreateResponse = {
@@ -75,6 +77,17 @@ export type SourceEvidence = {
   excerpt: string
 }
 
+export type AnalysisStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
+
+export type AnalysisTimelineItem = {
+  id: string
+  title: string
+  status: AnalysisStepStatus
+  summary: string | null
+  evidence: string[]
+  completedAt: string | null
+}
+
 export type AdminQuestion = {
   id: string
   question: string
@@ -93,15 +106,34 @@ export type LearnerQuestion = {
 
 export type DrillStatus = 'generating' | 'ready' | 'failed' | 'analyzing' | 'analyzed'
 
+export type QuestionScoreSummary = {
+  questionId: string
+  averageScore: number | null
+  maxScore: number
+  gradedAnswerCount: number
+  commonMissingPoints: string[]
+  failureTags: string[]
+}
+
+export type DrillScoreSummary = {
+  gradedAnswerCount: number
+  averageScore: number | null
+  maxScore: number
+  questions: QuestionScoreSummary[]
+}
+
 export type DrillAdmin = {
   id: string
   courseId: string
   courseVersion: number
+  drillFocus: string | null
   status: DrillStatus
   questions: AdminQuestion[]
   rubricSummary: string[]
   shareUrl: string | null
   answerCount: number
+  scoreSummary: DrillScoreSummary | null
+  analysisTimeline: AnalysisTimelineItem[]
   canAnalyze: boolean
   errorMessage: string | null
 }
@@ -140,6 +172,19 @@ export type DrillAnswer = {
 export type DrillAnswersResponse = {
   courseVersion: number
   answers: DrillAnswer[]
+}
+
+export type CourseMetricsRun = {
+  drillRunId: string
+  courseVersion: number
+  answerCount: number
+  averageScore: number | null
+  maxScore: number | null
+}
+
+export type CourseMetricsResponse = {
+  courseId: string
+  runs: CourseMetricsRun[]
 }
 
 export type AnswerPayload = {
@@ -182,6 +227,7 @@ export type DocumentPatch = {
   riskNotes: string[]
   diffText: string
   failureSignals: FailureSignal[]
+  analysisTimeline: AnalysisTimelineItem[]
   ownerFeedback: string | null
 }
 

@@ -22,6 +22,16 @@ def _question(question_id: str) -> dict[str, object]:
     }
 
 
+def _assert_forbidden_keys_absent(payload: object, forbidden_keys: set[str]) -> None:
+    if isinstance(payload, dict):
+        assert forbidden_keys.isdisjoint(payload)
+        for value in payload.values():
+            _assert_forbidden_keys_absent(value, forbidden_keys)
+    elif isinstance(payload, list):
+        for item in payload:
+            _assert_forbidden_keys_absent(item, forbidden_keys)
+
+
 class MvpAgentDouble:
     def __init__(self) -> None:
         self.payloads: list[tuple[str, dict[str, object]]] = []
@@ -108,9 +118,15 @@ def test_full_mvp_flow_from_course_to_patch_apply(client: TestClient) -> None:
 
     course_response = client.post(
         "/api/courses",
-        json={"title": "講座", "markdown": "# 判断基準\n根拠を確認する。"},
+        json={
+            "title": "講座",
+            "markdown": "## 判断基準\n根拠を確認する。",
+            "drillFocus": "例外条件を重点的に出す",
+        },
     )
     course_id = course_response.json()["courseId"]
+    saved_course = client.get(f"/api/courses/{course_id}").json()
+    assert saved_course["drillFocus"] == "例外条件を重点的に出す"
 
     drill_response = client.post(f"/api/courses/{course_id}/drill-runs")
     assert drill_response.status_code == 201
@@ -120,14 +136,23 @@ def test_full_mvp_flow_from_course_to_patch_apply(client: TestClient) -> None:
 
     admin_response = client.get(f"/api/courses/{course_id}/drill-runs/{drill_run_id}")
     assert admin_response.status_code == 200
-    assert admin_response.json()["answerCount"] == 0
+    admin_payload = admin_response.json()
+    assert admin_payload["answerCount"] == 0
+    assert admin_payload["drillFocus"] == "例外条件を重点的に出す"
+    assert admin_payload["scoreSummary"]["gradedAnswerCount"] == 0
+    assert admin_payload["analysisTimeline"] == []
+
+    generate_payload = next(payload for task, payload in agent.payloads if task == "generate_drill")
+    assert generate_payload["drillFocus"] == "例外条件を重点的に出す"
 
     learner_response = client.get("/api/drills/share-token")
     assert learner_response.status_code == 200
     learner_payload = learner_response.json()
     assert len(learner_payload["questions"]) == 3
-    assert "rubric" not in str(learner_payload)
-    assert "idealAnswer" not in str(learner_payload)
+    _assert_forbidden_keys_absent(
+        learner_payload,
+        {"drillFocus", "scoreSummary", "analysisTimeline", "metrics", "rubric", "idealAnswer"},
+    )
 
     answer_response = client.post(
         "/api/drills/share-token/answers",
@@ -146,15 +171,49 @@ def test_full_mvp_flow_from_course_to_patch_apply(client: TestClient) -> None:
     analyzed_admin_response = client.get(f"/api/courses/{course_id}/drill-runs/{drill_run_id}")
     assert analyzed_admin_response.json()["answerCount"] == 1
     assert analyzed_admin_response.json()["canAnalyze"] is True
+    assert analyzed_admin_response.json()["scoreSummary"]["averageScore"] == 9.0
 
     analysis_response = client.post(f"/api/courses/{course_id}/drill-runs/{drill_run_id}/analyze")
     assert analysis_response.status_code == 200
     patch_id = analysis_response.json()["patchId"]
 
+    analyzed_drill_response = client.get(f"/api/courses/{course_id}/drill-runs/{drill_run_id}")
+    analyzed_drill = analyzed_drill_response.json()
+    assert analyzed_drill["status"] == "analyzed"
+    assert [step["status"] for step in analyzed_drill["analysisTimeline"]] == [
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+        "completed",
+    ]
+
+    learner_after_analysis_response = client.get("/api/drills/share-token")
+    assert learner_after_analysis_response.status_code == 200
+    _assert_forbidden_keys_absent(
+        learner_after_analysis_response.json(),
+        {"drillFocus", "scoreSummary", "analysisTimeline", "metrics", "rubric", "idealAnswer"},
+    )
+    post_analysis_answer_response = client.post(
+        "/api/drills/share-token/answers",
+        json={
+            "learnerName": "受講者2",
+            "answers": [
+                {"questionId": "q1", "answerText": "根拠を確認します。"},
+                {"questionId": "q2", "answerText": "例外時は確認します。"},
+                {"questionId": "q3", "answerText": "次に共有します。"},
+            ],
+        },
+    )
+    assert post_analysis_answer_response.status_code == 201
+    assert post_analysis_answer_response.json()["status"] == "graded"
+
     patch_response = client.get(f"/api/patches/{patch_id}")
     assert patch_response.status_code == 200
-    assert patch_response.json()["status"] == "proposed"
-    assert patch_response.json()["failureSignals"][0]["confidenceNote"] == "少数回答の傾向です。"
+    patch_payload = patch_response.json()
+    assert patch_payload["status"] == "proposed"
+    assert patch_payload["failureSignals"][0]["confidenceNote"] == "少数回答の傾向です。"
+    assert patch_payload["analysisTimeline"] == analyzed_drill["analysisTimeline"]
 
     apply_response = client.post(
         f"/api/patches/{patch_id}/apply",
@@ -168,6 +227,20 @@ def test_full_mvp_flow_from_course_to_patch_apply(client: TestClient) -> None:
     assert updated_course["version"] == 2
     assert "### 例外条件" in updated_course["markdown"]
 
+    metrics_response = client.get(f"/api/courses/{course_id}/metrics")
+    assert metrics_response.status_code == 200
+    metrics_payload = metrics_response.json()
+    assert metrics_payload["courseId"] == course_id
+    assert metrics_payload["runs"] == [
+        {
+            "drillRunId": drill_run_id,
+            "courseVersion": 1,
+            "answerCount": 2,
+            "averageScore": 9.0,
+            "maxScore": 12,
+        }
+    ]
+
     serialized_payloads = str(agent.payloads)
     assert "share-token" not in serialized_payloads
     assert "admin token" not in serialized_payloads
@@ -179,7 +252,7 @@ def test_stale_patch_and_non_proposed_conflict_return_current_state(client: Test
     _configure_agent_backed_services(client, agent)
     course_id = client.post(
         "/api/courses",
-        json={"title": "講座", "markdown": "# 判断基準\n根拠を確認する。"},
+        json={"title": "講座", "markdown": "## 判断基準\n根拠を確認する。"},
     ).json()["courseId"]
     drill_run_id = client.post(f"/api/courses/{course_id}/drill-runs").json()["drillRunId"]
     client.post(
@@ -198,7 +271,7 @@ def test_stale_patch_and_non_proposed_conflict_return_current_state(client: Test
     ]
     client.put(
         f"/api/courses/{course_id}",
-        json={"title": "講座", "markdown": "# 判断基準\n別更新。"},
+        json={"title": "講座", "markdown": "## 判断基準\n別更新。"},
     )
 
     stale_response = client.get(f"/api/patches/{patch_id}")
@@ -219,7 +292,8 @@ def test_max_length_course_markdown_save_generate_and_analysis_smoke(
 ) -> None:
     agent = MvpAgentDouble()
     _configure_agent_backed_services(client, agent)
-    course_markdown = "x" * 20_000
+    evidence_heading = "## 判断基準\n"
+    course_markdown = evidence_heading + ("x" * (20_000 - len(evidence_heading)))
 
     course_response = client.post(
         "/api/courses",

@@ -9,6 +9,7 @@ from app.schemas import (
     CourseCreateResponse,
     CourseDetailResponse,
     CourseListResponse,
+    CourseMetricsResponse,
     CourseRevisionDiffResponse,
     CourseRevisionListResponse,
     CourseUpdateRequest,
@@ -74,6 +75,15 @@ def update_course(
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
 ) -> CourseDetailResponse:
     return get_course_service(request).update_course(course_id, payload, current_user.uid)
+
+
+@router.get("/{course_id}/metrics", response_model=CourseMetricsResponse)
+def get_course_metrics(
+    request: Request,
+    course_id: str,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
+) -> CourseMetricsResponse:
+    return get_course_service(request).get_course_metrics(course_id, current_user.uid)
 
 
 @router.get("/{course_id}/revisions", response_model=CourseRevisionListResponse)
