@@ -69,7 +69,7 @@ export function CourseEditorPage() {
   }, [courseId, location.state])
 
   const validationError = validateCourse(title, markdown, drillFocus)
-  const metricsComparison = buildMetricsComparison(metrics)
+  const scoreProgression = buildScoreProgression(metrics)
 
   async function saveCourse() {
     if (validationError) {
@@ -260,7 +260,7 @@ export function CourseEditorPage() {
                 </dl>
               </div>
             </div>
-            {metricsComparison ? <MetricsComparisonCard comparison={metricsComparison} /> : null}
+            {scoreProgression ? <ScoreProgressionCard progression={scoreProgression} /> : null}
             <div className="next-step">
               <b>次のステップ</b>
               資料を保存したら「ドリルを生成」で確認テストを作成し、共有 URL を受講者に配布します。
@@ -277,36 +277,104 @@ type ScoredMetricsRun = CourseMetricsRun & {
   maxScore: number
 }
 
-type MetricsComparison = {
-  before: ScoredMetricsRun
-  after: ScoredMetricsRun
-  delta: number
+type ScoreProgression = {
+  runs: ScoredMetricsRun[]
+  totalRateDelta: number
 }
 
-function MetricsComparisonCard({ comparison }: { comparison: MetricsComparison }) {
+const SPARKLINE_WIDTH = 180
+const SPARKLINE_HEIGHT = 64
+const SPARKLINE_PADDING = 8
+
+function ScoreProgressionCard({ progression }: { progression: ScoreProgression }) {
   return (
     <article className="card metrics-card" aria-label="改善メトリクス">
       <div className="card__head">
-        <h2>Before / After</h2>
-        <span className={`chip chip--${comparison.delta >= 0 ? 'success' : 'warning'}`}>
-          {formatScoreDelta(comparison.delta)}
+        <h2>スコアの推移</h2>
+        <span
+          className={`chip chip--${progression.totalRateDelta >= 0 ? 'success' : 'warning'}`}
+        >
+          {formatScoreRateDelta(progression.totalRateDelta)}
         </span>
       </div>
       <div className="card__body metrics-card__body">
-        <MetricRunColumn label="Before" run={comparison.before} />
-        <MetricRunColumn label="After" run={comparison.after} />
+        <ScoreSparkline runs={progression.runs} />
+        <div className="metrics-flow">
+          {progression.runs.map((run, index) => {
+            const nextRun = progression.runs[index + 1]
+            const intervalDelta = nextRun ? scoreRateDelta(run, nextRun) : null
+            return (
+              <div className="metrics-flow__segment" key={`${run.drillRunId}-${index}`}>
+                <MetricRunStep run={run} />
+                {intervalDelta !== null ? (
+                  <span
+                    className={`metrics-flow__delta metrics-flow__delta--${
+                      intervalDelta >= 0 ? 'up' : 'down'
+                    }`}
+                  >
+                    {formatScoreRateDelta(intervalDelta)}
+                  </span>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </article>
   )
 }
 
-function MetricRunColumn({ label, run }: { label: string; run: ScoredMetricsRun }) {
+function ScoreSparkline({ runs }: { runs: ScoredMetricsRun[] }) {
+  const points = runs.map((run, index) => {
+    const x =
+      runs.length === 1
+        ? SPARKLINE_WIDTH / 2
+        : SPARKLINE_PADDING +
+          (index * (SPARKLINE_WIDTH - SPARKLINE_PADDING * 2)) / (runs.length - 1)
+    const clampedRate = Math.max(0, Math.min(1, scoreRate(run)))
+    const y =
+      SPARKLINE_PADDING + (1 - clampedRate) * (SPARKLINE_HEIGHT - SPARKLINE_PADDING * 2)
+    return { x, y }
+  })
+  const path = points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(' ')
+  const firstPoint = points[0]
+  const lastPoint = points[points.length - 1]
+  const areaPath =
+    firstPoint && lastPoint
+      ? `${path} L ${lastPoint.x.toFixed(1)} ${SPARKLINE_HEIGHT - SPARKLINE_PADDING} L ${firstPoint.x.toFixed(1)} ${SPARKLINE_HEIGHT - SPARKLINE_PADDING} Z`
+      : ''
+
+  return (
+    <svg
+      className="metrics-sparkline"
+      role="img"
+      aria-label="バージョンごとのスコア率の推移"
+      viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
+      preserveAspectRatio="none"
+    >
+      {areaPath ? <path className="metrics-sparkline__area" d={areaPath} /> : null}
+      <path className="metrics-sparkline__line" d={path} />
+      {points.map((point, index) => (
+        <circle
+          key={`${runs[index].drillRunId}-${index}`}
+          className="metrics-sparkline__point"
+          cx={point.x}
+          cy={point.y}
+          r="3"
+        />
+      ))}
+    </svg>
+  )
+}
+
+function MetricRunStep({ run }: { run: ScoredMetricsRun }) {
   return (
     <div className="metrics-card__run">
-      <span className="metrics-card__label">{label}</span>
       <strong>v{run.courseVersion}</strong>
       <span>
-        {formatMetricScore(run.averageScore)} / {run.maxScore} 点
+        {formatMetricScore(run.averageScore)} / {formatMetricMaxScore(run.maxScore)} 点
       </span>
       <small>回答 {run.answerCount} 件</small>
     </div>
@@ -333,7 +401,7 @@ async function loadCourseMetrics(courseId: string): Promise<CourseMetricsRespons
   }
 }
 
-function buildMetricsComparison(metrics: CourseMetricsResponse | null): MetricsComparison | null {
+function buildScoreProgression(metrics: CourseMetricsResponse | null): ScoreProgression | null {
   const scoredRuns = (metrics?.runs ?? [])
     .map((run, index) => ({ run, index }))
     .filter((entry): entry is { run: ScoredMetricsRun; index: number } =>
@@ -344,25 +412,44 @@ function buildMetricsComparison(metrics: CourseMetricsResponse | null): MetricsC
       return versionDiff !== 0 ? versionDiff : left.index - right.index
     })
 
-  if (scoredRuns.length < 2) {
+  const runs = scoredRuns.map((entry) => entry.run)
+  if (runs.length < 2) {
     return null
   }
 
-  const before = scoredRuns[0].run
-  const after = scoredRuns[scoredRuns.length - 1].run
-  return { before, after, delta: after.averageScore - before.averageScore }
+  return {
+    runs,
+    totalRateDelta: scoreRateDelta(runs[0], runs[runs.length - 1]),
+  }
 }
 
 function isScoredMetricsRun(run: CourseMetricsRun): run is ScoredMetricsRun {
-  return run.answerCount > 0 && run.averageScore !== null && run.maxScore !== null
+  return (
+    run.answerCount > 0 &&
+    run.averageScore !== null &&
+    run.maxScore !== null &&
+    run.maxScore > 0
+  )
 }
 
 function formatMetricScore(score: number): string {
   return score.toFixed(1)
 }
 
-function formatScoreDelta(delta: number): string {
-  return `${delta > 0 ? '+' : ''}${delta.toFixed(1)} 点`
+function formatMetricMaxScore(score: number): string {
+  return Number.isInteger(score) ? String(score) : score.toFixed(1)
+}
+
+function scoreRate(run: ScoredMetricsRun): number {
+  return run.averageScore / run.maxScore
+}
+
+function scoreRateDelta(before: ScoredMetricsRun, after: ScoredMetricsRun): number {
+  return (scoreRate(after) - scoreRate(before)) * 100
+}
+
+function formatScoreRateDelta(delta: number): string {
+  return `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} pp`
 }
 
 function validateCourse(title: string, markdown: string, drillFocus: string): string | null {
