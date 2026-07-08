@@ -27,7 +27,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: `uv run --frozen uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}`,
+      command: `uv run --native-tls --frozen uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}`,
       cwd: backendDir,
       url: `${apiBaseUrl}/health`,
       reuseExistingServer: !process.env.CI,

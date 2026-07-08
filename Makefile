@@ -6,8 +6,6 @@ FRONTEND_HOST ?= 127.0.0.1
 FRONTEND_PORT ?= 5173
 PORT ?= 8080
 
-export UV_NATIVE_TLS ?= true
-
 .PHONY: help
 help:
 	@echo "Targets:"
@@ -28,7 +26,7 @@ dev:
 
 .PHONY: dev-backend
 dev-backend:
-	cd backend && uv run --frozen uvicorn app.main:app --host $(BACKEND_HOST) --port $(BACKEND_PORT)
+	cd backend && uv run --native-tls --frozen uvicorn app.main:app --host $(BACKEND_HOST) --port $(BACKEND_PORT)
 
 .PHONY: dev-frontend
 dev-frontend:
@@ -36,7 +34,7 @@ dev-frontend:
 
 .PHONY: serve-backend
 serve-backend:
-	cd backend && uv run --frozen uvicorn app.main:app --host 0.0.0.0 --port $(PORT)
+	cd backend && uv run --native-tls --frozen uvicorn app.main:app --host 0.0.0.0 --port $(PORT)
 
 .PHONY: install
 install: install-backend install-agent install-frontend
@@ -61,11 +59,11 @@ test: test-backend test-agent test-frontend
 
 .PHONY: test-backend
 test-backend:
-	cd backend && uv run --frozen pytest
+	cd backend && uv run --native-tls --frozen pytest
 
 .PHONY: test-agent
 test-agent:
-	cd agent && uv run --frozen pytest
+	cd agent && uv run --native-tls --frozen pytest
 
 .PHONY: test-frontend
 test-frontend:
@@ -76,11 +74,11 @@ lint: lint-backend lint-agent lint-frontend
 
 .PHONY: lint-backend
 lint-backend:
-	cd backend && uv run --frozen ruff check .
+	cd backend && uv run --native-tls --frozen ruff check .
 
 .PHONY: lint-agent
 lint-agent:
-	cd agent && uv run --frozen ruff check .
+	cd agent && uv run --native-tls --frozen ruff check .
 
 .PHONY: lint-frontend
 lint-frontend:
@@ -91,11 +89,11 @@ typecheck: typecheck-backend typecheck-agent typecheck-frontend
 
 .PHONY: typecheck-backend
 typecheck-backend:
-	cd backend && uv run --frozen mypy .
+	cd backend && uv run --native-tls --frozen mypy .
 
 .PHONY: typecheck-agent
 typecheck-agent:
-	cd agent && uv run --frozen mypy .
+	cd agent && uv run --native-tls --frozen mypy .
 
 .PHONY: typecheck-frontend
 typecheck-frontend:
@@ -106,11 +104,11 @@ format: format-backend format-agent
 
 .PHONY: format-backend
 format-backend:
-	cd backend && uv run --frozen ruff format .
+	cd backend && uv run --native-tls --frozen ruff format .
 
 .PHONY: format-agent
 format-agent:
-	cd agent && uv run --frozen ruff format .
+	cd agent && uv run --native-tls --frozen ruff format .
 
 .PHONY: build-frontend
 build-frontend:
