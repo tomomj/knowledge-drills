@@ -21,7 +21,15 @@ const items: AnalysisTimelineItemView[] = [
     completedAt: null,
   },
   {
-    id: 'propose_document_patch',
+    id: 'match_course_evidence',
+    title: '教材根拠を照合',
+    status: 'completed',
+    summary: '教材本文にある根拠を確認しました。',
+    evidence: ['## 判断基準'],
+    completedAt: '2026-07-08T09:58:00Z',
+  },
+  {
+    id: 'create_patch',
     title: '改善案を作成',
     status: 'completed',
     summary: '判断基準の追記候補を作成しました。',
@@ -47,13 +55,24 @@ const items: AnalysisTimelineItemView[] = [
 ]
 
 describe('AnalysisTimeline', () => {
-  it('renders status chips, titles, summaries, and the evidence entries it receives', () => {
+  it('renders grouped categories, status chips, titles, summaries, and evidence entries', () => {
     render(<AnalysisTimeline title="分析タイムライン" items={items} />)
 
     expect(screen.getByRole('heading', { name: '分析タイムライン' })).toBeTruthy()
+    expect(screen.getByText('入力確認')).toBeTruthy()
+    expect(screen.getByText('採点済み回答を集め、分析に使う材料を確認します。')).toBeTruthy()
+    expect(screen.getByText('つまずき分析')).toBeTruthy()
+    expect(
+      screen.getByText('回答と採点結果から、繰り返し出ている理解不足を抽出します。'),
+    ).toBeTruthy()
+    expect(screen.getByText('根拠レビュー')).toBeTruthy()
+    expect(screen.getByText('教材本文と照合し、根拠の弱い所見を修正案から外します。')).toBeTruthy()
+    expect(screen.getByText('修正判断')).toBeTruthy()
+    expect(screen.getByText('採用する所見を選び、資料への変更案と注意点をまとめます。')).toBeTruthy()
+    expect(screen.getByText('その他')).toBeTruthy()
     expect(screen.getByText('未開始')).toBeTruthy()
     expect(screen.getByText('実行中')).toBeTruthy()
-    expect(screen.getByText('完了')).toBeTruthy()
+    expect(screen.getAllByText('完了').length).toBeGreaterThan(0)
     expect(screen.getByText('失敗')).toBeTruthy()
     expect(screen.getByText('スキップ')).toBeTruthy()
     expect(screen.getByText('判断基準の追記候補を作成しました。')).toBeTruthy()

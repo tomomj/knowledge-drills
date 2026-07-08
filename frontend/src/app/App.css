@@ -958,9 +958,40 @@ a.tag-btn {
   font-weight: 800;
 }
 
+.analysis-timeline__groups {
+  display: grid;
+  gap: 16px;
+}
+
+.analysis-timeline__group {
+  display: grid;
+  gap: 8px;
+}
+
+.analysis-timeline__group-head {
+  display: grid;
+  gap: 3px;
+  padding: 0 2px;
+}
+
+.analysis-timeline__group-head h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.analysis-timeline__group-head p {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
 .analysis-timeline__list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -983,7 +1014,7 @@ a.tag-btn {
   min-width: 0;
 }
 
-.analysis-timeline__head h3 {
+.analysis-timeline__head h4 {
   margin: 0;
   min-width: 0;
   font-size: 14px;
