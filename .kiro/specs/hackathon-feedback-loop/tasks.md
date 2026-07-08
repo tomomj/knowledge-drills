@@ -1,0 +1,156 @@
+# Implementation Plan
+
+- [ ] 1. Foundation: データ契約の拡張
+- [ ] 1.1 backend の API schema に改善ループ用の field と型を追加する
+  - 講座系 schema に出題観点を追加し、drill run・patch に分析タイムライン、drill run に出題観点 snapshot を持たせる
+  - 分析 step の状態型・タイムライン項目・設問別/全体の採点集計型・講座メトリクス応答型を新設する
+  - ドリル生成要求に出題観点を、失敗分析応答に optional な観点別所見（perspectives）を追加する
+  - 既存 document に新 field が無くても default（None / 空 list）で読めることをテストで確認する
+  - schema テストが camelCase alias・500 文字制約・既定値を検証して green になる
+  - _Requirements: 1.1, 1.5, 3.4, 4.1, 4.3, 5.2, 6.1_
+- [ ] 1.2 (P) agent パッケージの契約と設定を拡張する
+  - ドリル生成入力に出題観点（複数 alias 受理）を追加する
+  - 失敗分析出力に optional な観点別所見（perspectives）の型を追加する。optional のため既存 sample output は無変更のまま schema-valid（sample の perspectives 対応更新は 6.1 が所有する）
+  - 分析方式の設定（single | composed、env で切り替え、default composed。single は撤退用の明示指定）を agent 設定に追加する
+  - agent の契約テストと import テストが green になる
+  - _Requirements: 1.5, 2.3, 5.2, 5.4_
+  - _Boundary: agent package_
+
+- [ ] 2. 出題観点（drillFocus）の backend 管理
+- [ ] 2.1 講座の作成・更新で出題観点を保存し version 管理する
+  - trim 後空文字の None 正規化、500 文字超の validation error
+  - title・markdown・出題観点いずれかの変更で version が 1 増え、revision に出題観点が記録される
+  - 講座詳細応答に出題観点が含まれ、講座一覧（summary）には含まれないことをテストで確認する
+  - _Requirements: 1.1, 1.2, 1.3, 1.4_
+- [ ] 2.2 ドリル生成時に出題観点を snapshot して agent へ渡す
+  - drill run 作成時に講座の出題観点を snapshot 保存し、生成要求 payload に含める
+  - 講座の観点を後から変更しても既存 drill run の snapshot が変わらないことをテストで確認する
+  - 観点未設定でも従来どおり生成が成功する
+  - _Requirements: 1.5, 1.7_
+
+- [ ] 3. 根拠付きドリル生成の保証
+- [ ] 3.1 生成結果の根拠検証を backend 境界に追加する
+  - 各設問の sourceEvidence が空でなく、excerpt が trim 後非空かつ教材 Markdown に完全一致で含まれることを検証する
+  - 検証失敗時は drill run が failed になり、無根拠設問が保存・配布されないことをテストで確認する
+  - _Requirements: 2.1, 2.2_
+- [ ] 3.2 (P) ドリル生成プロンプトを観点優先・原文引用に更新する
+  - 出題観点を設問の観点として優先しつつ、根拠は教材 Markdown に限定するルールを追記する
+  - excerpt は教材原文をそのまま引用する（完全一致）制約を明記する
+  - 観点が教材に無い場合は教材に実在する内容のみで出題する挙動をプロンプトで規定する
+  - プロンプト内容を検証する agent テストが green になる
+  - _Requirements: 2.3, 2.4_
+  - _Boundary: agent prompts_
+- [ ] 3.3 (P) local 実行モードの生成 fallback を教材準拠にする
+  - 教材 Markdown の見出しまたは先頭本文から sourceEvidence を作り、固定 excerpt を返さない
+  - 出題観点があれば設問・intent に反映する
+  - local mode で生成→根拠検証が通ることをテストで確認する
+  - _Requirements: 2.5_
+  - _Boundary: LocalAgentInvoker_
+  - _Depends: 3.1_
+
+- [ ] 4. 分析前の採点集計（scoreSummary）を管理応答に追加する
+  - 採点完了（graded）の回答のみを対象に、全体・設問別の平均点、採点済み回答数、よく欠落する観点を読み取り時集計する（採点中・採点失敗は除外）
+  - 集計規則: 平均点は丸めなし float（表示丸めは frontend）、欠落観点は文字列完全一致で頻度集計し出現 2 回以上を頻度降順（同数は初出順）で最大 3 件、failure tags は重複排除のうえ頻度降順で最大 3 件
+  - 分析開始可否（canAnalyze）を回答総数基準から採点済み回答数基準に変更する
+  - 採点済み 0 件時は平均点を null で返す
+  - Drill Admin 応答に採点集計・出題観点・分析タイムラインが含まれ、テストで形状と集計規則を確認する
+  - _Requirements: 3.1, 3.2, 3.4, 3.6, 3.7_
+
+- [ ] 5. 分析タイムラインの backend 段階保存
+- [ ] 5.1 分析実行を固定 5 step で段階記録する
+  - 分析開始で status を analyzing にし、回答収集 step を running で保存する
+  - 集計完了・失敗分析前後・根拠照合・方針判断・修正案作成の各境界で step 状態と 1 行要約・根拠を保存する
+  - 分析途中の取得で中間状態のタイムラインが観測できることをテストで確認する
+  - 失敗時は実行中 step を failed にし、error message を記録したうえで drill run を配布可能（ready）に戻す（既存の「失敗時 failed」挙動からの変更。既存テストも更新する）
+  - タイムラインには観測値・根拠・判断結果のみを保存し、推論文・プロンプト本文を保存しない
+  - _Requirements: 4.1, 4.5, 4.6_
+- [ ] 5.2 完了時タイムラインを patch に保存して返却する
+  - patch 作成時に完了時点のタイムラインを patch にコピーする
+  - patch 取得 API の応答にタイムラインが含まれることをテストで確認する
+  - _Requirements: 4.3_
+- [ ] 5.3 分析ライフサイクル中も share URL を配布可能に保つ
+  - 受講者向けドリル取得の配布可能 status を ready に加えて analyzing・analyzed にも拡張する（generating・生成失敗の failed は従来どおり 404）
+  - 回答提出（submit）側の受付可能 status も同じ allowlist（ready・analyzing・analyzed）に変更し、取得と提出で判定が食い違わないようにする
+  - 分析開始・分析完了・分析失敗のいずれの後でも share URL でドリル取得・回答提出の両方が成功することをテストで確認する
+  - _Requirements: 4.8_
+  - _Depends: 5.1_
+
+- [ ] 6. 誤答分析の多視点化（composed agent）
+- [ ] 6.1 3 レンズ並列 + 統合の composite agent を作る
+  - 教材ギャップ・設問品質・つまずきパターンの各レンズ用プロンプトと統合プロンプトを作成する
+  - 従来の単一分析プロンプトにも観点別所見（perspectives）の出力を追記する（single mode 用）
+  - 分析方式設定に応じて従来の単一 agent または composite（並列 3 レンズ→統合）を返す factory にする
+  - 失敗分析の sample output を perspectives 含みに更新し schema-valid を維持する
+  - 統合 agent のみが最終出力 schema を持ち、最終応答の契約が従来と同一であることを新規 composite テストで確認する（既存テストの更新は 6.2 が所有する）
+  - _Requirements: 5.1, 5.2, 5.4_
+  - _Depends: 1.2_
+- [ ] 6.2 composite 対応で既存テストと eval を更新する
+  - agent 側・backend 側の leaf 前提テスト（契約テスト・invoker テスト）を composite 許容に更新する（新規 composite テストは 6.1 が所有する）
+  - 失敗分析 evalset の root_agent discovery が composite でも機能することを確認する
+  - composed mode で agent テストスイートが green になる
+  - _Requirements: 5.1, 5.4_
+  - _Boundary: agent tests, backend agent-invoker tests_
+- [ ] 6.3 観点別所見を分析タイムラインに統合する
+  - 失敗分析応答の perspectives を、つまずき特定 step の根拠として「観点名: 1 行要約」で反映する
+  - perspectives が空（single mode・旧応答）でもタイムラインが従来どおり成立する
+  - 多視点分析の失敗が既存の分析失敗と同様に扱われることをテストで確認する
+  - _Requirements: 5.3, 5.5_
+  - _Depends: 5.1_
+
+- [ ] 7. (P) 改善メトリクス API を追加する
+  - 講座の drill run ごとに講座 version・回答数・平均点・満点を読み取り時集計して返す endpoint を追加する
+  - 採点済み回答が無い drill run の平均点は null になる
+  - 他ユーザーの講座への要求は既存 owner check と同じ not found 扱いになることをテストで確認する
+  - _Requirements: 6.1, 6.3, 6.4_
+  - _Boundary: CourseService, courses route_
+  - _Depends: 1.1_
+
+- [ ] 8. Frontend 実装
+- [ ] 8.1 API 型と client を拡張する
+  - タイムライン・採点集計・メトリクス・出題観点の型を追加し、講座 payload / 講座詳細 / Drill Admin / patch の型を更新する
+  - 講座メトリクス取得の client メソッドを追加する
+  - 型チェックと client テストが green になる
+  - _Requirements: 1.6, 3.1, 4.2, 6.2_
+- [ ] 8.2 (P) Course Editor に出題観点入力を追加する
+  - 教材 Markdown 下に任意入力欄（placeholder・hint 付き）を追加し、保存 payload に含める
+  - 500 文字超でエラーメッセージを表示し保存をブロックする
+  - 講座読込時に既存の出題観点がフォームへ反映される
+  - _Requirements: 1.1, 1.3_
+  - _Boundary: CourseEditorPage_
+  - _Depends: 8.1_
+- [ ] 8.3 (P) 分析タイムライン表示 component を作る
+  - status chip・タイトル・1 行要約・根拠リスト（最大 3 件）を表示する表示専用 component
+  - api を import せず、型は type-only import とする
+  - 全 status（pending/running/completed/failed/skipped）の表示をテストで確認する
+  - _Requirements: 4.2, 4.4, 5.3_
+  - _Boundary: AnalysisTimeline component_
+  - _Depends: 8.1_
+- [ ] 8.4 Drill Admin に採点集計と分析 polling を追加する
+  - 出題観点 meta と採点集計（全体・設問別平均、欠落観点）を分析前から表示する
+  - 採点済み 0 件時は案内文を表示し分析ボタンを無効化する
+  - 分析実行中は一定間隔で管理ドリルを再取得してタイムラインを更新表示し、完了で Patch Review へ遷移、失敗で error banner を表示する
+  - unmount・完了・失敗のいずれでも polling が停止することをテストで確認する
+  - _Requirements: 1.6, 3.1, 3.2, 3.3, 4.2_
+  - _Depends: 8.3_
+- [ ] 8.5 (P) Patch Review に判断ログを表示する
+  - patch summary と failure signals の間に分析タイムラインを表示し、空なら非表示にする
+  - 判断ログの各 step に要約と根拠が表示されることをテストで確認する
+  - _Requirements: 4.4_
+  - _Boundary: PatchReviewPage_
+  - _Depends: 8.1, 8.3_
+- [ ] 8.6 Course Editor に Before / After 比較カードを追加する
+  - 採点済み回答を持つ drill run が 2 つ以上あるとき、講座の状態エリアに version 間の平均点比較を表示する
+  - 対象 run が 1 つ以下なら比較カードを表示しない
+  - _Requirements: 6.2_
+  - _Depends: 7, 8.2_
+
+- [ ] 9. 統合検証
+- [ ] 9.1 受講者秘匿と改善ループの integration テストを追加する
+  - 受講者向けドリル応答に出題観点・採点集計・タイムライン・メトリクスが含まれないことを確認する
+  - 講座作成→観点保存→生成→snapshot→分析→patch→metrics の一連の API 形状を integration テストで確認する
+  - 分析完了後の drill run に対して share URL の取得・回答が引き続き成功することを一連フローの中で確認する
+  - _Requirements: 1.7, 1.8, 3.5, 4.7, 4.8, 6.5_
+- [ ] 9.2 全テストスイートと agent eval で回帰確認する
+  - backend・frontend・agent の全テストスイートが green になる
+  - 認証情報がある環境で composed mode の失敗分析 eval（quick profile）が threshold を満たす
+  - _Requirements: 5.1, 5.2_
