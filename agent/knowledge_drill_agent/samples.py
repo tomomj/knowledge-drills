@@ -1,5 +1,6 @@
 from knowledge_drill_agent.schemas import (
     AnalysisPerspective,
+    AnalysisReviewNote,
     DocumentPatchOutput,
     DrillGenerationOutput,
     DrillQuestion,
@@ -73,6 +74,24 @@ def build_sample_failure_analysis_output() -> FailureAnalysisOutput:
                 id="learner_pattern",
                 title="つまずきパターン",
                 summary="複数回答で判断根拠への言及が抜けている",
+            ),
+        ],
+        review_notes=[
+            AnalysisReviewNote(
+                id="review-evidence-001",
+                source="evidence_critic",
+                timeline_step="match_course_evidence",
+                title="根拠照合",
+                summary="判断根拠の不足は教材の対応方針と採点結果の両方に根拠がある",
+                evidence=["2 件の回答で根拠箇所への言及がなかった"],
+            ),
+            AnalysisReviewNote(
+                id="review-critic-001",
+                source="critic_reviewer",
+                timeline_step="decide_patch_strategy",
+                title="採用所見のレビュー",
+                summary="doc-gap-1 の根拠は approvedFindingIds により採用可能",
+                evidence=["approvedFindingIds: doc-gap-1"],
             ),
         ],
     )

@@ -2,7 +2,13 @@ from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.clients.local_agent_invoker import LocalAgentInvoker
 from app.repositories.firestore_client import InMemoryFirestoreClient
 from app.repositories.repositories import CourseRepository, DrillRepository, ShareTokenRepository
-from app.schemas import Course, DrillGenerationRequest
+from app.schemas import (
+    AnswerStatus,
+    AnswerSubmission,
+    Course,
+    DrillGenerationRequest,
+    FailureAnalysisRequest,
+)
 from app.services.drill_service import DrillService
 from app.services.share_token_service import ShareTokenService
 
@@ -69,3 +75,29 @@ def test_local_generate_drill_passes_backend_evidence_validation() -> None:
         for question in drill_run.questions
         for evidence in question.source_evidence
     )
+
+
+def test_local_analyze_failures_includes_review_notes_for_smoke() -> None:
+    client = AgentRuntimeClient(invoker=LocalAgentInvoker())
+
+    response = client.analyze_failures(
+        FailureAnalysisRequest(
+            course_markdown="# 判断基準",
+            questions=[],
+            answers=[
+                AnswerSubmission(
+                    id="answer-1",
+                    drill_run_id="drill-1",
+                    learner_name="受講者",
+                    status=AnswerStatus.GRADED,
+                    answers={"q1": "回答"},
+                )
+            ],
+            grading_results=[],
+        )
+    )
+
+    assert [note.timeline_step for note in response.review_notes] == [
+        "match_course_evidence",
+        "decide_patch_strategy",
+    ]

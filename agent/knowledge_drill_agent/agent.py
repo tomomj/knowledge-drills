@@ -1,13 +1,16 @@
 from pathlib import Path
 
-from google.adk.agents import Agent, BaseAgent, ParallelAgent, SequentialAgent
+from google.adk.agents import Agent, BaseAgent, LoopAgent, ParallelAgent, SequentialAgent
+from google.adk.tools.exit_loop_tool import exit_loop
 
 from knowledge_drill_agent.config import AnalysisMode, get_agent_settings
 from knowledge_drill_agent.schemas import (
+    CriticReviewOutput,
     DocumentPatchInput,
     DocumentPatchOutput,
     DrillGenerationInput,
     DrillGenerationOutput,
+    EvidenceReviewOutput,
     FailureAnalysisInput,
     FailureAnalysisOutput,
     GradingInput,
@@ -97,48 +100,77 @@ def _create_failure_analysis_lens_agent(
 def create_composite_failure_analysis_agent(model: str | None = None) -> BaseAgent:
     """Create a parent-less composed failure analysis workflow.
 
-    Three lens agents write perspective notes into session state in parallel.
-    The synthesis agent is the only child with the final FailureAnalysisOutput
-    schema, preserving the backend response contract.
+    Analyst agents write findings into session state in parallel, then a bounded
+    critic/reviewer loop validates those findings before the finalizer emits the
+    stable backend response contract.
     """
-    material_gap_lens = _create_failure_analysis_lens_agent(
-        name="failure_material_gap_lens",
-        description="教材側の説明不足や曖昧さに絞って誤答傾向を分析する。",
-        prompt_name="failure_analysis_material_gap_lens.md",
-        output_key="material_gap_perspective",
-        model=model,
-    )
-    question_quality_lens = _create_failure_analysis_lens_agent(
-        name="failure_question_quality_lens",
-        description="設問や rubric が誤答を誘発していないかを分析する。",
-        prompt_name="failure_analysis_question_quality_lens.md",
-        output_key="question_quality_perspective",
-        model=model,
-    )
-    learner_pattern_lens = _create_failure_analysis_lens_agent(
-        name="failure_learner_pattern_lens",
+    misconception_analyst = _create_failure_analysis_lens_agent(
+        name="failure_misconception_analyst",
         description="受講者回答に繰り返し現れるつまずきパターンを分析する。",
         prompt_name="failure_analysis_learner_pattern_lens.md",
-        output_key="learner_pattern_perspective",
+        output_key="misconception_findings",
         model=model,
     )
-    lens_parallel = ParallelAgent(
-        name="failure_analysis_lens_parallel",
-        description="教材・設問・受講者の3視点で失敗傾向を並列分析する。",
-        sub_agents=[material_gap_lens, question_quality_lens, learner_pattern_lens],
+    document_gap_analyst = _create_failure_analysis_lens_agent(
+        name="failure_document_gap_analyst",
+        description="教材側の説明不足や曖昧さに絞って誤答傾向を分析する。",
+        prompt_name="failure_analysis_material_gap_lens.md",
+        output_key="doc_gap_findings",
+        model=model,
     )
-    synthesis_agent = Agent(
-        name="failure_analysis_synthesis_agent",
+    question_quality_analyst = _create_failure_analysis_lens_agent(
+        name="failure_question_quality_analyst",
+        description="設問や rubric が誤答を誘発していないかを分析する。",
+        prompt_name="failure_analysis_question_quality_lens.md",
+        output_key="question_quality_findings",
+        model=model,
+    )
+    analyst_parallel = ParallelAgent(
+        name="analyst_parallel",
+        description="教材・設問・受講者の3視点で失敗傾向を並列分析する。",
+        sub_agents=[
+            misconception_analyst,
+            document_gap_analyst,
+            question_quality_analyst,
+        ],
+    )
+    evidence_critic = Agent(
+        name="evidence_critic",
         model=_resolve_model(model),
-        description="3視点の分析メモを統合し、最終 Failure Signal を返す。",
-        instruction=_load_prompt("failure_analysis_synthesis.md"),
+        description="並列分析結果を根拠の強さで採用・棄却し、finalizer への指示を作る。",
+        instruction=_load_prompt("failure_analysis_evidence_critic.md"),
+        input_schema=FailureAnalysisInput,
+        output_schema=EvidenceReviewOutput,
+        output_key="evidence_review",
+    )
+    critic_reviewer = Agent(
+        name="critic_reviewer",
+        model=_resolve_model(model),
+        description="evidence critic の評価妥当性をレビューし、承認済み finding ID を明示する。",
+        instruction=_load_prompt("failure_analysis_critic_reviewer.md"),
+        input_schema=FailureAnalysisInput,
+        output_schema=CriticReviewOutput,
+        output_key="critic_review",
+        tools=[exit_loop],
+    )
+    review_loop = LoopAgent(
+        name="review_loop",
+        description="根拠評価とレビューを最大3回まで繰り返す。",
+        sub_agents=[evidence_critic, critic_reviewer],
+        max_iterations=3,
+    )
+    finalizer = Agent(
+        name="failure_analysis_finalizer",
+        model=_resolve_model(model),
+        description="レビュー承認済み finding だけから最終 FailureAnalysisOutput を返す。",
+        instruction=_load_prompt("failure_analysis_finalizer.md"),
         input_schema=FailureAnalysisInput,
         output_schema=FailureAnalysisOutput,
     )
     return SequentialAgent(
         name="failure_analysis_agent",
-        description="3視点の並列分析と統合により Failure Signal を抽出する。",
-        sub_agents=[lens_parallel, synthesis_agent],
+        description="並列分析、根拠評価、レビュー、最終化により Failure Signal を抽出する。",
+        sub_agents=[analyst_parallel, review_loop, finalizer],
     )
 
 

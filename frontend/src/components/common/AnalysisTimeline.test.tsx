@@ -47,7 +47,7 @@ const items: AnalysisTimelineItemView[] = [
 ]
 
 describe('AnalysisTimeline', () => {
-  it('renders status chips, titles, summaries, and up to three evidence entries', () => {
+  it('renders status chips, titles, summaries, and the evidence entries it receives', () => {
     render(<AnalysisTimeline title="分析タイムライン" items={items} />)
 
     expect(screen.getByRole('heading', { name: '分析タイムライン' })).toBeTruthy()
@@ -60,6 +60,31 @@ describe('AnalysisTimeline', () => {
     expect(screen.getByText('根拠 1')).toBeTruthy()
     expect(screen.getByText('根拠 2')).toBeTruthy()
     expect(screen.getByText('根拠 3')).toBeTruthy()
-    expect(screen.queryByText('根拠 4')).toBeNull()
+    expect(screen.getByText('根拠 4')).toBeTruthy()
+  })
+
+  it('renders review-derived evidence text in timeline items', () => {
+    render(
+      <AnalysisTimeline
+        title="分析タイムライン"
+        items={[
+          {
+            id: 'decide_patch_strategy',
+            title: '改善方針を判断',
+            status: 'completed',
+            summary: '教材修正方針を選定しました',
+            evidence: [
+              '採用レビュー: finding-1 のみ採用 (approvedFindingIds: finding-1)',
+              '最終化: 未承認所見は採用しない',
+            ],
+            completedAt: '2026-07-08T10:00:00Z',
+          },
+        ]}
+      />,
+    )
+
+    expect(screen.getByText('改善方針を判断')).toBeTruthy()
+    expect(screen.getByText('採用レビュー: finding-1 のみ採用 (approvedFindingIds: finding-1)')).toBeTruthy()
+    expect(screen.getByText('最終化: 未承認所見は採用しない')).toBeTruthy()
   })
 })
