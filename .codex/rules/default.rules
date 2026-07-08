@@ -116,8 +116,8 @@ prefix_rule(
 
 prefix_rule(
     pattern = ["terraform", ["apply", "destroy"]],
-    decision = "prompt",
-    justification = "Terraform apply/destroy changes infrastructure state and must be explicitly reviewed.",
+    decision = "forbidden",
+    justification = "Terraform apply/destroy changes infrastructure state; run these manually outside Codex when needed.",
     match = [
         "terraform apply",
         "terraform destroy",

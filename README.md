@@ -52,7 +52,7 @@ terraform plan
 
 Codex の project-local command rules は `.codex/rules/default.rules` に置く。この repository が
 trusted のときだけ読み込まれ、通常の `uv` / `npm` / `make` / Terraform 確認コマンドを許可し、
-`terraform apply` / `destroy` は都度確認する。
+`terraform apply` / `destroy` は拒否する。
 
 CI は Backend / Frontend / Agent Eval で workflow を分け、該当ディレクトリに差分がある PR だけで
 実行する。
