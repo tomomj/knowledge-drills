@@ -1,6 +1,20 @@
 # Project-local Codex configuration layer.
 # Rules under .codex/rules/ are loaded only when this repository is trusted.
 
+default_permissions = "knowledge-drills-worktree"
+
+[permissions.knowledge-drills-worktree]
+description = "Allow writes in this worktree except .env files."
+extends = ":workspace"
+
+[permissions.knowledge-drills-worktree.filesystem]
+glob_scan_max_depth = 6
+
+[permissions.knowledge-drills-worktree.filesystem.":workspace_roots"]
+"." = "write"
+".env" = "deny"
+"**/.env" = "deny"
+
 [mcp_servers.deepwiki]
 url = "https://mcp.deepwiki.com/mcp"
 default_tools_approval_mode = "approve"
