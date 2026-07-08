@@ -464,6 +464,18 @@
   text-decoration: underline;
 }
 
+.danger-zone {
+  display: flex;
+  justify-content: stretch;
+  padding-top: 14px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+.danger-zone .btn {
+  width: 100%;
+}
+
 .metrics-card__body {
   display: grid;
   gap: 14px;
@@ -1394,7 +1406,7 @@ a.tag-btn {
 
 .course-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(132px, 160px) auto auto;
   align-items: center;
   gap: 10px 20px;
   padding: 16px 22px;
@@ -1420,6 +1432,7 @@ a.tag-btn {
   font-size: 15px;
   font-weight: 700;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .course-row__meta {
@@ -1434,6 +1447,42 @@ a.tag-btn {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.course-row__trend {
+  display: grid;
+  gap: 4px;
+  min-width: 132px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.course-row__trend-placeholder {
+  display: block;
+  width: 132px;
+}
+
+.course-row__sparkline {
+  display: block;
+  width: 120px;
+  height: 34px;
+  overflow: visible;
+}
+
+.course-row__sparkline-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+}
+
+.course-row__sparkline-point {
+  fill: var(--surface);
+  stroke: currentColor;
+  stroke-width: 2;
 }
 
 .course-row__arrow {
@@ -1496,6 +1545,17 @@ a.tag-btn {
   .page-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .course-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .course-row__trend,
+  .course-row__trend-placeholder,
+  .course-row__chips {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
   .topbar {
