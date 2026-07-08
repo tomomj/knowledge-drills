@@ -79,8 +79,8 @@ cd agent
 # 認証（初回のみ）
 gcloud auth application-default login
 cp .env.example .env
-# .env の GOOGLE_CLOUD_PROJECT を、Vertex AI で gemini-2.5-flash-lite を
-# us-central1 から実行できるプロジェクトに変更する
+# .env の GOOGLE_CLOUD_PROJECT を、Vertex AI で gemini-3.1-flash-lite を
+# global endpoint から実行できるプロジェクトに変更する
 
 # 全 eval を実行し、ADK の結果 JSON を読んで失敗時は非ゼロ終了する
 python scripts/run_adk_evals.py
