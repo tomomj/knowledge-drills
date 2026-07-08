@@ -93,6 +93,10 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(payload),
     }),
+  deleteCourse: (courseId: string) =>
+    requestJson<void>(`/api/courses/${courseId}`, {
+      method: 'DELETE',
+    }),
   getCourseMetrics: (courseId: string) =>
     requestJson<CourseMetricsResponse>(`/api/courses/${courseId}/metrics`),
   listCourseRevisions: (courseId: string) =>

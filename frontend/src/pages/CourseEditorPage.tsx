@@ -14,6 +14,7 @@ type PageState =
   | { status: 'idle' }
   | { status: 'saving' }
   | { status: 'generating' }
+  | { status: 'deleting' }
   | { status: 'ready'; message: string }
   | { status: 'failed'; message: string }
 
@@ -27,6 +28,7 @@ export function CourseEditorPage() {
   const [course, setCourse] = useState<CourseDetail | null>(null)
   const [metrics, setMetrics] = useState<CourseMetricsResponse | null>(null)
   const [state, setState] = useState<PageState>({ status: 'idle' })
+  const [deleteConfirming, setDeleteConfirming] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -37,6 +39,7 @@ export function CourseEditorPage() {
         setMarkdown('')
         setDrillFocus('')
         setMetrics(null)
+        setDeleteConfirming(false)
         setState({ status: 'idle' })
         return
       }
@@ -53,6 +56,7 @@ export function CourseEditorPage() {
           setTitle(loaded.title)
           setMarkdown(loaded.markdown)
           setDrillFocus(loaded.drillFocus ?? '')
+          setDeleteConfirming(false)
           const saveMessage = saveMessageFromLocationState(location.state)
           setState(saveMessage ? { status: 'ready', message: saveMessage } : { status: 'idle' })
         }
@@ -115,6 +119,24 @@ export function CourseEditorPage() {
     }
   }
 
+  async function deleteCourse() {
+    if (!course) {
+      setState({ status: 'failed', message: '削除する講座がありません。' })
+      return
+    }
+    if (!deleteConfirming) {
+      setDeleteConfirming(true)
+      return
+    }
+    setState({ status: 'deleting' })
+    try {
+      await api.deleteCourse(course.id)
+      navigate('/courses')
+    } catch (error) {
+      setState({ status: 'failed', message: errorMessage(error) })
+    }
+  }
+
   return (
     <AppShell>
       <main className="page">
@@ -134,7 +156,7 @@ export function CourseEditorPage() {
               type="button"
               className="btn btn--secondary"
               onClick={generateDrill}
-              disabled={!course || state.status === 'generating'}
+              disabled={!course || state.status === 'generating' || state.status === 'deleting'}
             >
               ドリルを生成
             </button>
@@ -142,7 +164,7 @@ export function CourseEditorPage() {
               type="button"
               className="btn btn--primary"
               onClick={saveCourse}
-              disabled={state.status === 'saving'}
+              disabled={state.status === 'saving' || state.status === 'deleting'}
             >
               保存する
             </button>
@@ -157,6 +179,7 @@ export function CourseEditorPage() {
         {state.status === 'generating' ? (
           <StatusBanner tone="info">ドリルを生成中です。</StatusBanner>
         ) : null}
+        {state.status === 'deleting' ? <StatusBanner tone="info">削除中です。</StatusBanner> : null}
         {state.status === 'ready' ? (
           <StatusBanner tone="success">{state.message}</StatusBanner>
         ) : null}
@@ -258,6 +281,18 @@ export function CourseEditorPage() {
                     </dd>
                   </div>
                 </dl>
+                {course ? (
+                  <div className="danger-zone">
+                    <button
+                      type="button"
+                      className="btn btn--danger"
+                      onClick={deleteCourse}
+                      disabled={state.status === 'deleting'}
+                    >
+                      {deleteConfirming ? '本当に削除する' : '講座を削除'}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
             {scoreProgression ? <ScoreProgressionCard progression={scoreProgression} /> : null}

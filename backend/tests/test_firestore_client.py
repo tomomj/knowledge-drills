@@ -46,6 +46,9 @@ class FakeDocument:
             raise google_exceptions.NotFound("not found")  # type: ignore[no-untyped-call]
         self._collection.documents[self._document_id].update(data)
 
+    def delete(self) -> None:
+        self._collection.documents.pop(self._document_id, None)
+
 
 class FakeQuery:
     def __init__(self, collection: FakeCollection, field_name: str, field_value: object) -> None:
@@ -95,6 +98,9 @@ class FakeTransaction:
         self.updated += 1
         reference.update(data)
 
+    def delete(self, reference: FakeDocument) -> None:
+        reference.delete()
+
     def get(self, reference_or_query: FakeDocument | FakeQuery) -> Iterator[FakeSnapshot]:
         if isinstance(reference_or_query, FakeDocument):
             yield reference_or_query.get()
@@ -126,6 +132,8 @@ def test_google_firestore_client_maps_document_operations() -> None:
     client.create_document("courses", "course-1", {"id": "course-1", "courseId": "c1"})
     client.set_document("courses", "course-2", {"id": "course-2", "courseId": "c1"})
     client.update_document("courses", "course-2", {"title": "更新"})
+    client.delete_document("courses", "course-1")
+    client.delete_document("courses", "missing")
 
     assert client.get_document("courses", "course-2") == {
         "id": "course-2",
@@ -133,12 +141,10 @@ def test_google_firestore_client_maps_document_operations() -> None:
         "title": "更新",
     }
     assert [document["id"] for document in client.list_documents("courses")] == [
-        "course-1",
         "course-2",
     ]
     course_documents = client.list_documents_by_field("courses", "courseId", "c1")
     assert [document["id"] for document in course_documents] == [
-        "course-1",
         "course-2",
     ]
 

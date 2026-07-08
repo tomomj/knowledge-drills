@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { api, ApiClientError } from '../api/client'
-import type { CourseSummary } from '../api/types'
+import type { CourseScoreTrendPoint, CourseSummary } from '../api/types'
 import { AppShell } from '../components/common/AppShell'
 import { StatusBanner } from '../components/common/StatusBanner'
 
@@ -41,6 +41,7 @@ export function CourseListPage() {
   const filtered = trimmedQuery
     ? courses.filter((course) => course.title.includes(trimmedQuery))
     : courses
+  const hasDemoCourse = courses.some((course) => course.isDemo)
 
   return (
     <AppShell>
@@ -78,6 +79,11 @@ export function CourseListPage() {
             </StatusBanner>
           ) : (
             <>
+              {hasDemoCourse ? (
+                <StatusBanner tone="info">
+                  体験用デモ講座を開くと、採点済み回答の分析と改善履歴をすぐ確認できます。
+                </StatusBanner>
+              ) : null}
               <div className="list-toolbar">
                 <input
                   type="search"
@@ -95,24 +101,32 @@ export function CourseListPage() {
                 </StatusBanner>
               ) : (
                 <div className="card course-list">
-                  {filtered.map((course) => (
-                    <Link className="course-row" to={`/courses/${course.id}`} key={course.id}>
-                      <div>
-                        <div className="course-row__title">{course.title}</div>
-                        <div className="course-row__meta">{metaLine(course)}</div>
-                      </div>
-                      <div className="course-row__chips">
-                        {statusChips(course).map((chip) => (
-                          <span className={`chip chip--${chip.tone}`} key={chip.label}>
-                            {chip.label}
-                          </span>
-                        ))}
-                      </div>
-                      <span className="course-row__arrow" aria-hidden="true">
-                        ›
-                      </span>
-                    </Link>
-                  ))}
+                  {filtered.map((course) => {
+                    const scoreTrend = eligibleScoreTrend(course.scoreTrend)
+                    return (
+                      <Link className="course-row" to={`/courses/${course.id}`} key={course.id}>
+                        <div className="course-row__main">
+                          <div className="course-row__title">{course.title}</div>
+                          <div className="course-row__meta">{metaLine(course)}</div>
+                        </div>
+                        {scoreTrend.length >= 2 ? (
+                          <CourseScoreTrendMini trend={scoreTrend} />
+                        ) : (
+                          <span className="course-row__trend-placeholder" aria-hidden="true" />
+                        )}
+                        <div className="course-row__chips">
+                          {statusChips(course).map((chip) => (
+                            <span className={`chip chip--${chip.tone}`} key={chip.label}>
+                              {chip.label}
+                            </span>
+                          ))}
+                        </div>
+                        <span className="course-row__arrow" aria-hidden="true">
+                          ›
+                        </span>
+                      </Link>
+                    )
+                  })}
                 </div>
               )}
             </>
@@ -127,6 +141,12 @@ type Chip = { label: string; tone: string }
 
 function statusChips(course: CourseSummary): Chip[] {
   const chips: Chip[] = []
+  if (course.isDemo) {
+    chips.push({ label: 'デモ', tone: 'accent' })
+  }
+  if (course.drillStatus === 'ready' && course.answerCount > 0) {
+    chips.push({ label: '分析できます', tone: 'success' })
+  }
   if (course.patchStatus === 'proposed') {
     chips.push({ label: 'パッチ提案あり', tone: 'warning' })
   } else if (course.patchStatus === 'applied') {
@@ -148,6 +168,77 @@ function statusChips(course: CourseSummary): Chip[] {
       chips.push({ label: 'ドリル未生成', tone: 'muted' })
   }
   return chips
+}
+
+type ScoredTrendPoint = CourseScoreTrendPoint & {
+  averageScore: number
+  maxScore: number
+}
+
+const MINI_SPARKLINE_WIDTH = 120
+const MINI_SPARKLINE_HEIGHT = 34
+const MINI_SPARKLINE_PADDING = 4
+
+function CourseScoreTrendMini({ trend }: { trend: ScoredTrendPoint[] }) {
+  const first = trend[0]
+  const last = trend[trend.length - 1]
+  const points = trend.map((point, index) => {
+    const x =
+      trend.length === 1
+        ? MINI_SPARKLINE_WIDTH / 2
+        : MINI_SPARKLINE_PADDING +
+          (index * (MINI_SPARKLINE_WIDTH - MINI_SPARKLINE_PADDING * 2)) / (trend.length - 1)
+    const clampedRate = Math.max(0, Math.min(1, point.averageScore / point.maxScore))
+    const y =
+      MINI_SPARKLINE_PADDING +
+      (1 - clampedRate) * (MINI_SPARKLINE_HEIGHT - MINI_SPARKLINE_PADDING * 2)
+    return { x, y }
+  })
+  const path = points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .join(' ')
+  const label = `平均点の推移 ${formatScore(first.averageScore)} から ${formatScore(last.averageScore)}`
+
+  return (
+    <div className="course-row__trend">
+      <svg
+        className="course-row__sparkline"
+        role="img"
+        aria-label={label}
+        viewBox={`0 0 ${MINI_SPARKLINE_WIDTH} ${MINI_SPARKLINE_HEIGHT}`}
+        preserveAspectRatio="none"
+      >
+        <path className="course-row__sparkline-line" d={path} />
+        {points.map((point, index) => (
+          <circle
+            key={`${trend[index].courseVersion}-${index}`}
+            className="course-row__sparkline-point"
+            cx={point.x}
+            cy={point.y}
+            r="2.3"
+          />
+        ))}
+      </svg>
+      <span>
+        平均 {formatScore(first.averageScore)} → {formatScore(last.averageScore)}
+      </span>
+    </div>
+  )
+}
+
+function eligibleScoreTrend(
+  trend: CourseScoreTrendPoint[] | null,
+): ScoredTrendPoint[] {
+  return (trend ?? []).filter(
+    (point): point is ScoredTrendPoint =>
+      Number.isFinite(point.averageScore) &&
+      Number.isFinite(point.maxScore) &&
+      point.maxScore > 0,
+  )
+}
+
+function formatScore(score: number): string {
+  return score.toFixed(1)
 }
 
 function metaLine(course: CourseSummary): string {

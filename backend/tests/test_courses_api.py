@@ -16,11 +16,17 @@ from app.schemas import (
 )
 
 
-def test_list_courses_empty(client: TestClient) -> None:
+def test_list_courses_seeds_demo_courses_for_new_owner(client: TestClient) -> None:
     response = client.get("/api/courses")
 
     assert response.status_code == 200
-    assert response.json() == {"courses": []}
+    courses = response.json()["courses"]
+    assert len(courses) == 2
+    assert {course["title"] for course in courses} == {
+        "DevOps x AI Agent Hackathon 2026 参加ガイド(デモ)",
+        "経費精算の判断基準(デモ・改善 3 周済み)",
+    }
+    assert all(course["isDemo"] is True for course in courses)
 
 
 def test_list_courses_returns_summaries_sorted_by_updated_at(client: TestClient) -> None:
@@ -64,12 +70,14 @@ def test_list_courses_uses_stored_summary_without_related_collection_reads(
         answer_count=1,
         latest_patch_id="patch-1",
         latest_patch_status=PatchStatus.PROPOSED,
+        score_trend=[],
     )
 
     def fail_related_read(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("course list should use stored course summary")
 
     monkeypatch.setattr(app_state.drill_repository, "get", fail_related_read)
+    monkeypatch.setattr(app_state.drill_repository, "list_by_course", fail_related_read)
     monkeypatch.setattr(app_state.answer_repository, "list_by_drill_run", fail_related_read)
     monkeypatch.setattr(app_state.patch_repository, "get", fail_related_read)
 
@@ -82,6 +90,8 @@ def test_list_courses_uses_stored_summary_without_related_collection_reads(
     assert summary["patchStatus"] == "proposed"
     assert summary["latestDrillRunId"] == "drill-1"
     assert summary["latestPatchId"] == "patch-1"
+    assert summary["scoreTrend"] == []
+    assert summary["isDemo"] is False
 
 
 def test_list_courses_backfills_legacy_summary_fields(client: TestClient) -> None:
@@ -133,6 +143,7 @@ def test_list_courses_backfills_legacy_summary_fields(client: TestClient) -> Non
     assert saved_course.latest_drill_status == "ready"
     assert saved_course.answer_count == 1
     assert saved_course.latest_patch_status == "proposed"
+    assert saved_course.score_trend == []
 
 
 def test_course_revisions_and_diff(client: TestClient) -> None:
@@ -328,6 +339,146 @@ def test_get_course_metrics_returns_run_level_score_history(client: TestClient) 
             "maxScore": 4,
         },
     ]
+
+
+def test_course_summary_score_trend_backfill_matches_metrics(client: TestClient) -> None:
+    create = client.post("/api/courses", json={"title": "講座", "markdown": "# Body"})
+    course_id = create.json()["courseId"]
+
+    app_state = client.app.state  # type: ignore[attr-defined]
+    app_state.drill_repository.create(
+        DrillRun(
+            id="drill-v1",
+            course_id=course_id,
+            course_version=1,
+            status=DrillRunStatus.READY,
+            questions=[_question("q1")],
+        )
+    )
+    app_state.drill_repository.create(
+        DrillRun(
+            id="drill-v2",
+            course_id=course_id,
+            course_version=2,
+            status=DrillRunStatus.READY,
+            questions=[_question("q1")],
+        )
+    )
+    app_state.answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-v1",
+            drill_run_id="drill-v1",
+            learner_name="受講者A",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=2,
+            max_score=4,
+        )
+    )
+    app_state.answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-v2",
+            drill_run_id="drill-v2",
+            learner_name="受講者B",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=3,
+            max_score=4,
+        )
+    )
+    app_state.course_repository.update_summary(course_id, answer_count=2)
+
+    list_response = client.get("/api/courses")
+    metrics_response = client.get(f"/api/courses/{course_id}/metrics")
+
+    assert list_response.status_code == 200
+    assert metrics_response.status_code == 200
+    summary = list_response.json()["courses"][0]
+    metric_runs = metrics_response.json()["runs"]
+    assert summary["scoreTrend"] == [
+        {
+            "courseVersion": run["courseVersion"],
+            "averageScore": run["averageScore"],
+            "maxScore": run["maxScore"],
+        }
+        for run in metric_runs
+    ]
+    saved = app_state.course_repository.get(course_id)
+    assert saved is not None
+    assert saved.score_trend is not None
+
+
+def test_delete_course_cascades_related_documents(client: TestClient) -> None:
+    create = client.post("/api/courses", json={"title": "削除対象", "markdown": "# Body"})
+    course_id = create.json()["courseId"]
+
+    app_state = client.app.state  # type: ignore[attr-defined]
+    drill_run = DrillRun(
+        id="drill-1",
+        course_id=course_id,
+        status=DrillRunStatus.READY,
+        share_token="token-1",
+        questions=[_question("q1")],
+    )
+    app_state.drill_repository.create(drill_run)
+    app_state.share_token_repository.reserve("token-1", "drill-1")
+    app_state.answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-1",
+            drill_run_id="drill-1",
+            learner_name="受講者A",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=3,
+            max_score=4,
+        )
+    )
+    app_state.patch_repository.create(
+        DocumentPatch(
+            id="patch-1",
+            course_id=course_id,
+            drill_run_id="drill-1",
+            status=PatchStatus.PROPOSED,
+            base_markdown="# Body",
+            patched_markdown="# Body\n\n追記",
+            patch_summary="追記",
+            diff_text="+追記",
+        )
+    )
+
+    response = client.delete(f"/api/courses/{course_id}")
+
+    assert response.status_code == 204
+    assert client.get(f"/api/courses/{course_id}").status_code == 404
+    assert client.get(f"/api/courses/{course_id}/drill-runs/drill-1").status_code == 404
+    assert client.get("/api/patches/patch-1").status_code == 404
+    assert client.get("/api/drills/token-1").status_code == 404
+    assert client.delete(f"/api/courses/{course_id}").status_code == 404
+    listed = client.get("/api/courses")
+    assert listed.status_code == 200
+    assert course_id not in {course["id"] for course in listed.json()["courses"]}
+    assert app_state.answer_repository.get("answer-1") is None
+    assert app_state.drill_repository.get("drill-1") is None
+    assert app_state.patch_repository.get("patch-1") is None
+    assert app_state.course_repository.get_revision(course_id, 1) is None
+
+
+def test_delete_course_owned_by_other_user_returns_not_found(client: TestClient) -> None:
+    app_state = client.app.state  # type: ignore[attr-defined]
+    app_state.course_repository.create(
+        Course(
+            id="other-course",
+            owner_user_id="other-owner",
+            title="他人の講座",
+            markdown="# Body",
+        )
+    )
+
+    response = client.delete("/api/courses/other-course")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "course_not_found"
+    assert app_state.course_repository.get("other-course") is not None
 
 
 def test_create_get_and_update_course(client: TestClient) -> None:

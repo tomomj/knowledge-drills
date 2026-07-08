@@ -116,11 +116,29 @@ def test_me_route_upserts_profile_from_verified_user() -> None:
         "photoUrl": "https://example.test/owner.png",
         "createdAt": "2026-07-07T00:00:00+00:00",
         "lastLoginAt": "2026-07-07T00:00:00+00:00",
+        "demoSeededAt": None,
     }
     assert auth_client.authorization_headers == ["Bearer id-token"]
     saved = repository.get("firebase-owner")
     assert saved is not None
     assert saved.uid == "firebase-owner"
+
+
+def test_user_service_preserves_demo_seeded_at_on_profile_upsert() -> None:
+    repository = UserRepository(InMemoryFirestoreClient())
+    service = UserService(repository, clock=lambda: "2026-07-08T01:00:00+00:00")
+    assert repository.claim_demo_seeded("owner-1", "2026-07-08T00:00:00+00:00") is True
+
+    profile = service.upsert_current_user(
+        AuthenticatedUser(
+            uid="owner-1",
+            email="owner@example.test",
+            display_name="Owner",
+        )
+    )
+
+    assert profile.demo_seeded_at == "2026-07-08T00:00:00+00:00"
+    assert repository.get("owner-1") == profile
 
 
 def test_me_route_requires_verified_user_before_profile_upsert() -> None:

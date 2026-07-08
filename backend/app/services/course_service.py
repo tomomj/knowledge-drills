@@ -7,6 +7,7 @@ from app.repositories.repositories import (
     CourseRepository,
     DrillRepository,
     PatchRepository,
+    ShareTokenRepository,
 )
 from app.schemas import (
     AnswerStatus,
@@ -20,6 +21,7 @@ from app.schemas import (
     CourseRevisionDiffResponse,
     CourseRevisionListResponse,
     CourseRevisionSummary,
+    CourseScoreTrendPoint,
     CourseSummary,
     CourseUpdateRequest,
     DrillRun,
@@ -36,11 +38,13 @@ class CourseService:
         drill_repository: DrillRepository | None = None,
         answer_repository: AnswerRepository | None = None,
         patch_repository: PatchRepository | None = None,
+        share_token_repository: ShareTokenRepository | None = None,
     ) -> None:
         self._course_repository = course_repository
         self._drill_repository = drill_repository
         self._answer_repository = answer_repository
         self._patch_repository = patch_repository
+        self._share_token_repository = share_token_repository
 
     def create_course(
         self,
@@ -93,6 +97,32 @@ class CourseService:
         # updatedAt 降順、updatedAt なしは末尾
         summaries.sort(key=lambda summary: summary.updated_at or "", reverse=True)
         return CourseListResponse(courses=summaries)
+
+    def delete_course(self, course_id: str, owner_user_id: str) -> None:
+        self._get_owned_course_or_404(course_id, owner_user_id)
+        if (
+            self._drill_repository is None
+            or self._answer_repository is None
+            or self._patch_repository is None
+            or self._share_token_repository is None
+        ):
+            raise RuntimeError("CourseService delete dependencies are not configured")
+
+        drill_runs = self._drill_repository.list_by_course(course_id)
+        for drill_run in drill_runs:
+            if drill_run.share_token:
+                self._share_token_repository.delete(drill_run.share_token)
+            for answer in self._answer_repository.list_by_drill_run(drill_run.id):
+                self._answer_repository.delete(answer.id)
+            self._drill_repository.delete(drill_run.id)
+
+        for patch in self._patch_repository.list_by_course(course_id):
+            self._patch_repository.delete(patch.id)
+
+        for revision in self._course_repository.list_revisions(course_id):
+            self._course_repository.delete_revision(course_id, revision.version)
+
+        self._course_repository.delete(course_id)
 
     def list_revisions(
         self,
@@ -163,6 +193,7 @@ class CourseService:
         drill_status = course.latest_drill_status
         answer_count = course.answer_count
         patch_status = course.latest_patch_status
+        score_trend = course.score_trend
 
         if (
             course.latest_drill_run_id
@@ -180,10 +211,21 @@ class CourseService:
             if patch is not None:
                 patch_status = patch.status
 
+        score_trend_changed = False
+        if (
+            score_trend is None
+            and answer_count > 0
+            and self._drill_repository is not None
+            and self._answer_repository is not None
+        ):
+            score_trend = self._build_score_trend(course.id)
+            score_trend_changed = True
+
         if (
             drill_status != course.latest_drill_status
             or answer_count != course.answer_count
             or patch_status != course.latest_patch_status
+            or score_trend_changed
         ):
             self._course_repository.update_summary(
                 course.id,
@@ -192,6 +234,7 @@ class CourseService:
                 answer_count=answer_count,
                 latest_patch_id=course.latest_patch_id,
                 latest_patch_status=patch_status,
+                score_trend=score_trend if score_trend_changed else None,
             )
 
         return CourseSummary(
@@ -204,6 +247,8 @@ class CourseService:
             patch_status=patch_status,
             latest_drill_run_id=course.latest_drill_run_id,
             latest_patch_id=course.latest_patch_id,
+            score_trend=score_trend,
+            is_demo=course.is_demo,
         )
 
     def _build_metrics_run(self, drill_run: DrillRun) -> CourseMetricsRun:
@@ -221,6 +266,23 @@ class CourseService:
             average_score=_average(total_scores),
             max_score=_drill_max_score(drill_run, graded_answers),
         )
+
+    def _build_score_trend(self, course_id: str) -> list[CourseScoreTrendPoint]:
+        if self._drill_repository is None:
+            raise RuntimeError("CourseService metrics dependencies are not configured")
+        drill_runs = self._drill_repository.list_by_course(course_id)
+        drill_runs.sort(key=lambda drill_run: (drill_run.course_version, drill_run.id))
+        by_version: dict[int, CourseScoreTrendPoint] = {}
+        for drill_run in drill_runs:
+            metrics_run = self._build_metrics_run(drill_run)
+            if metrics_run.average_score is None or metrics_run.max_score is None:
+                continue
+            by_version[metrics_run.course_version] = CourseScoreTrendPoint(
+                course_version=metrics_run.course_version,
+                average_score=metrics_run.average_score,
+                max_score=metrics_run.max_score,
+            )
+        return [by_version[version] for version in sorted(by_version)]
 
     def _validate_title_and_markdown(self, title: str, markdown: str) -> None:
         if not title.strip():

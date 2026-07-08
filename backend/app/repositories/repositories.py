@@ -8,6 +8,7 @@ from app.schemas import (
     AnswerSubmission,
     Course,
     CourseRevision,
+    CourseScoreTrendPoint,
     DocumentPatch,
     DrillRun,
     DrillRunStatus,
@@ -69,6 +70,7 @@ class CourseRepository:
         answer_count: int | None = None,
         latest_patch_id: str | None = None,
         latest_patch_status: PatchStatus | None = None,
+        score_trend: list[CourseScoreTrendPoint] | None = None,
     ) -> None:
         data: dict[str, object] = {}
         if latest_drill_run_id is not None:
@@ -81,8 +83,25 @@ class CourseRepository:
             data["latestPatchId"] = latest_patch_id
         if latest_patch_status is not None:
             data["latestPatchStatus"] = latest_patch_status.value
+        if score_trend is not None:
+            data["scoreTrend"] = [
+                point.model_dump(mode="json", by_alias=True) for point in score_trend
+            ]
         if data:
             self._client.update_document(self.collection, course_id, data)
+
+    def update_score_trend_point(
+        self,
+        course_id: str,
+        point: CourseScoreTrendPoint,
+    ) -> None:
+        course = self.get(course_id)
+        if course is None:
+            return
+        by_version = {existing.course_version: existing for existing in (course.score_trend or [])}
+        by_version[point.course_version] = point
+        score_trend = [by_version[version] for version in sorted(by_version)]
+        self.update_summary(course_id, score_trend=score_trend)
 
     def increment_answer_count(self, course_id: str) -> None:
         course = self.get(course_id)
@@ -108,6 +127,12 @@ class CourseRepository:
         if document is None:
             return None
         return CourseRevision.model_validate(document)
+
+    def delete_revision(self, course_id: str, version: int) -> None:
+        self._client.delete_document(self.revision_collection, f"{course_id}:{version}")
+
+    def delete(self, course_id: str) -> None:
+        self._client.delete_document(self.collection, course_id)
 
     def _record_revision(self, course: Course) -> None:
         revision = CourseRevision(
@@ -164,6 +189,9 @@ class DrillRepository:
             )
         ]
 
+    def delete(self, drill_run_id: str) -> None:
+        self._client.delete_document(self.collection, drill_run_id)
+
 
 class ShareTokenRepository:
     collection = "share_tokens"
@@ -189,6 +217,9 @@ class ShareTokenRepository:
 
     def run_transaction(self, callback: Callable[[], object]) -> object:
         return self._client.run_transaction(callback)
+
+    def delete(self, token: str) -> None:
+        self._client.delete_document(self.collection, token)
 
 
 class AnswerRepository:
@@ -252,6 +283,9 @@ class AnswerRepository:
             answer.model_dump(mode="json", by_alias=True),
         )
 
+    def delete(self, answer_id: str) -> None:
+        self._client.delete_document(self.collection, answer_id)
+
 
 class PatchRepository:
     collection = "patches"
@@ -281,3 +315,16 @@ class PatchRepository:
             patch.id,
             patch.model_dump(mode="json", by_alias=True),
         )
+
+    def list_by_course(self, course_id: str) -> list[DocumentPatch]:
+        return [
+            DocumentPatch.model_validate(document)
+            for document in self._client.list_documents_by_field(
+                self.collection,
+                "courseId",
+                course_id,
+            )
+        ]
+
+    def delete(self, patch_id: str) -> None:
+        self._client.delete_document(self.collection, patch_id)
