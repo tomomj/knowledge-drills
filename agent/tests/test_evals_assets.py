@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import cast
 
+from knowledge_drill_agent.schemas import FailureAnalysisOutput
+
 EVALS_DIR = Path(__file__).resolve().parent.parent / "evals"
 RUNNER_PATH = Path(__file__).resolve().parent.parent / "scripts" / "run_adk_evals.py"
 AGENT_EVAL_DIRS = ["drill_generator", "grading", "failure_analysis", "document_patch"]
@@ -57,6 +59,24 @@ def test_evalset_files_are_wellformed() -> None:
             for invocation in case["conversation"]:
                 text = invocation["user_content"]["parts"][0]["text"]
                 json.loads(text)  # input must be a JSON string (input_schema enforcement)
+
+
+def test_failure_analysis_eval_expected_outputs_include_review_notes() -> None:
+    payload = json.loads(
+        (EVALS_DIR / "failure_analysis" / "failure_analysis.evalset.json").read_text("utf-8")
+    )
+    for case in payload["eval_cases"]:
+        for invocation in case["conversation"]:
+            text = invocation["final_response"]["parts"][0]["text"]
+            output = FailureAnalysisOutput.model_validate_json(text)
+            assert output.review_notes, case["eval_id"]
+            assert {
+                note.timeline_step
+                for note in output.review_notes
+            } <= {
+                "match_course_evidence",
+                "decide_patch_strategy",
+            }
 
 
 def test_configs_use_one_integrated_rubric_per_agent() -> None:

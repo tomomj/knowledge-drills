@@ -69,6 +69,32 @@ def _proposal_service(
                         "summary": "根拠への言及が抜けている",
                     },
                 ],
+                "reviewNotes": [
+                    {
+                        "id": "looks-like-decide-but-field-wins",
+                        "source": "evidence_critic",
+                        "timelineStep": "match_course_evidence",
+                        "title": "根拠レビュー",
+                        "summary": "教材根拠と採点根拠が一致",
+                        "evidence": ["## 方針"],
+                    },
+                    {
+                        "id": "looks-like-match-but-field-wins",
+                        "source": "critic_reviewer",
+                        "timelineStep": "decide_patch_strategy",
+                        "title": "採用レビュー",
+                        "summary": "finding-1 のみ採用",
+                        "evidence": ["approvedFindingIds: finding-1"],
+                    },
+                    {
+                        "id": "finalizer-note",
+                        "source": "finalizer",
+                        "timelineStep": "decide_patch_strategy",
+                        "title": "最終化",
+                        "summary": "未承認所見は採用しない",
+                        "evidence": [],
+                    },
+                ],
             }
         return {
             "patchedMarkdown": "# After\n",
@@ -266,6 +292,16 @@ def test_run_analysis_persists_patch_and_latest_state() -> None:
         "設問品質: 設問は根拠提示を求めている",
         "つまずきパターン: 根拠への言及が抜けている",
     ]
+    assert saved_drill.analysis_timeline[2].evidence == [
+        "根拠レビュー: 教材根拠と採点根拠が一致 (## 方針)",
+        "## 方針",
+    ]
+    assert saved_drill.analysis_timeline[3].evidence == [
+        "採用レビュー: finding-1 のみ採用 (approvedFindingIds: finding-1)",
+        "最終化: 未承認所見は採用しない",
+        "例を追記",
+    ]
+    assert saved_patch.analysis_timeline == saved_drill.analysis_timeline
 
 
 def test_run_analysis_saves_intermediate_timeline_before_agent_calls() -> None:

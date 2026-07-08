@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -155,9 +156,51 @@ class AnalysisPerspective(AgentModel):
     summary: str
 
 
+class AnalysisReviewNote(AgentModel):
+    id: str
+    source: Literal["evidence_critic", "critic_reviewer", "finalizer"]
+    timeline_step: Literal[
+        "detect_failure_patterns",
+        "match_course_evidence",
+        "decide_patch_strategy",
+    ]
+    title: str
+    summary: str
+    evidence: list[str] = Field(default_factory=list)
+
+
 class FailureAnalysisOutput(AgentModel):
     failure_signals: list[FailureSignal] = Field(min_length=1)
     perspectives: list[AnalysisPerspective] = Field(default_factory=list)
+    review_notes: list[AnalysisReviewNote] = Field(default_factory=list)
+
+
+class ReviewedFinding(AgentModel):
+    finding_id: str
+    source: Literal[
+        "misconception_analyst",
+        "document_gap_analyst",
+        "question_quality_analyst",
+    ]
+    summary: str
+    rationale: str
+    evidence: list[str] = Field(default_factory=list)
+
+
+class EvidenceReviewOutput(AgentModel):
+    accepted_findings: list[ReviewedFinding] = Field(default_factory=list)
+    rejected_findings: list[ReviewedFinding] = Field(default_factory=list)
+    finalizer_guidance: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    revision_notes: list[str] = Field(default_factory=list)
+
+
+class CriticReviewOutput(AgentModel):
+    verdict: Literal["approved", "needs_revision"]
+    issues: list[str] = Field(default_factory=list)
+    revision_instructions: list[str] = Field(default_factory=list)
+    approved_finding_ids: list[str] = Field(default_factory=list)
+    risk_notes: list[str] = Field(default_factory=list)
 
 
 class DocumentPatchInput(AgentModel):

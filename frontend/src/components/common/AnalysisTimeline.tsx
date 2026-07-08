@@ -35,7 +35,6 @@ export function AnalysisTimeline({ title, items }: AnalysisTimelineProps) {
       <ol className="analysis-timeline__list">
         {items.map((item) => {
           const status = STATUS_META[item.status]
-          const evidence = item.evidence.slice(0, 3)
 
           return (
             <li key={item.id} className="analysis-timeline__item">
@@ -44,9 +43,9 @@ export function AnalysisTimeline({ title, items }: AnalysisTimelineProps) {
                 <h3>{item.title}</h3>
               </div>
               {item.summary ? <p className="analysis-timeline__summary">{item.summary}</p> : null}
-              {evidence.length > 0 ? (
+              {item.evidence.length > 0 ? (
                 <ul className="analysis-timeline__evidence">
-                  {evidence.map((entry, index) => (
+                  {item.evidence.map((entry, index) => (
                     <li key={`${item.id}-${index}`}>{entry}</li>
                   ))}
                 </ul>

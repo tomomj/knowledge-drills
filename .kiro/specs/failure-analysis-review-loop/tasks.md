@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- [ ] 1. Agent 契約と review loop workflow を追加する
-- [ ] 1.1 agent schema に review note と中間レビュー出力を追加する
+- [x] 1. Agent 契約と review loop workflow を追加する
+- [x] 1.1 agent schema に review note と中間レビュー出力を追加する
   - `FailureAnalysisOutput` に optional `reviewNotes` を追加する
   - `reviewNotes` は `id`、`source`、`timelineStep`、`title`、`summary`、`evidence` を持つ
   - `EvidenceReviewOutput` は `acceptedFindings`、`rejectedFindings`、`finalizerGuidance`、`risks`、`revisionNotes` を持つ
@@ -9,7 +9,7 @@
   - 既存 `failureSignals` / `perspectives` の契約を維持し、旧 sample が schema-valid であることを確認する
   - _Requirements: 1.2, 1.3, 1.8, 1.9, 2.1, 2.2, 2.3, 2.4, 2.6, 2.7_
   - _Boundary: agent schemas_
-- [ ] 1.2 (P) critic / reviewer / finalizer prompt を作る
+- [x] 1.2 (P) critic / reviewer / finalizer prompt を作る
   - `evidence_critic` は analyst outputs を採用・棄却・risk・finalizer guidance に評価する
   - `critic_reviewer` は evidence review の妥当性だけをレビューし、`verdict=approved` なら `exit_loop` を呼ぶ
   - `critic_reviewer` は finalizer が採用してよい finding を `approvedFindingIds` に明示する
@@ -18,7 +18,7 @@
   - prompt に Chain-of-thought や内部推論文を出力しない制約を明記する
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.7, 1.8, 1.9, 2.5_
   - _Boundary: agent prompts_
-- [ ] 1.3 review loop 付き composed agent を実装する
+- [x] 1.3 review loop 付き composed agent を実装する
   - `analyst_parallel` の output_key を `misconception_findings` / `doc_gap_findings` / `question_quality_findings` に整理する
   - `LoopAgent(max_iterations=3)` に `evidence_critic` と `critic_reviewer` を配置する
   - `critic_reviewer` に `exit_loop` tool を持たせる
@@ -27,7 +27,7 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 5.1_
   - _Boundary: agent.py_
   - _Depends: 1.1, 1.2_
-- [ ] 1.4 agent sample / contract tests / eval assets を更新する
+- [x] 1.4 agent sample / contract tests / eval assets を更新する
   - sample output に `reviewNotes` を追加する
   - workflow 構造、output_key、LoopAgent、finalizer output_schema、中間出力 schema、`approvedFindingIds`、max iteration 到達時の partial/fail policy を contract test で確認する
   - eval asset が optional `reviewNotes` 追加後も credential-free test を通ることを確認する
@@ -35,15 +35,15 @@
   - _Boundary: agent tests, eval assets_
   - _Depends: 1.3_
 
-- [ ] 2. Backend 契約と timeline mapping を追加する
-- [ ] 2.1 backend schema に optional `reviewNotes` を追加する
+- [x] 2. Backend 契約と timeline mapping を追加する
+- [x] 2.1 backend schema に optional `reviewNotes` を追加する
   - `FailureAnalysisResponse` に `review_notes` default empty list を追加する
   - `AnalysisReviewNote` に `source` と `timeline_step` enum を追加し、id 文字列に依存しない contract にする
   - camelCase alias と既存応答の後方互換を schema test で確認する
   - agent sample output を backend contract test で validate する
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6, 2.7_
   - _Boundary: backend schemas_
-- [ ] 2.2 review notes を既存 timeline step に反映する
+- [x] 2.2 review notes を既存 timeline step に反映する
   - `perspectives` は `detect_failure_patterns` step の evidence として維持する
   - review note は `timelineStep` の値だけで対象 step に反映し、`id` の文字列内容は使わない
   - review note 由来 evidence を既存 evidence より前に置き、重複排除後に最大 3 件へ制限する
@@ -52,7 +52,7 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.7, 3.8_
   - _Boundary: AnalysisService_
   - _Depends: 2.1_
-- [ ] 2.3 local mode の smoke 用応答にも review notes を入れる
+- [x] 2.3 local mode の smoke 用応答にも review notes を入れる
   - `LocalAgentInvoker` の failure analysis response に最小の `reviewNotes` を追加する
   - local server 起動でも UI 上で review 結果を確認できる
   - 受講者向け API に timeline / review note が出ないことを既存 integration test で確認する
@@ -60,14 +60,14 @@
   - _Boundary: LocalAgentInvoker, backend tests_
   - _Depends: 2.1_
 
-- [ ] 3. Frontend 表示を既存 timeline で確認する
-- [ ] 3.1 AnalysisTimeline の review evidence 表示テストを追加する
+- [x] 3. Frontend 表示を既存 timeline で確認する
+- [x] 3.1 AnalysisTimeline の review evidence 表示テストを追加する
   - review note 由来の evidence を含む timeline item が表示されることを確認する
   - 表示件数制御は backend 側で最大 3 件に正規化される前提とし、component は受け取った evidence を表示する
   - component から api client を import しない構造を維持する
   - _Requirements: 4.1, 4.2, 4.3, 4.4_
   - _Boundary: AnalysisTimeline component_
-- [ ] 3.2 Drill Admin / Patch Review の page test を必要最小限で更新する
+- [x] 3.2 Drill Admin / Patch Review の page test を必要最小限で更新する
   - Drill Admin polling 中に review 結果を含む timeline を表示できることを確認する
   - Patch Review で patch summary と failure signals の間に timeline が表示されることを確認する
   - 専用 workflow viewer を追加しない
@@ -76,12 +76,12 @@
   - _Depends: 3.1_
 
 - [ ] 4. 統合検証と server smoke
-- [ ] 4.1 ADK timeout budget を確認する
+- [x] 4.1 ADK timeout budget を確認する
   - backend local default は `KNOWLEDGE_DRILLS_AGENT_TIMEOUT_SECONDS=60`、production Terraform は `backend_agent_timeout_seconds = "120"` であることを前提として記録する
   - review loop の local/adk smoke で分析所要時間を計測する
   - 既存値で不足する場合は、手動 smoke 用 env だけ上げるのか、`terraform/locals.tf` の production timeout も変更するのかを明示する
   - _Requirements: 5.6_
-- [ ] 4.2 test suite を実行する
+- [x] 4.2 test suite を実行する
   - agent: `uv run --native-tls --frozen pytest`
   - backend: `uv run --native-tls --frozen pytest`
   - frontend: typecheck / lint / test の既存 script を実行する
@@ -94,3 +94,9 @@
   - server URL、確認手順、観測結果、分析所要時間、使用した `KNOWLEDGE_DRILLS_AGENT_TIMEOUT_SECONDS` を記録する
   - _Requirements: 4.1, 4.2, 4.5, 5.5, 5.6_
   - _Depends: 1.4, 2.3, 3.2, 4.1, 4.2_
+  - _Blocked: この実行環境では backend / frontend ともに localhost listen が EPERM で拒否されたため、server URL を持つ手動 smoke は未実行。FastAPI TestClient による同一 API flow の代替 smoke は Implementation Notes に記録済み。_
+
+## Implementation Notes
+
+- 2026-07-08: backend local default は `KNOWLEDGE_DRILLS_AGENT_TIMEOUT_SECONDS=60`、Terraform production は `backend_agent_timeout_seconds = "120"` であることを確認した。local mode TestClient smoke は 0.025 秒で完了した。実 ADK latency は credentials と server listen 制約のため未計測。
+- 2026-07-08: `uvicorn` は `127.0.0.1:8000` / `127.0.0.1:8080`、Vite は `127.0.0.1:5173` の listen が昇格後も EPERM で失敗した。代替として TestClient で講座作成、ドリル生成、回答、分析、patch 取得まで実行し、review evidence が `DrillRun.analysisTimeline` と `DocumentPatch.analysisTimeline` に保存され、受講者向け API には `analysisTimeline` が含まれないことを確認した。

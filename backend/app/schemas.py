@@ -79,6 +79,18 @@ class AnalysisStepStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+class AnalysisReviewSource(StrEnum):
+    EVIDENCE_CRITIC = "evidence_critic"
+    CRITIC_REVIEWER = "critic_reviewer"
+    FINALIZER = "finalizer"
+
+
+class AnalysisReviewTimelineStep(StrEnum):
+    DETECT_FAILURE_PATTERNS = "detect_failure_patterns"
+    MATCH_COURSE_EVIDENCE = "match_course_evidence"
+    DECIDE_PATCH_STRATEGY = "decide_patch_strategy"
+
+
 class Course(ApiModel):
     id: str
     owner_user_id: str | None = None
@@ -319,6 +331,15 @@ class AnalysisPerspective(ApiModel):
     summary: str
 
 
+class AnalysisReviewNote(ApiModel):
+    id: str
+    source: AnalysisReviewSource
+    timeline_step: AnalysisReviewTimelineStep
+    title: str
+    summary: str
+    evidence: list[str] = Field(default_factory=list)
+
+
 class DocumentPatch(ApiModel):
     id: str
     course_id: str
@@ -475,6 +496,7 @@ class FailureAnalysisRequest(ApiModel):
 class FailureAnalysisResponse(ApiModel):
     failure_signals: list[FailureSignal]
     perspectives: list[AnalysisPerspective] = Field(default_factory=list)
+    review_notes: list[AnalysisReviewNote] = Field(default_factory=list)
 
 
 class DocumentPatchRequest(ApiModel):

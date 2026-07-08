@@ -11,6 +11,7 @@ from app.repositories.repositories import (
     PatchRepository,
 )
 from app.schemas import (
+    AnalysisReviewTimelineStep,
     AnalysisStepStatus,
     AnalysisTimelineItem,
     AnswerStatus,
@@ -250,7 +251,13 @@ class AnalysisService:
             "match_course_evidence",
             AnalysisStepStatus.COMPLETED,
             summary=f"対象セクション {len(target_sections)} 件を照合しました",
-            evidence=target_sections[:3],
+            evidence=_merge_timeline_evidence(
+                _review_note_evidence(
+                    failure_analysis,
+                    AnalysisReviewTimelineStep.MATCH_COURSE_EVIDENCE,
+                ),
+                target_sections,
+            ),
         )
 
         recommended_changes = _unique_strings(
@@ -261,7 +268,13 @@ class AnalysisService:
             "decide_patch_strategy",
             AnalysisStepStatus.COMPLETED,
             summary="教材修正方針を選定しました",
-            evidence=recommended_changes[:3],
+            evidence=_merge_timeline_evidence(
+                _review_note_evidence(
+                    failure_analysis,
+                    AnalysisReviewTimelineStep.DECIDE_PATCH_STRATEGY,
+                ),
+                recommended_changes,
+            ),
         )
 
         drill_run = self._update_timeline(
@@ -406,9 +419,48 @@ def _failure_pattern_evidence(failure_analysis: FailureAnalysisResponse) -> list
         perspective_evidence.append(f"{title}: {summary}")
         if len(perspective_evidence) == 3:
             break
-    if perspective_evidence:
-        return perspective_evidence
-    return [signal.title for signal in failure_analysis.failure_signals[:3]]
+    existing_evidence = (
+        perspective_evidence
+        if perspective_evidence
+        else [signal.title for signal in failure_analysis.failure_signals]
+    )
+    return _merge_timeline_evidence(
+        _review_note_evidence(
+            failure_analysis,
+            AnalysisReviewTimelineStep.DETECT_FAILURE_PATTERNS,
+        ),
+        existing_evidence,
+    )
+
+
+def _review_note_evidence(
+    failure_analysis: FailureAnalysisResponse,
+    timeline_step: AnalysisReviewTimelineStep,
+) -> list[str]:
+    evidence: list[str] = []
+    for note in failure_analysis.review_notes:
+        if note.timeline_step != timeline_step:
+            continue
+        title = " ".join((note.title or note.id).split())
+        summary = " ".join(note.summary.split())
+        if not title or not summary:
+            continue
+        first_evidence = next(
+            (" ".join(item.split()) for item in note.evidence if item.strip()),
+            "",
+        )
+        formatted = f"{title}: {summary}"
+        if first_evidence:
+            formatted = f"{formatted} ({first_evidence})"
+        evidence.append(formatted)
+    return evidence
+
+
+def _merge_timeline_evidence(
+    review_evidence: Iterable[str],
+    existing_evidence: Iterable[str],
+) -> list[str]:
+    return _unique_strings([*review_evidence, *existing_evidence])[:3]
 
 
 def _utc_now() -> str:

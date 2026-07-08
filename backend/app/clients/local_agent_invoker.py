@@ -43,7 +43,25 @@ class LocalAgentInvoker:
                         "sampleSize": 1,
                         "confidenceNote": "少数回答の傾向です。",
                     }
-                ]
+                ],
+                "reviewNotes": [
+                    {
+                        "id": "local-evidence-review",
+                        "source": "evidence_critic",
+                        "timelineStep": "match_course_evidence",
+                        "title": "根拠照合",
+                        "summary": "例外条件の不足を教材の判断基準と照合しました",
+                        "evidence": ["## 判断基準"],
+                    },
+                    {
+                        "id": "local-critic-review",
+                        "source": "critic_reviewer",
+                        "timelineStep": "decide_patch_strategy",
+                        "title": "採用レビュー",
+                        "summary": "承認済み所見のみを修正案に使います",
+                        "evidence": ["approvedFindingIds: doc-gap-1"],
+                    },
+                ],
             }
         if task_name == "propose_document_patch":
             base_markdown = cast(str, payload["courseMarkdown"])
