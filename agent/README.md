@@ -137,9 +137,9 @@ backend と講座オーナーが決める。
 
 ```sh
 cd agent
-uv run --frozen pytest
-uv run --frozen ruff check .
-uv run --frozen mypy .
+uv run --native-tls --frozen pytest
+uv run --native-tls --frozen ruff check .
+uv run --native-tls --frozen mypy .
 ```
 
 実モデル eval:

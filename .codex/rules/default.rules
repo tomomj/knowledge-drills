@@ -5,24 +5,12 @@
 prefix_rule(
     pattern = ["uv", "run"],
     decision = "allow",
-    justification = "Routine Python checks and dev servers for this repository use uv run.",
+    justification = "Routine Python checks and dev servers for this repository use uv run, normally with --native-tls.",
     match = [
-        "uv run --frozen pytest",
-        "uv run --frozen ruff check .",
-        "uv run --frozen mypy .",
-        "uv run --frozen uvicorn app.main:app --host 127.0.0.1 --port 8000",
-    ],
-)
-
-prefix_rule(
-    pattern = ["UV_NATIVE_TLS=true", "uv", "run"],
-    decision = "allow",
-    justification = "Routine uv run commands in this repository may set UV_NATIVE_TLS for local TLS compatibility.",
-    match = [
-        "UV_NATIVE_TLS=true uv run --frozen pytest",
-        "UV_NATIVE_TLS=true uv run --frozen ruff check .",
-        "UV_NATIVE_TLS=true uv run --frozen mypy .",
-        "UV_NATIVE_TLS=true uv run --frozen uvicorn app.main:app --host 127.0.0.1 --port 8000",
+        "uv run --native-tls --frozen pytest",
+        "uv run --native-tls --frozen ruff check .",
+        "uv run --native-tls --frozen mypy .",
+        "uv run --native-tls --frozen uvicorn app.main:app --host 127.0.0.1 --port 8000",
     ],
 )
 
