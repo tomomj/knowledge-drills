@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiClientError } from '../api/client'
-import type { LearnerDrill } from '../api/types'
+import type { LearnerDrill, SubmitAnswerResponse } from '../api/types'
 import { LearnerDrillPage } from './LearnerDrillPage'
 
 const learnerDrill: LearnerDrill = {
@@ -124,5 +124,37 @@ describe('LearnerDrillPage', () => {
     await waitFor(() => expect(screen.getByText('提出が完了しました。')).toBeTruthy())
     expect(screen.getByText('根拠が明確です。')).toBeTruthy()
     expect(screen.queryByText('idealAnswer')).toBeNull()
+  })
+
+  it('hides the submit button and locks fields while submission is pending', async () => {
+    const user = userEvent.setup()
+    let resolveSubmit: (value: SubmitAnswerResponse) => void = () => {}
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+    mocks.submitAnswer.mockReturnValueOnce(
+      new Promise<SubmitAnswerResponse>((resolve) => {
+        resolveSubmit = resolve
+      }),
+    )
+
+    renderLearner()
+
+    await screen.findByLabelText(/判断理由を書いてください。/)
+    await user.type(screen.getByLabelText('お名前'), '受講者A')
+    await user.type(screen.getByLabelText(/判断理由を書いてください。/), '根拠です')
+    await user.type(screen.getByLabelText(/例外条件を書いてください。/), '例外です')
+    await user.type(screen.getByLabelText(/次の対応を書いてください。/), '対応です')
+    await user.click(screen.getByRole('button', { name: '回答を提出する' }))
+
+    expect(mocks.submitAnswer).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('button', { name: '回答を提出する' })).toBeNull()
+    expect(screen.getByText('回答を提出しています。')).toBeTruthy()
+    expect((screen.getByLabelText('お名前') as HTMLInputElement).disabled).toBe(true)
+
+    resolveSubmit({
+      answerId: 'answer-1',
+      status: 'graded',
+      feedback: ['受付しました。'],
+    })
+    await waitFor(() => expect(screen.getByText('提出が完了しました。')).toBeTruthy())
   })
 })

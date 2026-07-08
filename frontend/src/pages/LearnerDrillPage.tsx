@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { api, ApiClientError } from '../api/client'
@@ -8,7 +8,8 @@ import { StatusBanner } from '../components/common/StatusBanner'
 
 type PageState =
   | { status: 'loading' }
-  | { status: 'ready'; drill: LearnerDrill }
+  | { status: 'ready'; drill: LearnerDrill; submitError?: string }
+  | { status: 'submitting'; drill: LearnerDrill }
   | { status: 'submitted'; result: SubmitAnswerResponse }
   | { status: 'invalidToken'; message: string }
   | { status: 'failed'; message: string }
@@ -18,6 +19,7 @@ export function LearnerDrillPage() {
   const [state, setState] = useState<PageState>({ status: 'loading' })
   const [learnerName, setLearnerName] = useState('')
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  const submittingRef = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -50,11 +52,16 @@ export function LearnerDrillPage() {
   }, [shareToken])
 
   async function submit(drill: LearnerDrill) {
-    const validation = validateSubmission(learnerName, answers, drill)
-    if (validation) {
-      setState({ status: 'failed', message: validation })
+    if (submittingRef.current) {
       return
     }
+    const validation = validateSubmission(learnerName, answers, drill)
+    if (validation) {
+      setState({ status: 'ready', drill, submitError: validation })
+      return
+    }
+    submittingRef.current = true
+    setState({ status: 'submitting', drill })
     try {
       const result = await api.submitAnswer(shareToken ?? '', {
         learnerName,
@@ -65,7 +72,9 @@ export function LearnerDrillPage() {
       })
       setState({ status: 'submitted', result })
     } catch (error) {
-      setState({ status: 'failed', message: submitErrorMessage(error) })
+      setState({ status: 'ready', drill, submitError: submitErrorMessage(error) })
+    } finally {
+      submittingRef.current = false
     }
   }
 
@@ -106,7 +115,9 @@ export function LearnerDrillPage() {
     )
   }
 
-  const drill = state.status === 'ready' ? state.drill : null
+  const drill = state.status === 'ready' || state.status === 'submitting' ? state.drill : null
+  const isSubmitting = state.status === 'submitting'
+  const submitError = state.status === 'ready' ? state.submitError : null
   const answeredCount = drill
     ? drill.questions.filter((question) => answers[question.id]?.trim()).length
     : 0
@@ -124,6 +135,7 @@ export function LearnerDrillPage() {
         {state.status === 'failed' ? (
           <StatusBanner tone="error">{state.message}</StatusBanner>
         ) : null}
+        {submitError ? <StatusBanner tone="error">{submitError}</StatusBanner> : null}
 
         {drill ? (
           <>
@@ -145,6 +157,7 @@ export function LearnerDrillPage() {
                   <span className="field__label">お名前</span>
                   <input
                     value={learnerName}
+                    disabled={isSubmitting}
                     onChange={(event) => setLearnerName(event.target.value)}
                   />
                 </label>
@@ -166,6 +179,7 @@ export function LearnerDrillPage() {
                         rows={3}
                         placeholder="回答を入力…"
                         value={answers[question.id] ?? ''}
+                        disabled={isSubmitting}
                         onChange={(event) =>
                           setAnswers((current) => ({
                             ...current,
@@ -180,14 +194,20 @@ export function LearnerDrillPage() {
             </section>
 
             <div className="submit-row">
-              <span className="submit-row__note">すべての設問への回答が必要です</span>
-              <button
-                type="button"
-                className="btn btn--primary btn--lg"
-                onClick={() => void submit(drill)}
-              >
-                回答を提出する
-              </button>
+              <span className="submit-row__note">
+                {isSubmitting ? '提出完了までこの画面でお待ちください' : 'すべての設問への回答が必要です'}
+              </span>
+              {isSubmitting ? (
+                <StatusBanner tone="info">回答を提出しています。</StatusBanner>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn--primary btn--lg"
+                  onClick={() => void submit(drill)}
+                >
+                  回答を提出する
+                </button>
+              )}
             </div>
           </>
         ) : null}
