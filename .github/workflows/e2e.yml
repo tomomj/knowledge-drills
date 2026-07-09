@@ -1,0 +1,83 @@
+name: E2E
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "backend/**"
+      - ".github/workflows/e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        # v8 系はメジャーエイリアスタグが無いためパッチまで固定する
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # ux-audit.spec はデモシード(講座 0 件のオーナー)前提、knowledge-drill.spec は
+      # 講座を作成するため、in-memory backend を共有すると干渉する。
+      # ポートを分けて別インスタンスで順に実行する(実 LLM の llm-agent.spec は
+      # E2E_LLM=1 のときだけ動く opt-in なので CI では自動 skip)。
+      - name: Run demo loop E2E
+        run: npx playwright test e2e/ux-audit.spec.ts
+        env:
+          E2E_BACKEND_PORT: "8101"
+          E2E_FRONTEND_PORT: "5273"
+
+      - name: Run knowledge drill E2E
+        run: npx playwright test e2e/knowledge-drill.spec.ts
+        env:
+          E2E_BACKEND_PORT: "8102"
+          E2E_FRONTEND_PORT: "5274"
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: frontend/test-results/
+          retention-days: 7
