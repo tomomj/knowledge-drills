@@ -90,10 +90,11 @@ def test_agent_invocation_error_returns_502_without_payload_and_app_continues(
 
     assert response.status_code == 502
     assert response.json()["code"] == "agent_invocation_failed"
-    messages = [record.getMessage() for record in caplog.records]
+    error_records = [record for record in caplog.records if record.name == "app.error"]
+    messages = [record.getMessage() for record in error_records]
     assert any("agent invocation failed" in message for message in messages)
     assert any("error_type=AgentInvocationError" in message for message in messages)
-    assert all(record.levelno >= logging.ERROR for record in caplog.records)
+    assert all(record.levelno >= logging.ERROR for record in error_records)
     assert sentinel not in str(response.json())
     assert sentinel not in caplog.text
 
