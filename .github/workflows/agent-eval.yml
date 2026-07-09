@@ -1,6 +1,12 @@
 name: Agent Eval
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "agent/**"
+      - ".github/workflows/agent-eval.yml"
   pull_request:
     paths:
       - "agent/**"
@@ -43,11 +49,11 @@ jobs:
       should_run_eval: ${{ steps.manual.outputs.should_run_eval || steps.prerequisites.outputs.should_run_eval }}
 
     steps:
-      - name: Skip prerequisite wait for manual runs
+      - name: Skip prerequisite wait for non-PR runs
         id: manual
         if: github.event_name != 'pull_request'
         run: |
-          echo "workflow_dispatch runs execute eval directly."
+          echo "push / workflow_dispatch runs execute eval directly."
           echo "should_run_eval=true" >> "$GITHUB_OUTPUT"
 
       - name: Wait for Backend and Frontend CI
