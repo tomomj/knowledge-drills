@@ -36,6 +36,7 @@ locals {
   backend_agent_trace_service_name = "${local.project_name}-${local.environment}-backend"
   backend_agent_trace_resource_attributes = join(",", [
     "deployment.environment=${local.environment}",
+    "gcp.project_id=${local.project_id}",
     "service.namespace=${local.project_name}",
   ])
   backend_vertex_location = "global"
@@ -63,5 +64,6 @@ locals {
     "run.googleapis.com",
     "serviceusage.googleapis.com",
     "sts.googleapis.com",
+    "telemetry.googleapis.com",
   ])
 }
