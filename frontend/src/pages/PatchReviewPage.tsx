@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, ApiClientError } from '../api/client'
 import type { DocumentPatch, FailureSignal, PatchStatus } from '../api/types'
@@ -177,9 +177,14 @@ export function PatchReviewPage() {
                 evidenceDisplay="collapsed"
               />
 
-              {patch.failureSignals.map((signal) => (
-                <FailureSignalItem key={signal.id} signal={signal} />
-              ))}
+              {patch.failureSignals.length > 0 ? (
+                <section className="signal-group" aria-labelledby="failure-signals-title">
+                  <h2 id="failure-signals-title">検出されたつまずき</h2>
+                  {patch.failureSignals.map((signal) => (
+                    <FailureSignalItem key={signal.id} signal={signal} />
+                  ))}
+                </section>
+              ) : null}
 
               {patch.riskNotes.length > 0 ? (
                 <section className="risk-notes" aria-labelledby="risk-notes-title">
@@ -228,10 +233,24 @@ function PatchStatusBanner({ patch }: { patch: DocumentPatch }) {
     return <StatusBanner tone="warning">このパッチは古くなっています。再分析が必要です。</StatusBanner>
   }
   if (patch.status === 'applied') {
-    return <StatusBanner tone="success">パッチを適用しました。</StatusBanner>
+    return (
+      <StatusBanner tone="success">
+        パッチを適用しました。教材は新しいバージョンに更新されています。{' '}
+        <Link className="side-link" to={`/courses/${patch.courseId}`}>
+          講座管理でスコアの推移を確認 →
+        </Link>
+      </StatusBanner>
+    )
   }
   if (patch.status === 'rejected') {
-    return <StatusBanner tone="info">パッチを却下しました。</StatusBanner>
+    return (
+      <StatusBanner tone="info">
+        パッチを却下しました。却下理由は次回の分析で考慮されます。{' '}
+        <Link className="side-link" to={`/courses/${patch.courseId}/drill-runs/${patch.drillRunId}`}>
+          ドリル確認へ戻る →
+        </Link>
+      </StatusBanner>
+    )
   }
   return null
 }
@@ -246,7 +265,7 @@ function FailureSignalItem({ signal }: { signal: FailureSignal }) {
   return (
     <article className={`card signal signal--${signal.severity}`}>
       <div className="signal__head">
-        <h2>{signal.title}</h2>
+        <h3>{signal.title}</h3>
         <span className={`chip chip--${severity.tone}`}>{severity.label}</span>
       </div>
       <p className="signal__meta">
