@@ -1,0 +1,202 @@
+name: E2E
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "backend/**"
+      - ".github/workflows/e2e.yml"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # CI (lint / typecheck / unit test) が通ってから E2E を実行する。
+  # CI が落ちた PR では E2E のセットアップ(ブラウザ install 等)を走らせない。
+  wait-for-prerequisite-ci:
+    name: Wait for prerequisite CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Skip prerequisite wait for manual runs
+        if: github.event_name != 'pull_request'
+        run: echo "workflow_dispatch runs execute e2e directly."
+
+      - name: Wait for Backend and Frontend CI
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+            const sha = context.payload.pull_request.head.sha;
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number,
+              per_page: 100,
+            });
+            const paths = files.map((file) => file.filename);
+
+            const requiresBackendCi = paths.some(
+              (path) =>
+                path.startsWith("backend/") ||
+                path === ".github/workflows/backend-ci.yml",
+            );
+            const requiresFrontendCi = paths.some(
+              (path) =>
+                path.startsWith("frontend/") ||
+                path === ".github/workflows/frontend-ci.yml",
+            );
+
+            const requiredChecks = [];
+            if (requiresBackendCi) {
+              requiredChecks.push("Backend");
+            }
+            if (requiresFrontendCi) {
+              requiredChecks.push("Frontend");
+            }
+
+            if (requiredChecks.length === 0) {
+              core.info("No prerequisite CI checks are expected for this pull request.");
+              return;
+            }
+
+            const deadline = Date.now() + 25 * 60 * 1000;
+            while (Date.now() < deadline) {
+              const { data } = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: sha,
+                per_page: 100,
+              });
+              const checkRuns = data.check_runs;
+
+              const latestByName = new Map();
+              for (const run of checkRuns) {
+                if (!requiredChecks.includes(run.name)) {
+                  continue;
+                }
+                const current = latestByName.get(run.name);
+                const runStartedAt = new Date(run.started_at || run.created_at);
+                const currentStartedAt = current
+                  ? new Date(current.started_at || current.created_at)
+                  : null;
+                if (!current || runStartedAt > currentStartedAt) {
+                  latestByName.set(run.name, run);
+                }
+              }
+
+              const missing = requiredChecks.filter((name) => !latestByName.has(name));
+              const pending = [];
+              for (const name of requiredChecks) {
+                const run = latestByName.get(name);
+                if (!run) {
+                  continue;
+                }
+                if (run.status !== "completed") {
+                  pending.push(`${name}: ${run.status}`);
+                  continue;
+                }
+                if (run.conclusion !== "success") {
+                  core.setFailed(
+                    `${name} prerequisite check finished with ${run.conclusion}; skipping e2e.`,
+                  );
+                  return;
+                }
+              }
+
+              if (missing.length === 0 && pending.length === 0) {
+                core.info(`Prerequisite CI passed: ${requiredChecks.join(", ")}`);
+                return;
+              }
+
+              core.info(
+                `Waiting for prerequisite CI. Missing: ${
+                  missing.join(", ") || "none"
+                }. Pending: ${pending.join(", ") || "none"}.`,
+              );
+              await new Promise((resolve) => setTimeout(resolve, 30_000));
+            }
+
+            core.setFailed(
+              `Timed out waiting for prerequisite CI: ${requiredChecks.join(", ")}`,
+            );
+
+  e2e:
+    name: E2E
+    runs-on: ubuntu-latest
+    needs: wait-for-prerequisite-ci
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        # v8 系はメジャーエイリアスタグが無いためパッチまで固定する
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --frozen
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # ux-audit.spec はデモシード(講座 0 件のオーナー)前提、knowledge-drill.spec は
+      # 講座を作成するため、in-memory backend を共有すると干渉する。
+      # ポートを分けて別インスタンスで順に実行する(実 LLM の llm-agent.spec は
+      # E2E_LLM=1 のときだけ動く opt-in なので CI では自動 skip)。
+      - name: Run demo loop E2E
+        run: npx playwright test e2e/ux-audit.spec.ts
+        env:
+          E2E_BACKEND_PORT: "8101"
+          E2E_FRONTEND_PORT: "5273"
+
+      - name: Run knowledge drill E2E
+        run: npx playwright test e2e/knowledge-drill.spec.ts
+        env:
+          E2E_BACKEND_PORT: "8102"
+          E2E_FRONTEND_PORT: "5274"
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: frontend/test-results/
+          retention-days: 7
