@@ -336,6 +336,7 @@ def _expense_course() -> DemoCourseDefinition:
                     suspected_document_gap="例外時の支払証跡と紛失理由の扱いが不足",
                     target_sections=["例外と期限"],
                     recommended_change="領収書紛失時の代替証跡、申請期限、接待費の追加記録を追記する",
+                    affected_count=6,
                     sample_size=10,
                     confidence_note="v2 の誤答が同じ例外条件に集中している",
                 ),
