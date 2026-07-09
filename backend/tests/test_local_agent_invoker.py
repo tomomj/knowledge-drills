@@ -7,7 +7,11 @@ from app.schemas import (
     AnswerSubmission,
     Course,
     DrillGenerationRequest,
+    DrillQuestion,
     FailureAnalysisRequest,
+    GradingRequest,
+    RubricItem,
+    SourceEvidence,
 )
 from app.services.drill_service import DrillService
 from app.services.share_token_service import ShareTokenService
@@ -75,6 +79,53 @@ def test_local_generate_drill_passes_backend_evidence_validation() -> None:
         for question in drill_run.questions
         for evidence in question.source_evidence
     )
+
+
+def test_local_grade_answer_respects_request_max_score() -> None:
+    client = AgentRuntimeClient(invoker=LocalAgentInvoker())
+
+    response = client.grade_answer(
+        GradingRequest(
+            question=DrillQuestion(
+                id="q1",
+                question="設問",
+                intent="意図",
+                rubric=[RubricItem(criterion="根拠", points=1, required=True)],
+                ideal_answer="模範解答",
+                source_evidence=[SourceEvidence(section_heading="本文", excerpt="根拠")],
+                max_score=1,
+            ),
+            learner_answer="回答",
+        )
+    )
+
+    assert response.max_score == 1
+    assert 0 <= response.score <= 1
+
+
+def test_local_analyze_failures_derives_sample_size_from_answers() -> None:
+    client = AgentRuntimeClient(invoker=LocalAgentInvoker())
+
+    response = client.analyze_failures(
+        FailureAnalysisRequest(
+            course_markdown="# 判断基準",
+            questions=[],
+            answers=[
+                AnswerSubmission(
+                    id=f"answer-{index}",
+                    drill_run_id="drill-1",
+                    learner_name=f"受講者{index}",
+                    status=AnswerStatus.GRADED,
+                    answers={"q1": "回答"},
+                )
+                for index in range(4)
+            ],
+            grading_results=[],
+        )
+    )
+
+    assert all(signal.sample_size == 4 for signal in response.failure_signals)
+    assert all(signal.affected_count <= 4 for signal in response.failure_signals)
 
 
 def test_local_analyze_failures_includes_review_notes_for_smoke() -> None:

@@ -184,7 +184,7 @@ describe('CourseEditorPage', () => {
 
     await screen.findByText('スコアの推移')
     const metricsCard = screen.getByLabelText('改善メトリクス')
-    expect(within(metricsCard).getByRole('img', { name: 'バージョンごとのスコア率の推移' })).toBeTruthy()
+    expect(within(metricsCard).getByRole('img', { name: 'バージョンごとの平均点の推移' })).toBeTruthy()
     expect(within(metricsCard).getByText('v1')).toBeTruthy()
     expect(within(metricsCard).getByText('v2')).toBeTruthy()
     expect(within(metricsCard).getByText('v3')).toBeTruthy()
@@ -192,9 +192,11 @@ describe('CourseEditorPage', () => {
     expect(within(metricsCard).getByText('3.0 / 4 点')).toBeTruthy()
     expect(within(metricsCard).getByText('3.0 / 5 点')).toBeTruthy()
     expect(within(metricsCard).getByText('回答 3 件')).toBeTruthy()
-    expect(within(metricsCard).getByText('+25.0 pp')).toBeTruthy()
-    expect(within(metricsCard).getByText('-15.0 pp')).toBeTruthy()
-    expect(within(metricsCard).getByText('+10.0 pp')).toBeTruthy()
+    // 満点が揃っていないため、総計はスコア率で表示する
+    expect(within(metricsCard).getByText('スコア率 50% → 60%')).toBeTruthy()
+    // 満点が同じ隣接バージョン間だけ点数デルタを表示する
+    expect(within(metricsCard).getByText('+1.0 点')).toBeTruthy()
+    expect(within(metricsCard).queryByText(/pp/)).toBeNull()
 
     const cardText = metricsCard.textContent ?? ''
     expect(cardText.indexOf('v1')).toBeLessThan(cardText.indexOf('v2'))
@@ -202,6 +204,50 @@ describe('CourseEditorPage', () => {
     expect(screen.getByRole('link', { name: 'レビュー →' }).getAttribute('href')).toBe(
       '/patches/patch-1',
     )
+  })
+
+  it('collapses middle versions when more than four scored runs exist', async () => {
+    mocks.getCourse.mockResolvedValueOnce({
+      id: 'course-1',
+      title: '講座',
+      markdown: '# Body',
+      drillFocus: null,
+      version: 6,
+      latestDrillRunId: 'drill-6',
+      latestPatchId: null,
+    })
+    mocks.getCourseMetrics.mockResolvedValueOnce({
+      courseId: 'course-1',
+      runs: [1, 2, 3, 4, 5, 6].map((version) => ({
+        drillRunId: `drill-${version}`,
+        courseVersion: version,
+        answerCount: 4,
+        averageScore: 1.6 + version * 0.4,
+        maxScore: 4,
+      })),
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/courses/course-1']}>
+        <Routes>
+          <Route path="/courses/:courseId" element={<CourseEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('スコアの推移')
+    const metricsCard = screen.getByLabelText('改善メトリクス')
+    expect(within(metricsCard).getByText('平均 2.0 → 4.0 点')).toBeTruthy()
+    expect(within(metricsCard).getByText('v1')).toBeTruthy()
+    expect(within(metricsCard).getByText('v5')).toBeTruthy()
+    expect(within(metricsCard).getByText('v6')).toBeTruthy()
+    expect(within(metricsCard).queryByText('v2')).toBeNull()
+    expect(within(metricsCard).queryByText('v3')).toBeNull()
+    expect(within(metricsCard).queryByText('v4')).toBeNull()
+    expect(within(metricsCard).getByText('… 3 版省略')).toBeTruthy()
+    // 省略をまたぐ v1 → v5 間にはデルタを出さず、隣接する v5 → v6 だけに出す
+    expect(within(metricsCard).getByText('+0.4 点')).toBeTruthy()
+    expect(within(metricsCard).getAllByText(/点$/).length).toBeGreaterThan(0)
   })
 
   it('filters unscored and invalid runs out of score progression', async () => {
@@ -385,7 +431,7 @@ describe('CourseEditorPage', () => {
     await screen.findByText('スコアの推移')
     const metricsCard = screen.getByLabelText('改善メトリクス')
     const totalDelta = metricsCard.querySelector('.card__head .chip')
-    expect(totalDelta?.textContent).toBe('-25.0 pp')
+    expect(totalDelta?.textContent).toBe('平均 3.0 → 2.0 点')
     expect(totalDelta?.className).toContain('chip--warning')
   })
 

@@ -580,6 +580,15 @@
   color: var(--warning);
 }
 
+.metrics-flow__skip {
+  flex: none;
+  align-self: center;
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .next-step {
   padding: 13px 15px;
   border-radius: var(--radius-sm);
@@ -1439,7 +1448,8 @@ a.tag-btn {
   flex-wrap: wrap;
 }
 
-.signal__head h2 {
+.signal__head h2,
+.signal__head h3 {
   margin: 0;
   font-size: 15px;
 }
@@ -1492,6 +1502,18 @@ a.tag-btn {
 }
 
 .risk-notes h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.signal-group {
+  display: grid;
+  gap: 8px;
+  padding: 2px 4px 0;
+}
+
+.signal-group h2 {
   margin: 0;
   font-size: 13px;
   font-weight: 800;
@@ -1577,6 +1599,16 @@ a.tag-btn {
   align-content: start;
   overflow-y: auto;
   max-height: 560px;
+}
+
+.select-list .select-row:first-child {
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+
+.select-list .select-row:last-child {
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
 }
 
 .select-row {

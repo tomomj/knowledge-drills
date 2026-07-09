@@ -338,6 +338,28 @@ describe('DrillAdminPage', () => {
     expect(mocks.getDrill).toHaveBeenCalledTimes(callsAfterFailure)
   })
 
+  it('maps agent invocation failure to a retryable Japanese message', async () => {
+    mocks.analyzeDrill.mockRejectedValueOnce(
+      new mocks.ApiClientError(502, {
+        code: 'agent_invocation_failed',
+        message: 'Agent invocation failed.',
+      }),
+    )
+
+    renderDrillAdmin()
+
+    await screen.findByText('/drills/share-token')
+    fireEvent.click(screen.getByRole('button', { name: '回答を分析する' }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          '分析 Agent の実行に失敗しました。少し待ってからもう一度お試しください。',
+        ),
+      ).toBeTruthy(),
+    )
+  })
+
   it('switches selected answer and filters by learner name', async () => {
     const user = userEvent.setup()
     renderDrillAdmin()

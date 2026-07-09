@@ -569,6 +569,9 @@ function analysisErrorMessage(error: unknown): string {
     if (error.error.code === 'drill_not_analyzable') {
       return 'このドリルは分析できない状態です。'
     }
+    if (error.error.code === 'agent_invocation_failed') {
+      return '分析 Agent の実行に失敗しました。少し待ってからもう一度お試しください。'
+    }
     return error.error.message
   }
   return '分析に失敗しました。再試行してください。'
