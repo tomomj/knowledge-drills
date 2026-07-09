@@ -210,7 +210,11 @@ describe('PatchReviewPage', () => {
     await user.click(screen.getByRole('button', { name: '修正を適用する' }))
 
     expect(mocks.applyPatch).toHaveBeenCalledWith('patch-1', { ownerFeedback: '反映します' })
-    await waitFor(() => expect(screen.getByText('パッチを適用しました。')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/パッチを適用しました。/)).toBeTruthy())
+    const scoreLink = screen.getByRole('link', {
+      name: '講座管理でスコアの推移を確認 →',
+    }) as HTMLAnchorElement
+    expect(scoreLink.getAttribute('href')).toBe('/courses/course-1')
   })
 
   it('rejects patch with owner feedback', async () => {
@@ -229,7 +233,11 @@ describe('PatchReviewPage', () => {
     await user.click(screen.getByRole('button', { name: '却下する' }))
 
     expect(mocks.rejectPatch).toHaveBeenCalledWith('patch-1', { ownerFeedback: '不要です' })
-    await waitFor(() => expect(screen.getByText('パッチを却下しました。')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/パッチを却下しました。/)).toBeTruthy())
+    const drillLink = screen.getByRole('link', {
+      name: 'ドリル確認へ戻る →',
+    }) as HTMLAnchorElement
+    expect(drillLink.getAttribute('href')).toBe('/courses/course-1/drill-runs/drill-1')
   })
 
   it('shows current status when backend returns patch conflict', async () => {
