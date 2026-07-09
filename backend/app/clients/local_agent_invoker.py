@@ -19,10 +19,11 @@ class LocalAgentInvoker:
             }
         if task_name == "grade_answer":
             question = cast(dict[str, object], payload["question"])
+            max_score = int(cast(int, question.get("maxScore", 4)))
             return {
                 "questionId": question["id"],
-                "score": 3,
-                "maxScore": 4,
+                "score": max(0, max_score - 1),
+                "maxScore": max_score,
                 "correctPoints": ["判断理由を示している"],
                 "missingPoints": ["例外条件の説明を補える"],
                 "feedback": "判断理由は示せています。例外条件も添えてください。",
