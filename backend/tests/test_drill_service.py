@@ -1,4 +1,7 @@
+import logging
+
 import pytest
+from _pytest.logging import LogCaptureFixture
 
 from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.repositories.firestore_client import InMemoryFirestoreClient
@@ -173,6 +176,33 @@ def test_generate_drill_marks_run_failed_when_source_evidence_is_not_in_course(
     course = course_repository.get("course-1")
     assert course is not None
     assert course.latest_drill_status == "failed"
+
+
+def test_generate_drill_logs_validation_context_for_invalid_source_evidence(
+    caplog: LogCaptureFixture,
+) -> None:
+    service, _course_repository, _drill_repository = _service(
+        {
+            "questions": [
+                _question_payload("q1", excerpt="## 存在しない方針"),
+                _question_payload("q2"),
+                _question_payload("q3"),
+            ]
+        }
+    )
+
+    with caplog.at_level(logging.WARNING, logger="app.drill"):
+        drill_run = service.generate_drill("course-1", "owner-1")
+
+    assert drill_run.status == "failed"
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "drill generation validation failed course_id=course-1" in message
+        and "question_id=q1" in message
+        and "evidence_index=0" in message
+        and "excerpt_preview=## 存在しない方針" in message
+        for message in messages
+    )
 
 
 def test_generate_drill_marks_run_failed_when_agent_output_is_invalid() -> None:

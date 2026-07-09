@@ -35,7 +35,21 @@ logger = logging.getLogger("app.drill")
 
 
 class DrillGenerationValidationError(ValueError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        question_id: str | None = None,
+        evidence_index: int | None = None,
+        section_heading: str | None = None,
+        excerpt: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.question_id = question_id
+        self.evidence_index = evidence_index
+        self.section_heading_preview = _preview_text(section_heading)
+        self.excerpt_preview = _preview_text(excerpt)
+        self.excerpt_length = len(excerpt) if excerpt is not None else None
 
 
 class DrillService:
@@ -92,11 +106,18 @@ class DrillService:
                 course.markdown,
             )
         except DrillGenerationValidationError as exc:
-            logger.info(
-                "drill generation validation failed course_id=%s drill_run_id=%s reason=%s",
+            logger.warning(
+                "drill generation validation failed course_id=%s drill_run_id=%s reason=%s "
+                "question_id=%s evidence_index=%s section_heading=%s excerpt_preview=%s "
+                "excerpt_length=%s",
                 course.id,
                 saved_drill_run.id,
                 str(exc),
+                exc.question_id,
+                exc.evidence_index,
+                exc.section_heading_preview,
+                exc.excerpt_preview,
+                exc.excerpt_length,
             )
             return self._mark_generation_failed(saved_drill_run, course.id)
         except Exception:
@@ -255,13 +276,24 @@ class DrillService:
         for question in questions:
             rubric_total = sum(item.points for item in question.rubric)
             if rubric_total != question.max_score:
-                raise DrillGenerationValidationError("rubric points must total max_score")
+                raise DrillGenerationValidationError(
+                    "rubric points must total max_score",
+                    question_id=question.id,
+                )
             if not question.source_evidence:
-                raise DrillGenerationValidationError("source evidence is required")
+                raise DrillGenerationValidationError(
+                    "source evidence is required",
+                    question_id=question.id,
+                )
             normalized_evidence: list[SourceEvidence] = []
-            for evidence in question.source_evidence:
+            for evidence_index, evidence in enumerate(question.source_evidence):
                 normalized_evidence.append(
-                    self._normalize_source_evidence(evidence, course_markdown)
+                    self._normalize_source_evidence(
+                        evidence,
+                        course_markdown,
+                        question_id=question.id,
+                        evidence_index=evidence_index,
+                    )
                 )
             normalized_questions.append(
                 question.model_copy(update={"source_evidence": normalized_evidence})
@@ -272,10 +304,19 @@ class DrillService:
         self,
         evidence: SourceEvidence,
         course_markdown: str,
+        *,
+        question_id: str,
+        evidence_index: int,
     ) -> SourceEvidence:
         excerpt = evidence.excerpt.strip()
         if not excerpt:
-            raise DrillGenerationValidationError("source evidence excerpt is required")
+            raise DrillGenerationValidationError(
+                "source evidence excerpt is required",
+                question_id=question_id,
+                evidence_index=evidence_index,
+                section_heading=evidence.section_heading,
+                excerpt=evidence.excerpt,
+            )
 
         normalized_excerpt = _find_course_excerpt(evidence, course_markdown)
         if normalized_excerpt is not None:
@@ -283,7 +324,11 @@ class DrillService:
         if excerpt in course_markdown:
             return evidence.model_copy(update={"excerpt": excerpt})
         raise DrillGenerationValidationError(
-            "source evidence excerpt must match course markdown"
+            "source evidence excerpt must match course markdown",
+            question_id=question_id,
+            evidence_index=evidence_index,
+            section_heading=evidence.section_heading,
+            excerpt=evidence.excerpt,
         )
 
     def _mark_generation_failed(self, drill_run: DrillRun, course_id: str) -> DrillRun:
@@ -369,6 +414,15 @@ def _average(values: Iterable[int]) -> float | None:
     if not materialized:
         return None
     return sum(materialized) / len(materialized)
+
+
+def _preview_text(value: str | None, *, limit: int = 120) -> str | None:
+    if value is None:
+        return None
+    preview = _compact_whitespace(value)
+    if len(preview) <= limit:
+        return preview
+    return f"{preview[: limit - 3]}..."
 
 
 def _find_course_excerpt(evidence: SourceEvidence, course_markdown: str) -> str | None:
