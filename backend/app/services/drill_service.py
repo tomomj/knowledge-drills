@@ -26,6 +26,7 @@ from app.schemas import (
     LearnerDrillQuestionResponse,
     LearnerDrillResponse,
     QuestionScoreSummary,
+    SourceEvidence,
 )
 from app.services.drill_status_policy import is_distributable_drill_status
 from app.services.share_token_service import ShareTokenService
@@ -86,7 +87,10 @@ class DrillService:
                     drill_focus=course.drill_focus,
                 )
             )
-            self._validate_questions(agent_response.questions, course.markdown)
+            questions = self._validate_and_normalize_questions(
+                agent_response.questions,
+                course.markdown,
+            )
         except DrillGenerationValidationError as exc:
             logger.info(
                 "drill generation validation failed course_id=%s drill_run_id=%s reason=%s",
@@ -102,7 +106,7 @@ class DrillService:
         ready = saved_drill_run.model_copy(
             update={
                 "status": DrillRunStatus.READY,
-                "questions": agent_response.questions,
+                "questions": questions,
                 "error_message": None,
             }
         )
@@ -238,27 +242,49 @@ class DrillService:
             ],
         )
 
-    def _validate_questions(self, questions: list[DrillQuestion], course_markdown: str) -> None:
+    def _validate_and_normalize_questions(
+        self,
+        questions: list[DrillQuestion],
+        course_markdown: str,
+    ) -> list[DrillQuestion]:
         if len(questions) != 3:
             raise DrillGenerationValidationError(
                 "drill generation must return exactly three questions"
             )
+        normalized_questions: list[DrillQuestion] = []
         for question in questions:
             rubric_total = sum(item.points for item in question.rubric)
             if rubric_total != question.max_score:
                 raise DrillGenerationValidationError("rubric points must total max_score")
             if not question.source_evidence:
                 raise DrillGenerationValidationError("source evidence is required")
+            normalized_evidence: list[SourceEvidence] = []
             for evidence in question.source_evidence:
-                excerpt = evidence.excerpt.strip()
-                if not excerpt:
-                    raise DrillGenerationValidationError(
-                        "source evidence excerpt is required"
-                    )
-                if excerpt not in course_markdown:
-                    raise DrillGenerationValidationError(
-                        "source evidence excerpt must match course markdown"
-                    )
+                normalized_evidence.append(
+                    self._normalize_source_evidence(evidence, course_markdown)
+                )
+            normalized_questions.append(
+                question.model_copy(update={"source_evidence": normalized_evidence})
+            )
+        return normalized_questions
+
+    def _normalize_source_evidence(
+        self,
+        evidence: SourceEvidence,
+        course_markdown: str,
+    ) -> SourceEvidence:
+        excerpt = evidence.excerpt.strip()
+        if not excerpt:
+            raise DrillGenerationValidationError("source evidence excerpt is required")
+
+        normalized_excerpt = _find_course_excerpt(evidence, course_markdown)
+        if normalized_excerpt is not None:
+            return evidence.model_copy(update={"excerpt": normalized_excerpt})
+        if excerpt in course_markdown:
+            return evidence.model_copy(update={"excerpt": excerpt})
+        raise DrillGenerationValidationError(
+            "source evidence excerpt must match course markdown"
+        )
 
     def _mark_generation_failed(self, drill_run: DrillRun, course_id: str) -> DrillRun:
         failed = drill_run.model_copy(
@@ -343,6 +369,65 @@ def _average(values: Iterable[int]) -> float | None:
     if not materialized:
         return None
     return sum(materialized) / len(materialized)
+
+
+def _find_course_excerpt(evidence: SourceEvidence, course_markdown: str) -> str | None:
+    excerpt_heading = _heading_text(evidence.excerpt)
+    for line in course_markdown.splitlines():
+        candidate = line.strip()
+        if (
+            candidate
+            and _is_markdown_heading(candidate)
+            and _heading_text(candidate) == excerpt_heading
+        ):
+            return candidate if candidate in course_markdown else line
+
+    compact_excerpt = _compact_whitespace(evidence.excerpt)
+    if not compact_excerpt:
+        return None
+    for candidate in _course_excerpt_candidates(course_markdown):
+        if _compact_whitespace(candidate) == compact_excerpt:
+            return candidate
+    return None
+
+
+def _heading_text(value: str) -> str:
+    return value.strip().lstrip("#").strip()
+
+
+def _is_markdown_heading(value: str) -> bool:
+    return value.strip().startswith("#")
+
+
+def _compact_whitespace(value: str) -> str:
+    return " ".join(value.split())
+
+
+def _course_excerpt_candidates(course_markdown: str) -> Iterable[str]:
+    for line in course_markdown.splitlines():
+        candidate = line.strip()
+        if candidate:
+            yield candidate if candidate in course_markdown else line
+
+    paragraph: list[str] = []
+    for line in course_markdown.splitlines():
+        if line.strip():
+            paragraph.append(line)
+            continue
+        yield from _flush_paragraph_candidate(paragraph, course_markdown)
+        paragraph = []
+    yield from _flush_paragraph_candidate(paragraph, course_markdown)
+
+
+def _flush_paragraph_candidate(
+    paragraph: list[str],
+    course_markdown: str,
+) -> Iterable[str]:
+    if not paragraph:
+        return
+    candidate = "\n".join(paragraph).strip()
+    if candidate:
+        yield candidate if candidate in course_markdown else "\n".join(paragraph)
 
 
 def _top_failure_tags(results: list[GradingResult]) -> list[str]:
