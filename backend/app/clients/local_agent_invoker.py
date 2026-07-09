@@ -40,6 +40,7 @@ class LocalAgentInvoker:
                         "suspectedDocumentGap": "判断基準に例外条件の説明が不足",
                         "targetSections": ["## 判断基準"],
                         "recommendedChange": "例外条件と確認先を追記する",
+                        "affectedCount": 1,
                         "sampleSize": 1,
                         "confidenceNote": "少数回答の傾向です。",
                     }

@@ -63,6 +63,7 @@ class MvpAgentDouble:
                         "suspectedDocumentGap": "判断基準に例外条件が不足",
                         "targetSections": ["## 判断基準"],
                         "recommendedChange": "例外条件を判断基準に追記する",
+                        "affectedCount": 1,
                         "sampleSize": 1,
                         "confidenceNote": "少数回答の傾向です。",
                     }

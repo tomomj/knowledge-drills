@@ -13,6 +13,7 @@
         "## 対応方針"
       ],
       "recommendedChange": "例外条件の判断例を 1 つ追加する",
+      "affectedCount": 2,
       "sampleSize": 2,
       "confidenceNote": "少数回答に基づく傾向として扱う"
     }

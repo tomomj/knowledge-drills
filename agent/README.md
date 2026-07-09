@@ -40,6 +40,8 @@ diff 生成、patch の apply/reject は backend の責務です。
 - `DrillGenerationOutput.questions` は3問固定です。
 - 各 `DrillQuestion.rubric` の points 合計は `maxScore` と一致させます。
 - `GradingOutput.score` は `maxScore` を超えません。
+- `FailureSignal.severity` は `low` / `medium` / `high` のみです。
+- `FailureSignal.affectedCount` はその誤答傾向を示した受講者数、`sampleSize` は採点済み回答の受講者総数です。
 - prompt だけで直せる品質問題は `knowledge_drill_agent/prompts/*.md` で直し、schema や
   backend contract を不用意に変えません。
 - `sample_outputs/*.json` を変える場合は backend の契約テストへの影響も確認します。
