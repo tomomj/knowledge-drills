@@ -9,16 +9,135 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
+  checks: read
   contents: read
+  pull-requests: read
 
 concurrency:
   group: e2e-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # CI (lint / typecheck / unit test) が通ってから E2E を実行する。
+  # CI が落ちた PR では E2E のセットアップ(ブラウザ install 等)を走らせない。
+  wait-for-prerequisite-ci:
+    name: Wait for prerequisite CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Skip prerequisite wait for manual runs
+        if: github.event_name != 'pull_request'
+        run: echo "workflow_dispatch runs execute e2e directly."
+
+      - name: Wait for Backend and Frontend CI
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+            const sha = context.payload.pull_request.head.sha;
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number,
+              per_page: 100,
+            });
+            const paths = files.map((file) => file.filename);
+
+            const requiresBackendCi = paths.some(
+              (path) =>
+                path.startsWith("backend/") ||
+                path === ".github/workflows/backend-ci.yml",
+            );
+            const requiresFrontendCi = paths.some(
+              (path) =>
+                path.startsWith("frontend/") ||
+                path === ".github/workflows/frontend-ci.yml",
+            );
+
+            const requiredChecks = [];
+            if (requiresBackendCi) {
+              requiredChecks.push("Backend");
+            }
+            if (requiresFrontendCi) {
+              requiredChecks.push("Frontend");
+            }
+
+            if (requiredChecks.length === 0) {
+              core.info("No prerequisite CI checks are expected for this pull request.");
+              return;
+            }
+
+            const deadline = Date.now() + 25 * 60 * 1000;
+            while (Date.now() < deadline) {
+              const { data } = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: sha,
+                per_page: 100,
+              });
+              const checkRuns = data.check_runs;
+
+              const latestByName = new Map();
+              for (const run of checkRuns) {
+                if (!requiredChecks.includes(run.name)) {
+                  continue;
+                }
+                const current = latestByName.get(run.name);
+                const runStartedAt = new Date(run.started_at || run.created_at);
+                const currentStartedAt = current
+                  ? new Date(current.started_at || current.created_at)
+                  : null;
+                if (!current || runStartedAt > currentStartedAt) {
+                  latestByName.set(run.name, run);
+                }
+              }
+
+              const missing = requiredChecks.filter((name) => !latestByName.has(name));
+              const pending = [];
+              for (const name of requiredChecks) {
+                const run = latestByName.get(name);
+                if (!run) {
+                  continue;
+                }
+                if (run.status !== "completed") {
+                  pending.push(`${name}: ${run.status}`);
+                  continue;
+                }
+                if (run.conclusion !== "success") {
+                  core.setFailed(
+                    `${name} prerequisite check finished with ${run.conclusion}; skipping e2e.`,
+                  );
+                  return;
+                }
+              }
+
+              if (missing.length === 0 && pending.length === 0) {
+                core.info(`Prerequisite CI passed: ${requiredChecks.join(", ")}`);
+                return;
+              }
+
+              core.info(
+                `Waiting for prerequisite CI. Missing: ${
+                  missing.join(", ") || "none"
+                }. Pending: ${pending.join(", ") || "none"}.`,
+              );
+              await new Promise((resolve) => setTimeout(resolve, 30_000));
+            }
+
+            core.setFailed(
+              `Timed out waiting for prerequisite CI: ${requiredChecks.join(", ")}`,
+            );
+
   e2e:
     name: E2E
     runs-on: ubuntu-latest
+    needs: wait-for-prerequisite-ci
     timeout-minutes: 15
 
     defaults:
