@@ -56,6 +56,7 @@ def build_sample_failure_analysis_output() -> FailureAnalysisOutput:
                 suspected_document_gap="判断基準の具体例が不足している",
                 target_sections=["## 対応方針"],
                 recommended_change="例外条件の判断例を 1 つ追加する",
+                affected_count=2,
                 sample_size=2,
                 confidence_note="少数回答に基づく傾向として扱う",
             )

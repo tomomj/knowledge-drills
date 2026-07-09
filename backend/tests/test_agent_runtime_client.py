@@ -3,11 +3,15 @@ from _pytest.logging import LogCaptureFixture
 
 from app.clients.agent_runtime_client import AgentInvocationError, AgentRuntimeClient
 from app.schemas import (
+    AnswerStatus,
+    AnswerSubmission,
     DocumentPatchRequest,
     DocumentPatchResponse,
     DrillGenerationRequest,
     DrillGenerationResponse,
     DrillQuestion,
+    FailureAnalysisRequest,
+    FailureAnalysisResponse,
     GradingRequest,
     GradingResponse,
 )
@@ -41,6 +45,39 @@ def _grading_request(question_id: str = "q1", max_score: int = 4) -> GradingRequ
     question = _question_payload(question_id)
     question["maxScore"] = max_score
     return GradingRequest(question=DrillQuestion.model_validate(question), learner_answer="回答")
+
+
+def _failure_signal_payload(sample_size: int = 2) -> dict[str, object]:
+    return {
+        "id": "fs_test_001",
+        "title": "例外条件の不足",
+        "severity": "medium",
+        "evidence": ["q1 で例外条件が不足している"],
+        "likelyCause": "資料の例外条件が見つけにくい",
+        "suspectedDocumentGap": "判断基準に例外条件が不足",
+        "targetSections": ["## 判断基準"],
+        "recommendedChange": "例外条件を判断基準に追記する",
+        "affectedCount": 1,
+        "sampleSize": sample_size,
+    }
+
+
+def _failure_analysis_request(answer_count: int = 2) -> FailureAnalysisRequest:
+    return FailureAnalysisRequest(
+        course_markdown="# Body",
+        questions=[DrillQuestion.model_validate(_question_payload("q1"))],
+        answers=[
+            AnswerSubmission(
+                id=f"answer-{index}",
+                drill_run_id="drill-1",
+                learner_name=f"受講者{index}",
+                status=AnswerStatus.GRADED,
+                answers={"q1": "回答"},
+            )
+            for index in range(1, answer_count + 1)
+        ],
+        grading_results=[],
+    )
 
 
 def test_generate_drill_returns_typed_response() -> None:
@@ -167,6 +204,32 @@ def test_grade_answer_context_validation_failure_after_retry_raises() -> None:
         client.grade_answer(_grading_request("q1"))
 
     assert calls == []
+
+
+def test_analyze_failures_retries_sample_size_mismatch_and_recovers() -> None:
+    calls = [
+        {"failureSignals": [_failure_signal_payload(sample_size=1)]},
+        {"failureSignals": [_failure_signal_payload(sample_size=2)]},
+    ]
+    client = AgentRuntimeClient(invoker=lambda _task_name, _payload: calls.pop(0))
+
+    response = client.analyze_failures(_failure_analysis_request(answer_count=2))
+
+    assert isinstance(response, FailureAnalysisResponse)
+    assert response.failure_signals[0].affected_count == 1
+    assert response.failure_signals[0].sample_size == 2
+    assert calls == []
+
+
+def test_analyze_failures_sample_size_mismatch_after_retry_raises_reason() -> None:
+    client = AgentRuntimeClient(
+        invoker=lambda _task_name, _payload: {"failureSignals": [_failure_signal_payload(1)]}
+    )
+
+    with pytest.raises(AgentInvocationError, match="schema validation failed") as exc_info:
+        client.analyze_failures(_failure_analysis_request(answer_count=2))
+
+    assert exc_info.value.reason == "failure signal sampleSize does not match request answers"
 
 
 def test_agent_invocation_logs_task_latency_and_validation_error(

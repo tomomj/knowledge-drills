@@ -95,12 +95,13 @@ share token、Firestore 状態、status 遷移、diff 生成、patch の apply/r
 
 - `failureSignals`
 - 各 signal は `id`、`title`、`severity`、`evidence`、`likelyCause`、
-  `suspectedDocumentGap`、`targetSections`、`recommendedChange`、`sampleSize`、
-  `confidenceNote` を持つ
+  `suspectedDocumentGap`、`targetSections`、`recommendedChange`、`affectedCount`、
+  `sampleSize`、`confidenceNote` を持つ
 
 主な制約:
 
 - 孤立したミスより、繰り返し発生しているパターンを優先する
+- `affectedCount` はその誤答傾向を示した受講者数、`sampleSize` は採点済み回答の受講者総数にする
 - `sampleSize` が3未満の場合は `confidenceNote` を含め、小標本の傾向として表現する
 - 受講者の理解不足と、資料側の説明不足を区別する
 - 受講者を責める表現を避ける

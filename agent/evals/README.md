@@ -15,7 +15,7 @@
 | Agent | 評価項目 | 検証内容 |
 |---|---|---|
 | `grading` | rubric のみ | 満点 / 部分点 / rubric 外は加点しない、回答にないことを補完しない、score が rubric points と一致する |
-| `failure_analysis` | rubric のみ | 仕込んだ共通誤答（4人中3人が同じ対応を書けない）の検出をルーブリックで判定、confidenceNote・表現の節度 |
+| `failure_analysis` | rubric のみ | 仕込んだ共通誤答（4人中3人が同じ対応を書けない）の検出をルーブリックで判定、affectedCount / sampleSize・confidenceNote・表現の節度 |
 | `drill_generator` | rubric のみ | 実務シナリオ型であること、講座 Markdown への根拠性（生成に多様性があるためゴールデン一致は不採用） |
 | `document_patch` | rubric のみ | 最小変更・ルール創作なし・riskNotes（全文一致は brittle なため不採用） |
 
@@ -90,7 +90,7 @@ Judge rubric:
 
 Judge rubric（ジャンル非依存に一般化済み）:
 
-- 失敗分析品質を総合的に評価する。入力の採点結果で複数受講者に共通する誤答傾向（missingPoints / failureTags の一致）を `failureSignals` として検出し、`targetSections`・`sampleSize`・`confidenceNote` を妥当に出し、資料側の gap と受講者側の理解不足を分けて記述している。
+- 失敗分析品質を総合的に評価する。入力の採点結果で複数受講者に共通する誤答傾向（missingPoints / failureTags の一致）を `failureSignals` として検出し、`targetSections`・`affectedCount`・`sampleSize`・`confidenceNote` を妥当に出し、資料側の gap と受講者側の理解不足を分けて記述している。
 
 ### `document_patch`
 
@@ -157,7 +157,8 @@ document_patch 2）を同一 job 内で直列実行する。
   `dg_attendance_course` は手順系教材で「判断理由を書かせる問い」にならない問題文を生成
   （設問文に理由を明示的に要求するルールを追加）、`fa_missing_network_isolation` は
   sampleSize を「全回答者数」ではなく「誤答者数」と解釈し、かつ日本語入力に英語で応答
-  （sampleSize の定義をプロンプトに明記。出力言語はプロンプト日本語化で対応済み）。
+  （sampleSize の定義をプロンプトに明記し、後続で affectedCount を追加して誤答者数と分母を分離。
+  出力言語はプロンプト日本語化で対応済み）。
   あわせて failure_analysis の judge rubric を経費精算ケース固有の記述から
   ジャンル非依存に一般化した。
 

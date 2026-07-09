@@ -44,6 +44,7 @@ def _patch(status: PatchStatus = PatchStatus.PROPOSED) -> DocumentPatch:
                 suspected_document_gap="例外条件が不足",
                 target_sections=["## 判断基準"],
                 recommended_change="例外条件を追記",
+                affected_count=1,
                 sample_size=2,
                 confidence_note="少数回答の傾向です。",
             )
@@ -70,6 +71,7 @@ def test_get_patch_returns_patch_detail(client: TestClient) -> None:
     assert payload["patchSummary"] == "判断基準を追記"
     assert payload["analysisTimeline"][0]["id"] == "collect_answers"
     assert payload["analysisTimeline"][0]["summary"] == "採点済み回答 2 件を収集しました"
+    assert payload["failureSignals"][0]["affectedCount"] == 1
     assert payload["failureSignals"][0]["sampleSize"] == 2
     assert payload["failureSignals"][0]["confidenceNote"] == "少数回答の傾向です。"
 
