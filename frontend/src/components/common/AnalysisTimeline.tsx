@@ -12,6 +12,7 @@ export type AnalysisTimelineItemView = {
 type AnalysisTimelineProps = {
   title: string
   items: AnalysisTimelineItemView[]
+  evidenceDisplay?: 'expanded' | 'collapsed'
 }
 
 type ChipTone = 'accent' | 'error' | 'muted' | 'success' | 'warning'
@@ -69,12 +70,17 @@ const FALLBACK_PHASE: TimelinePhaseDefinition = {
   itemIds: [],
 }
 
-export function AnalysisTimeline({ title, items }: AnalysisTimelineProps) {
+export function AnalysisTimeline({
+  title,
+  items,
+  evidenceDisplay = 'expanded',
+}: AnalysisTimelineProps) {
   if (items.length === 0) {
     return null
   }
 
   const phases = groupTimelineItems(items)
+  const durations = elapsedDurations(items)
 
   return (
     <section className="analysis-timeline" aria-label={title}>
@@ -89,22 +95,37 @@ export function AnalysisTimeline({ title, items }: AnalysisTimelineProps) {
             <ol className="analysis-timeline__list">
               {phase.items.map((item) => {
                 const status = STATUS_META[item.status]
+                const duration = durations.get(item.id)
+                const canShowSummary = item.status !== 'pending' && Boolean(item.summary)
+                const canShowEvidence =
+                  item.status !== 'pending' &&
+                  item.status !== 'running' &&
+                  item.evidence.length > 0
 
                 return (
-                  <li key={item.id} className="analysis-timeline__item">
+                  <li
+                    key={item.id}
+                    className={`analysis-timeline__item analysis-timeline__item--${item.status}`}
+                  >
                     <div className="analysis-timeline__head">
+                      <span
+                        className={`analysis-timeline__state analysis-timeline__state--${item.status}`}
+                        aria-label={item.status === 'running' ? status.label : undefined}
+                        aria-hidden={item.status === 'running' ? undefined : true}
+                      >
+                        {item.status === 'running' ? '' : statusIcon(item.status)}
+                      </span>
                       <span className={`chip chip--${status.tone}`}>{status.label}</span>
                       <h4>{item.title}</h4>
+                      {duration ? (
+                        <span className="analysis-timeline__duration">{formatDuration(duration)}</span>
+                      ) : null}
                     </div>
-                    {item.summary ? (
+                    {canShowSummary ? (
                       <p className="analysis-timeline__summary">{item.summary}</p>
                     ) : null}
-                    {item.evidence.length > 0 ? (
-                      <ul className="analysis-timeline__evidence">
-                        {item.evidence.map((entry, index) => (
-                          <li key={`${item.id}-${index}`}>{entry}</li>
-                        ))}
-                      </ul>
+                    {canShowEvidence ? (
+                      <EvidenceList item={item} evidenceDisplay={evidenceDisplay} />
                     ) : null}
                   </li>
                 )
@@ -114,6 +135,32 @@ export function AnalysisTimeline({ title, items }: AnalysisTimelineProps) {
         ))}
       </div>
     </section>
+  )
+}
+
+type EvidenceListProps = {
+  item: AnalysisTimelineItemView
+  evidenceDisplay: 'expanded' | 'collapsed'
+}
+
+function EvidenceList({ item, evidenceDisplay }: EvidenceListProps) {
+  const list = (
+    <ul className="analysis-timeline__evidence">
+      {item.evidence.map((entry, index) => (
+        <li key={`${item.id}-${index}`}>{entry}</li>
+      ))}
+    </ul>
+  )
+
+  if (evidenceDisplay === 'expanded') {
+    return list
+  }
+
+  return (
+    <details className="analysis-timeline__evidence-details">
+      <summary>根拠を表示</summary>
+      {list}
+    </details>
   )
 }
 
@@ -143,4 +190,51 @@ function groupTimelineItems(items: AnalysisTimelineItemView[]): TimelinePhase[] 
     visiblePhases.push(fallback)
   }
   return visiblePhases
+}
+
+function elapsedDurations(items: AnalysisTimelineItemView[]): Map<string, number> {
+  const durations = new Map<string, number>()
+  let previousCompletedAt: number | null = null
+
+  for (const item of items) {
+    if (item.status !== 'completed' || !item.completedAt) {
+      continue
+    }
+    const completedAt = Date.parse(item.completedAt)
+    if (Number.isNaN(completedAt)) {
+      continue
+    }
+    if (previousCompletedAt !== null) {
+      const elapsedSeconds = Math.max(0, Math.round((completedAt - previousCompletedAt) / 1000))
+      durations.set(item.id, elapsedSeconds)
+    }
+    previousCompletedAt = completedAt
+  }
+
+  return durations
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds}秒`
+  }
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (remainingSeconds === 0) {
+    return `${minutes}分`
+  }
+  return `${minutes}分${remainingSeconds}秒`
+}
+
+function statusIcon(status: AnalysisStepStatus): string {
+  if (status === 'completed') {
+    return '✓'
+  }
+  if (status === 'failed') {
+    return '!'
+  }
+  if (status === 'skipped') {
+    return '-'
+  }
+  return ''
 }
