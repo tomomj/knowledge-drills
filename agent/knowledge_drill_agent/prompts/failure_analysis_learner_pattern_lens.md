@@ -12,6 +12,11 @@
 
 必ず含める観点:
 - 共通する missingPoints / failureTags
-- 何人中何人に見られる傾向か
+- affectedCount: その誤答傾向を示した受講者数
+- sampleSize: 提供された採点済み回答の受講者総数
 - likelyCause の候補
 - targetSections の候補
+
+人数の扱い:
+- 分母は常に全回答者数です。該当者だけを分母にした「3名中3名」「100%」のような表現は使わないでください。
+- 人数比の表示は最終出力の affectedCount / sampleSize に任せ、分析メモでは該当 learner と missingPoints / failureTags を中心に書いてください。

@@ -95,6 +95,7 @@ def test_failure_signal_carries_sample_size_and_confidence_note() -> None:
         suspected_document_gap="例外時の判断基準が薄い",
         target_sections=["## 対応方針"],
         recommended_change="例外条件を追記する",
+        affected_count=1,
         sample_size=2,
         confidence_note="少数回答に基づく傾向",
     )
@@ -102,10 +103,26 @@ def test_failure_signal_carries_sample_size_and_confidence_note() -> None:
 
     payload = response.model_dump(by_alias=True)
     assert payload["failureSignals"][0]["id"].startswith("fs_")
+    assert payload["failureSignals"][0]["affectedCount"] == 1
     assert payload["failureSignals"][0]["sampleSize"] == 2
     assert payload["failureSignals"][0]["likelyCause"] == "条件分岐の説明が不足している"
     assert payload["failureSignals"][0]["suspectedDocumentGap"] == "例外時の判断基準が薄い"
     assert payload["failureSignals"][0]["confidenceNote"] == "少数回答に基づく傾向"
+
+
+def test_failure_signal_rejects_affected_count_over_sample_size() -> None:
+    with pytest.raises(ValidationError):
+        FailureSignal(
+            title="判断基準の混同",
+            severity=FailureSeverity.MEDIUM,
+            evidence=["q1 の不足点が複数回答に出た"],
+            likely_cause="条件分岐の説明が不足している",
+            suspected_document_gap="例外時の判断基準が薄い",
+            target_sections=["## 対応方針"],
+            recommended_change="例外条件を追記する",
+            affected_count=3,
+            sample_size=2,
+        )
 
 
 def test_document_patch_and_answer_submission_domain_models() -> None:
