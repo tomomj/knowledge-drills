@@ -15,6 +15,7 @@ def _question_payload(
     question_id: str = "q1",
     points: int = 4,
     excerpt: str = "## 方針",
+    section_heading: str = "方針",
 ) -> dict[str, object]:
     return {
         "id": question_id,
@@ -22,7 +23,7 @@ def _question_payload(
         "intent": "実務判断を見る。",
         "rubric": [{"criterion": "根拠", "points": points}],
         "idealAnswer": "根拠に基づき判断する。",
-        "sourceEvidence": [{"sectionHeading": "方針", "excerpt": excerpt}],
+        "sourceEvidence": [{"sectionHeading": section_heading, "excerpt": excerpt}],
         "maxScore": 4,
     }
 
@@ -193,6 +194,29 @@ def test_generate_drill_normalizes_source_evidence_across_markdown_whitespace() 
     assert "\n\n" in normalized_excerpt
 
 
+def test_generate_drill_falls_back_to_source_evidence_section_heading() -> None:
+    service, _course_repository, drill_repository = _service(
+        {
+            "questions": [
+                _question_payload(
+                    "q1",
+                    excerpt="教材にはない言い換えを含む根拠文です。",
+                    section_heading="方針",
+                ),
+                _question_payload("q2"),
+                _question_payload("q3"),
+            ]
+        }
+    )
+
+    drill_run = service.generate_drill("course-1", "owner-1")
+
+    saved = drill_repository.get(drill_run.id)
+    assert saved is not None
+    assert saved.status == "ready"
+    assert saved.questions[0].source_evidence[0].excerpt == "## 方針"
+
+
 @pytest.mark.parametrize("excerpt", ["## 存在しない方針", "   "])
 def test_generate_drill_marks_run_failed_when_source_evidence_is_not_in_course(
     excerpt: str,
@@ -200,7 +224,7 @@ def test_generate_drill_marks_run_failed_when_source_evidence_is_not_in_course(
     service, course_repository, drill_repository = _service(
         {
             "questions": [
-                _question_payload("q1", excerpt=excerpt),
+                _question_payload("q1", excerpt=excerpt, section_heading="存在しない方針"),
                 _question_payload("q2"),
                 _question_payload("q3"),
             ]
@@ -226,7 +250,11 @@ def test_generate_drill_logs_validation_context_for_invalid_source_evidence(
     service, _course_repository, _drill_repository = _service(
         {
             "questions": [
-                _question_payload("q1", excerpt="## 存在しない方針"),
+                _question_payload(
+                    "q1",
+                    excerpt="## 存在しない方針",
+                    section_heading="存在しない方針",
+                ),
                 _question_payload("q2"),
                 _question_payload("q3"),
             ]
