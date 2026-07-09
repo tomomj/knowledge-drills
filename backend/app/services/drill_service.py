@@ -426,15 +426,9 @@ def _preview_text(value: str | None, *, limit: int = 120) -> str | None:
 
 
 def _find_course_excerpt(evidence: SourceEvidence, course_markdown: str) -> str | None:
-    excerpt_heading = _heading_text(evidence.excerpt)
-    for line in course_markdown.splitlines():
-        candidate = line.strip()
-        if (
-            candidate
-            and _is_markdown_heading(candidate)
-            and _heading_text(candidate) == excerpt_heading
-        ):
-            return candidate if candidate in course_markdown else line
+    excerpt_heading = _find_course_heading(evidence.excerpt, course_markdown)
+    if excerpt_heading is not None:
+        return excerpt_heading
 
     compact_excerpt = _compact_whitespace(evidence.excerpt)
     if not compact_excerpt:
@@ -442,7 +436,62 @@ def _find_course_excerpt(evidence: SourceEvidence, course_markdown: str) -> str 
     for candidate in _course_excerpt_candidates(course_markdown):
         if _compact_whitespace(candidate) == compact_excerpt:
             return candidate
+    whitespace_insensitive_excerpt = _find_whitespace_insensitive_course_excerpt(
+        evidence.excerpt,
+        course_markdown,
+    )
+    if whitespace_insensitive_excerpt is not None:
+        return whitespace_insensitive_excerpt
+    return _find_course_heading(evidence.section_heading, course_markdown)
+
+
+def _find_course_heading(heading: str, course_markdown: str) -> str | None:
+    heading_text = _heading_text(heading)
+    if not heading_text:
+        return None
+    for line in course_markdown.splitlines():
+        candidate = line.strip()
+        if (
+            candidate
+            and _is_markdown_heading(candidate)
+            and _heading_text(candidate) == heading_text
+        ):
+            return candidate if candidate in course_markdown else line
     return None
+
+
+def _find_whitespace_insensitive_course_excerpt(
+    excerpt: str,
+    course_markdown: str,
+) -> str | None:
+    normalized_excerpt = _remove_whitespace(excerpt)
+    if not normalized_excerpt:
+        return None
+
+    normalized_course, original_indexes = _remove_whitespace_with_indexes(course_markdown)
+    start_index = normalized_course.find(normalized_excerpt)
+    if start_index == -1:
+        return None
+
+    end_index = start_index + len(normalized_excerpt) - 1
+    original_start = original_indexes[start_index]
+    original_end = original_indexes[end_index] + 1
+    return course_markdown[original_start:original_end].strip()
+
+
+def _remove_whitespace(value: str) -> str:
+    return "".join(char for char in value if not char.isspace())
+
+
+def _remove_whitespace_with_indexes(value: str) -> tuple[str, list[int]]:
+    normalized_chars: list[str] = []
+    original_indexes: list[int] = []
+    for index, char in enumerate(value):
+        if char.isspace():
+            continue
+        normalized_chars.append(char)
+        original_indexes.append(index)
+    return "".join(normalized_chars), original_indexes
 
 
 def _heading_text(value: str) -> str:
