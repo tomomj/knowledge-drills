@@ -45,6 +45,7 @@ deploy するため、Terraform は Cloud Run image の `ignore_changes` を維�
 - `run.googleapis.com`
 - `serviceusage.googleapis.com`
 - `sts.googleapis.com`
+- `telemetry.googleapis.com`
 
 API を追加した場合は、該当 resource の `depends_on` も確認します。
 
