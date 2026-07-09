@@ -38,6 +38,7 @@ class UserProfile(ApiModel):
     photo_url: str | None = None
     created_at: str
     last_login_at: str
+    demo_seeded_at: str | None = None
 
 
 class CurrentUserResponse(UserProfile):
@@ -91,6 +92,12 @@ class AnalysisReviewTimelineStep(StrEnum):
     DECIDE_PATCH_STRATEGY = "decide_patch_strategy"
 
 
+class CourseScoreTrendPoint(ApiModel):
+    course_version: int
+    average_score: float
+    max_score: int
+
+
 class Course(ApiModel):
     id: str
     owner_user_id: str | None = None
@@ -104,6 +111,8 @@ class Course(ApiModel):
     answer_count: int = 0
     latest_patch_id: str | None = None
     latest_patch_status: PatchStatus | None = None
+    score_trend: list[CourseScoreTrendPoint] | None = None
+    is_demo: bool = False
 
 
 class CourseCreateRequest(ApiModel):
@@ -143,6 +152,8 @@ class CourseSummary(ApiModel):
     patch_status: PatchStatus | None = None
     latest_drill_run_id: str | None = None
     latest_patch_id: str | None = None
+    score_trend: list[CourseScoreTrendPoint] | None = None
+    is_demo: bool = False
 
 
 class CourseListResponse(ApiModel):

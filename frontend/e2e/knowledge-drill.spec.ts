@@ -41,6 +41,21 @@ type PatchSeed = DrillRunSeed & {
   patchId: string
 }
 
+type CourseSummary = {
+  id: string
+  title: string
+  latestDrillRunId: string | null
+  isDemo: boolean
+}
+
+type CourseListResponse = {
+  courses: CourseSummary[]
+}
+
+type AdminDrill = {
+  shareUrl: string | null
+}
+
 test.describe('Knowledge Drill E2E', () => {
   test('講座作成からドリル生成まで UI で実行できる', async ({ page }) => {
     await page.goto('/courses')
@@ -145,6 +160,35 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(page.getByText('4 pts')).toHaveCount(0)
   })
 
+  test('削除した講座の共有 URL は無効になる', async ({ page, request }) => {
+    const seed = await createDrillRun(request)
+
+    const deleted = await request.delete(`${apiBaseUrl}/api/courses/${seed.courseId}`)
+    expect(deleted.status()).toBe(204)
+
+    await page.goto(seed.shareUrl)
+
+    await expect(page.getByText('共有 URL が無効です。')).toBeVisible()
+    await expect(page.getByRole('button', { name: '回答を提出する' })).toHaveCount(0)
+  })
+
+  test('デモ講座の受講者画面でも rubric と ideal answer は表示しない', async ({
+    page,
+    request,
+  }) => {
+    const demo = await getDemoCourse(request, 'DevOps x AI Agent Hackathon 2026 参加ガイド')
+    expect(demo.latestDrillRunId).toBeTruthy()
+    const adminDrill = await getAdminDrill(request, demo.id, demo.latestDrillRunId ?? '')
+    expect(adminDrill.shareUrl).toBeTruthy()
+
+    await page.goto(adminDrill.shareUrl ?? '')
+
+    await expect(page.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
+    await expect(page.getByText('ルーブリック')).toHaveCount(0)
+    await expect(page.getByText('模範解答')).toHaveCount(0)
+    await expect(page.getByText(/idealAnswer/i)).toHaveCount(0)
+  })
+
   test('stale patch は Apply できない', async ({ page, request }) => {
     const seed = await createPatch(request)
 
@@ -228,6 +272,32 @@ async function getCourse(request: APIRequestContext, courseId: string): Promise<
   const response = await request.get(`${apiBaseUrl}/api/courses/${courseId}`)
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as CourseDetail
+}
+
+async function getDemoCourse(
+  request: APIRequestContext,
+  titlePart: string,
+): Promise<CourseSummary> {
+  const response = await request.get(`${apiBaseUrl}/api/courses`)
+  expect(response.ok()).toBeTruthy()
+  const payload = (await response.json()) as CourseListResponse
+  const demo = payload.courses.find(
+    (course) => course.isDemo && course.title.includes(titlePart),
+  )
+  expect(demo).toBeTruthy()
+  return demo as CourseSummary
+}
+
+async function getAdminDrill(
+  request: APIRequestContext,
+  courseId: string,
+  drillRunId: string,
+): Promise<AdminDrill> {
+  const response = await request.get(
+    `${apiBaseUrl}/api/courses/${courseId}/drill-runs/${drillRunId}`,
+  )
+  expect(response.ok()).toBeTruthy()
+  return (await response.json()) as AdminDrill
 }
 
 async function updateCourse(

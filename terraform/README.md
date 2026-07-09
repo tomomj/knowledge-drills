@@ -1,73 +1,129 @@
 # Terraform
 
-Knowledge Drills の GCP インフラを作成する Terraform 定義です。
+`terraform/` は Knowledge Drills の GCP production インフラを管理する小さな root module です。
+Cloud Run、Artifact Registry、Firestore、GitHub Actions Workload Identity Federation、
+service account、IAM をこのディレクトリで扱います。
 
-## デプロイ先
+## 構成
 
-デプロイ先の project、region、environment、state backend は次のファイルで管理します。
+| ファイル | 内容 |
+|---|---|
+| `backend.tf` | GCS remote state。bucket は事前作成が必要 |
+| `provider.tf` | Terraform version、Google provider、project/region |
+| `locals.tf` | project、region、service 名、Cloud Run env、API、labels |
+| `main.tf` | GCP resources、IAM、outputs |
 
-- `locals.tf`
-- `backend.tf`
+環境差分は `locals.tf` に置きます。現行は `environment = "prd"` の単一環境です。
 
-## 作成するリソース
+## 管理対象
 
+- 有効化する Google APIs
 - Artifact Registry Docker repository
-- Cloud Run service:
-  - frontend
-  - backend
-- Service account:
-  - frontend
-  - backend
-- Cloud Run invoker IAM:
-  - frontend/backend を `allUsers` に公開
+- Cloud Run v2 services: frontend / backend
+- Service accounts: frontend / backend / deploy / agent eval
+- Firestore Native database
+- GitHub Actions Workload Identity Pool / Provider
+- Cloud Run public invoker IAM
+- deploy service account の Artifact Registry / Cloud Run / service account 権限
+- backend service account の Vertex AI、Firestore、Cloud Trace 権限
+- agent eval service account の Vertex AI 権限
 
-初回作成時の Cloud Run image は bootstrap 用の `us-docker.pkg.dev/cloudrun/container/hello` です。実アプリの image は Artifact Registry に push した後、別途 Cloud Run にデプロイします。
+Cloud Run の初回 image は bootstrap 用の
+`us-docker.pkg.dev/cloudrun/container/hello` です。実アプリ image は GitHub Actions CD が
+deploy するため、Terraform は Cloud Run image の `ignore_changes` を維持します。
 
 ## 有効化する API
 
-Terraform は次の API を有効化します。
+`locals.tf` の `required_services` で次を有効化します。
 
+- `aiplatform.googleapis.com`
 - `artifactregistry.googleapis.com`
+- `cloudtrace.googleapis.com`
+- `firestore.googleapis.com`
 - `iam.googleapis.com`
+- `iamcredentials.googleapis.com`
 - `run.googleapis.com`
 - `serviceusage.googleapis.com`
+- `sts.googleapis.com`
+- `telemetry.googleapis.com`
 
-手動で API を有効化する場合も、同じ API を有効にしてください。
+API を追加した場合は、該当 resource の `depends_on` も確認します。
+
+## Cloud Run 設定
+
+frontend / backend はどちらも `min_instance_count = 0` で scale to zero します。
+
+| Service | 主な設定 |
+|---|---|
+| frontend | concurrency 80、timeout 60s、max instances 2、memory 512Mi |
+| backend | concurrency 20、timeout 300s、max instances 3、memory 1Gi |
+
+backend には主に次の環境変数を設定します。
+
+- `KNOWLEDGE_DRILLS_ENVIRONMENT`
+- `KNOWLEDGE_DRILLS_STORAGE_MODE=firestore`
+- `KNOWLEDGE_DRILLS_AUTH_MODE=firebase`
+- `KNOWLEDGE_DRILLS_FIREBASE_PROJECT_ID`
+- `KNOWLEDGE_DRILLS_FIRESTORE_DATABASE`
+- `KNOWLEDGE_DRILLS_AGENT_MODE=adk`
+- `KNOWLEDGE_DRILLS_AGENT_TIMEOUT_SECONDS`
+- `KNOWLEDGE_DRILLS_AGENT_TRACE_EXPORTER=gcp`
+- `KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS`
+- `GOOGLE_GENAI_USE_VERTEXAI=TRUE`
+- `GOOGLE_CLOUD_LOCATION`
+- `KNOWLEDGE_DRILL_AGENT_MODEL`
+
+## GitHub Actions WIF
+
+deploy 用 provider は `tomomj/knowledge-drills` の `main` branch を信頼します。agent eval 用
+provider は `Agent Eval` workflow の `pull_request` と `workflow_dispatch` を信頼します。
+
+Terraform apply 後、GitHub repository variables には outputs の値を設定します。
+
+| Output | 用途 |
+|---|---|
+| `github_actions_workload_identity_provider` | deploy workflow の WIF provider |
+| `github_actions_service_account` | deploy workflow の service account |
+| `github_actions_agent_eval_workload_identity_provider` | agent eval workflow の WIF provider |
+| `github_actions_agent_eval_service_account` | agent eval workflow の service account |
 
 ## 実行手順
 
-```bash
+```sh
 cd terraform
 terraform init
+terraform fmt
+terraform validate
 terraform plan
-terraform apply
 ```
 
-backend 設定を変更した場合は次を使います。
+backend 設定や state bucket を変更した場合は次を使います。
 
-```bash
+```sh
 terraform init -reconfigure
 ```
 
+`terraform apply` は実インフラを変更するため、plan の内容を確認してから明示的に実行します。
+secret や credentials は Terraform に書かず、WIF と service account 権限で扱います。
+
 ## 実行権限
 
-Terraform を実行するアカウントには少なくとも次が必要です。
+Terraform 実行アカウントには、少なくとも次の操作権限が必要です。
 
-- state bucket への `roles/storage.objectAdmin`
-- Cloud Run 管理用の `roles/run.admin`
-- Artifact Registry 管理用の `roles/artifactregistry.admin`
-- service account 作成用の `roles/iam.serviceAccountAdmin`
-- API 有効化用の `roles/serviceusage.serviceUsageAdmin`
+- GCS state bucket への object 管理
+- API 有効化
+- Artifact Registry 管理
+- Cloud Run 管理
+- Firestore database 管理
+- service account と IAM policy 管理
+- Workload Identity Pool / Provider 管理
 
-初期構築を急ぐ場合は project-level の広い権限で作成し、運用時に Terraform 実行用 service account へ絞り込む方針にします。
+運用時は最小権限を優先し、`roles/owner` のような広すぎる project 権限を常用しません。
 
-## コスト設定
+## 注意点
 
-Cloud Run は frontend/backend ともに `min_instance_count = 0` です。アイドル時は scale to zero します。
-
-同時に、上限は次の値に抑えています。
-
-- frontend: `frontend_max_instances = 2`
-- backend: `backend_max_instances = 3`
-
-さらに費用を抑える場合は、これらを `1` に下げます。
+- `*.tfvars` は使わず、環境差分は `locals.tf` に集約します。
+- Firestore は deletion protection と `deletion_policy = "ABANDON"` を使っています。
+- backend の Vertex AI location は Cloud Run region と一致するとは限らないため、
+  `backend_vertex_location` を使います。
+- resource 分割は `main.tf` がレビュー困難になった場合だけ行います。

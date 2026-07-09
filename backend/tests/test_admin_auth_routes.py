@@ -88,7 +88,7 @@ def test_admin_routes_allow_local_auth_mode_without_token(
         response = client.get("/api/courses")
 
     assert response.status_code == 200
-    assert response.json() == {"courses": []}
+    assert len(response.json()["courses"]) == 2
 
 
 @pytest.mark.parametrize(

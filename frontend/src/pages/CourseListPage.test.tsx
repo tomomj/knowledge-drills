@@ -17,6 +17,11 @@ const courses: CourseSummary[] = [
     patchStatus: 'proposed',
     latestDrillRunId: 'drill-1',
     latestPatchId: 'patch-1',
+    scoreTrend: [
+      { courseVersion: 1, averageScore: 1.0, maxScore: 4 },
+      { courseVersion: 2, averageScore: 0.8, maxScore: 4 },
+    ],
+    isDemo: true,
   },
   {
     id: 'course-2',
@@ -28,6 +33,8 @@ const courses: CourseSummary[] = [
     patchStatus: null,
     latestDrillRunId: null,
     latestPatchId: null,
+    scoreTrend: [{ courseVersion: 1, averageScore: 4.0, maxScore: 4 }],
+    isDemo: false,
   },
 ]
 
@@ -66,9 +73,15 @@ describe('CourseListPage', () => {
 
     await waitFor(() => expect(screen.getByText('情報セキュリティ入門')).toBeTruthy())
     expect(screen.getByText('パッチ提案あり')).toBeTruthy()
+    expect(screen.getByText('デモ')).toBeTruthy()
+    expect(screen.getByText('分析できます')).toBeTruthy()
     expect(screen.getByText('ドリル配布中')).toBeTruthy()
     expect(screen.getByText('ドリル未生成')).toBeTruthy()
     expect(screen.getByText(/回答 12 件/)).toBeTruthy()
+    expect(screen.getByText('体験用デモ講座を開くと、採点済み回答の分析と改善履歴をすぐ確認できます。')).toBeTruthy()
+    expect(screen.getByRole('img', { name: '平均点の推移 1.0 から 0.8' })).toBeTruthy()
+    expect(screen.getByText('平均 1.0 → 0.8')).toBeTruthy()
+    expect(screen.queryByRole('img', { name: '平均点の推移 4.0 から 4.0' })).toBeNull()
 
     const links = screen.getAllByRole('link')
     const rowLink = links.find((link) => link.textContent?.includes('情報セキュリティ入門'))

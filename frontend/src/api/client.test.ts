@@ -83,4 +83,15 @@ describe('api client auth token', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/courses/course-1/metrics', expect.any(Object))
   })
+
+  it('deletes a course', async () => {
+    const fetchMock = mockFetchJson(null)
+
+    await api.deleteCourse('course-1')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/courses/course-1',
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+  })
 })

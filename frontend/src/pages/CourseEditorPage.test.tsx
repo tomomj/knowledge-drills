@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getCourseMetrics: vi.fn(),
   updateCourse: vi.fn(),
   generateDrill: vi.fn(),
+  deleteCourse: vi.fn(),
 }))
 
 vi.mock('../api/client', () => ({
@@ -20,6 +21,7 @@ vi.mock('../api/client', () => ({
     getCourseMetrics: mocks.getCourseMetrics,
     updateCourse: mocks.updateCourse,
     generateDrill: mocks.generateDrill,
+    deleteCourse: mocks.deleteCourse,
   },
   ApiClientError: class ApiClientError extends Error {},
 }))
@@ -31,6 +33,7 @@ describe('CourseEditorPage', () => {
     mocks.getCourseMetrics.mockReset()
     mocks.updateCourse.mockReset()
     mocks.generateDrill.mockReset()
+    mocks.deleteCourse.mockReset()
     mocks.getCourseMetrics.mockResolvedValue({ courseId: 'course-1', runs: [] })
   })
 
@@ -384,5 +387,65 @@ describe('CourseEditorPage', () => {
     const totalDelta = metricsCard.querySelector('.card__head .chip')
     expect(totalDelta?.textContent).toBe('-25.0 pp')
     expect(totalDelta?.className).toContain('chip--warning')
+  })
+
+  it('deletes a course after two-step confirmation and navigates to course list', async () => {
+    const user = userEvent.setup()
+    mocks.getCourse.mockResolvedValueOnce({
+      id: 'course-1',
+      title: '講座',
+      markdown: '# Body',
+      drillFocus: null,
+      version: 1,
+      latestDrillRunId: null,
+      latestPatchId: null,
+    })
+    mocks.deleteCourse.mockResolvedValueOnce(undefined)
+
+    render(
+      <MemoryRouter initialEntries={['/courses/course-1']}>
+        <Routes>
+          <Route path="/courses/:courseId" element={<CourseEditorPage />} />
+          <Route path="/courses" element={<div>講座一覧へ戻りました</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByDisplayValue('講座')
+    await user.click(screen.getByRole('button', { name: '講座を削除' }))
+    expect(mocks.deleteCourse).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: '本当に削除する' }))
+
+    await waitFor(() => expect(mocks.deleteCourse).toHaveBeenCalledWith('course-1'))
+    await screen.findByText('講座一覧へ戻りました')
+  })
+
+  it('shows an error banner when course deletion fails', async () => {
+    const user = userEvent.setup()
+    mocks.getCourse.mockResolvedValueOnce({
+      id: 'course-1',
+      title: '講座',
+      markdown: '# Body',
+      drillFocus: null,
+      version: 1,
+      latestDrillRunId: null,
+      latestPatchId: null,
+    })
+    mocks.deleteCourse.mockRejectedValueOnce(new Error('delete failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/courses/course-1']}>
+        <Routes>
+          <Route path="/courses/:courseId" element={<CourseEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByDisplayValue('講座')
+    await user.click(screen.getByRole('button', { name: '講座を削除' }))
+    await user.click(screen.getByRole('button', { name: '本当に削除する' }))
+
+    await screen.findByText('処理に失敗しました。')
   })
 })
