@@ -31,6 +31,8 @@ class FirestoreClient(Protocol):
 
     def update_document(self, collection: str, document_id: str, data: DocumentData) -> None: ...
 
+    def delete_document(self, collection: str, document_id: str) -> None: ...
+
     def list_documents(self, collection: str) -> list[DocumentData]: ...
 
     def list_documents_by_field(
@@ -69,6 +71,9 @@ class InMemoryFirestoreClient:
             raise DocumentNotFound(f"{collection}/{document_id} was not found")
         collection_data[document_id].update(deepcopy(data))
 
+    def delete_document(self, collection: str, document_id: str) -> None:
+        self._collections.setdefault(collection, {}).pop(document_id, None)
+
     def list_documents(self, collection: str) -> list[DocumentData]:
         return [deepcopy(document) for document in self._collections.get(collection, {}).values()]
 
@@ -98,9 +103,7 @@ class GoogleFirestoreClient:
         client: Client | None = None,
     ) -> None:
         self._client = (
-            client
-            if client is not None
-            else firestore.Client(project=project, database=database)
+            client if client is not None else firestore.Client(project=project, database=database)
         )
         self._active_transaction: ContextVar[Transaction | None] = ContextVar(
             "active_firestore_transaction",
@@ -144,6 +147,14 @@ class GoogleFirestoreClient:
                 transaction.update(reference, deepcopy(data))
         except google_exceptions.NotFound as exc:
             raise DocumentNotFound(f"{collection}/{document_id} was not found") from exc
+
+    def delete_document(self, collection: str, document_id: str) -> None:
+        reference = self._document(collection, document_id)
+        transaction = self._active_transaction.get()
+        if transaction is None:
+            reference.delete()
+        else:
+            transaction.delete(reference)
 
     def list_documents(self, collection: str) -> list[DocumentData]:
         snapshots = self._client.collection(collection).stream()

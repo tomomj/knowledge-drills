@@ -15,6 +15,12 @@ export type CourseDetail = {
   latestPatchId: string | null
 }
 
+export type CourseScoreTrendPoint = {
+  courseVersion: number
+  averageScore: number
+  maxScore: number
+}
+
 export type CourseSummary = {
   id: string
   title: string
@@ -25,6 +31,8 @@ export type CourseSummary = {
   patchStatus: PatchStatus | null
   latestDrillRunId: string | null
   latestPatchId: string | null
+  scoreTrend: CourseScoreTrendPoint[] | null
+  isDemo: boolean
 }
 
 export type CourseListResponse = {
@@ -64,6 +72,7 @@ export type CurrentUser = {
   photoUrl: string | null
   createdAt: string
   lastLoginAt: string
+  demoSeededAt: string | null
 }
 
 export type RubricItem = {
