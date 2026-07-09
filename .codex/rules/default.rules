@@ -123,3 +123,16 @@ prefix_rule(
         "terraform destroy",
     ],
 )
+
+prefix_rule(
+    pattern = ["gcloud", "logging", "read"],
+    decision = "allow",
+    justification = "Reading Google Cloud logs is an expected diagnostics command for this repository.",
+    match = [
+        "gcloud logging read --limit=1",
+        "gcloud logging read resource.type=cloud_run_revision --project knowledge-drills --limit=20",
+    ],
+    not_match = [
+        "gcloud logging write test-log test-entry",
+    ],
+)
