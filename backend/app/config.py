@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     agent_trace_exporter: Literal["none", "otlp", "gcp"] = "none"
     agent_trace_service_name: str = "knowledge-drills-backend"
     agent_trace_resource_attributes: str = ""
+    log_level: str = "INFO"
     auth_mode: Literal["none", "firebase"] = "none"
     firebase_project_id: str | None = None
     local_auth_user_id: str = "local-owner"

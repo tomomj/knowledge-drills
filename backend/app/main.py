@@ -8,6 +8,7 @@ from app.clients.firebase_auth_client import create_auth_client
 from app.clients.local_agent_invoker import LocalAgentInvoker
 from app.config import Settings, get_settings
 from app.errors import register_exception_handlers
+from app.logging_config import configure_app_logging
 from app.observability import configure_adk_tracing
 from app.repositories.firestore_client import (
     FirestoreClient,
@@ -53,6 +54,7 @@ def _create_firestore_client(settings: Settings) -> FirestoreClient:
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    configure_app_logging(settings)
     configure_adk_tracing(settings)
     app = FastAPI(title=settings.app_name)
     app.add_middleware(
