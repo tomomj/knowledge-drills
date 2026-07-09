@@ -125,6 +125,29 @@ def test_generate_drill_snapshots_drill_focus_and_sends_it_to_agent() -> None:
     assert saved_after_course_update.drill_focus == "例外条件を重点的に出す"
 
 
+def test_generate_drill_normalizes_heading_only_source_evidence() -> None:
+    service, _course_repository, drill_repository = _service(
+        {
+            "questions": [
+                _question_payload("q1", excerpt="方針"),
+                _question_payload("q2", excerpt="方針"),
+                _question_payload("q3", excerpt="方針"),
+            ]
+        }
+    )
+
+    drill_run = service.generate_drill("course-1", "owner-1")
+
+    saved = drill_repository.get(drill_run.id)
+    assert saved is not None
+    assert saved.status == "ready"
+    assert all(
+        evidence.excerpt == "## 方針"
+        for question in saved.questions
+        for evidence in question.source_evidence
+    )
+
+
 @pytest.mark.parametrize("excerpt", ["## 存在しない方針", "   "])
 def test_generate_drill_marks_run_failed_when_source_evidence_is_not_in_course(
     excerpt: str,

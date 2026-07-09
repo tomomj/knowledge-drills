@@ -192,7 +192,7 @@ export function DrillAdminPage() {
 
         {drill.status === 'failed' ? (
           <StatusBanner tone="error">
-            ドリル生成に失敗しました。{drill.errorMessage ?? ''}
+            ドリル生成に失敗しました。{drillGenerationFailureDetail(drill.errorMessage)}
           </StatusBanner>
         ) : null}
         {analysisState?.status === 'loading' ? (
@@ -572,6 +572,17 @@ function analysisErrorMessage(error: unknown): string {
     return error.error.message
   }
   return '分析に失敗しました。再試行してください。'
+}
+
+function drillGenerationFailureDetail(message: string | null): string {
+  const normalized = message?.trim()
+  if (!normalized || normalized === 'drill generation failed') {
+    return '教材の根拠を確認できませんでした。教材本文を確認して、もう一度生成してください。'
+  }
+  if (normalized === 'share token reservation failed') {
+    return '共有 URL の発行に失敗しました。もう一度生成してください。'
+  }
+  return normalized
 }
 
 function formatScore(value: number | null): string {

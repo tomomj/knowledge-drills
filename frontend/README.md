@@ -64,6 +64,17 @@ VITE_AUTH_MODE=none npm run dev
 Playwright は `VITE_AUTH_MODE=none` を指定して frontend を起動し、backend には
 `KNOWLEDGE_DRILLS_CORS_ALLOWED_ORIGINS` を渡します。
 
+実 LLM を使う E2E は通常 CI では skip されます。ADK 認証環境を読み込んだうえで
+`E2E_LLM=1` を指定すると、backend は `KNOWLEDGE_DRILLS_AGENT_MODE=adk` と
+`KNOWLEDGE_DRILL_AGENT_ANALYSIS_MODE=single` で起動します。
+
+```sh
+set -a
+source ../agent/.env
+set +a
+E2E_LLM=1 npm run test:e2e -- llm-agent.spec.ts
+```
+
 ## 検証コマンド
 
 ```sh
