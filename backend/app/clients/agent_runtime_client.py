@@ -54,7 +54,15 @@ class AgentRuntimeClient:
         )
 
     def analyze_failures(self, request: FailureAnalysisRequest) -> FailureAnalysisResponse:
-        return self._invoke_typed("analyze_failures", request, FailureAnalysisResponse)
+        return self._invoke_typed(
+            "analyze_failures",
+            request,
+            FailureAnalysisResponse,
+            post_validate=lambda response: self._validate_failure_analysis_response(
+                request,
+                response,
+            ),
+        )
 
     def propose_document_patch(self, request: DocumentPatchRequest) -> DocumentPatchResponse:
         return self._invoke_typed("propose_document_patch", request, DocumentPatchResponse)
@@ -134,6 +142,17 @@ class AgentRuntimeClient:
             return "questionId does not match request question"
         if response.score > request.question.max_score:
             return "score exceeds request question maxScore"
+        return None
+
+    def _validate_failure_analysis_response(
+        self,
+        request: FailureAnalysisRequest,
+        response: FailureAnalysisResponse,
+    ) -> str | None:
+        expected_sample_size = len(request.answers)
+        for signal in response.failure_signals:
+            if signal.sample_size != expected_sample_size:
+                return "failure signal sampleSize does not match request answers"
         return None
 
 

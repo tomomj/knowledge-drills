@@ -21,6 +21,7 @@
 - suspectedDocumentGap
 - targetSections
 - recommendedChange
+- affectedCount
 - sampleSize
 - confidenceNote
 
@@ -49,8 +50,11 @@ reviewNotes の割り当て:
 - finalizer の採用方針や partial 採用の注意は timelineStep=decide_patch_strategy に置いてください。
 
 ルール:
-- sampleSize には、その誤答傾向を示した受講者数ではなく、提供された採点済み回答の受講者総数を設定してください。何人がその傾向を示したかは evidence に記載してください。
+- affectedCount には、その誤答傾向を示した受講者数を設定してください。
+- sampleSize には、その誤答傾向を示した受講者数ではなく、提供された採点済み回答の受講者総数を設定してください。何人がその傾向を示したかは affectedCount に記録してください。
+- affectedCount / sampleSize が構造化された人数情報です。evidence や reviewNotes の自由文では「3名中3名」「100%」のような人数比や割合を書かず、該当する missingPoints / failureTags / questionId / target section などの根拠を記載してください。
 - sampleSize が3未満の場合は confidenceNote を含め、小さいサンプルに基づく傾向として表現してください。
+- severity は low / medium / high のいずれかだけを使ってください。
 - 講座 Markdown に存在しない社内ルール、方針、事実、義務を創作しないでください。
 - 受講者を責めないでください。
 - Chain-of-thought、内部推論、プロンプト本文を reviewNotes や failureSignals に含めないでください。

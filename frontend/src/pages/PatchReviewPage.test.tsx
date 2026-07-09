@@ -29,6 +29,7 @@ const patch: DocumentPatch = {
       suspectedDocumentGap: '例外条件が不足',
       targetSections: ['## 判断基準'],
       recommendedChange: '例外条件を追記',
+      affectedCount: 1,
       sampleSize: 2,
       confidenceNote: '少数回答の傾向です。',
     },
@@ -91,6 +92,7 @@ describe('PatchReviewPage', () => {
 
     await waitFor(() => expect(screen.getByText('提案中')).toBeTruthy())
     expect(screen.getByText('回答サンプル 2 件')).toBeTruthy()
+    expect(screen.getByText(/該当 1 \/ サンプル 2 件/)).toBeTruthy()
     expect(screen.getByText(/少数回答の傾向です。/)).toBeTruthy()
     expect(screen.getByText('既存運用との整合を確認')).toBeTruthy()
     expect(screen.getByText(/--- base.md/)).toBeTruthy()

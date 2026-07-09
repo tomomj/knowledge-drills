@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Literal
 from uuid import uuid4
 
@@ -124,10 +125,16 @@ class GradedAnswerSummary(AgentModel):
     grading_results: list[GradingOutput]
 
 
+class FailureSeverity(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
 class FailureSignal(AgentModel):
     id: str = Field(default_factory=lambda: f"fs_{uuid4().hex[:8]}")
     title: str
-    severity: str
+    severity: FailureSeverity
     evidence: list[str] = Field(min_length=1)
     likely_cause: str = Field(
         validation_alias=AliasChoices("likelyCause", "inferredCause"),
@@ -139,8 +146,15 @@ class FailureSignal(AgentModel):
     )
     target_sections: list[str] = Field(min_length=1)
     recommended_change: str
+    affected_count: int = Field(ge=0)
     sample_size: int = Field(ge=1)
     confidence_note: str | None = None
+
+    @model_validator(mode="after")
+    def validate_affected_count(self) -> FailureSignal:
+        if self.affected_count > self.sample_size:
+            raise ValueError("affected_count must not exceed sample_size")
+        return self
 
 
 class FailureAnalysisInput(AgentModel):

@@ -5,6 +5,7 @@ from knowledge_drill_agent.schemas import (
     DrillGenerationOutput,
     DrillQuestion,
     FailureAnalysisOutput,
+    FailureSeverity,
     FailureSignal,
     GradingOutput,
     RubricItem,
@@ -49,12 +50,13 @@ def build_sample_failure_analysis_output() -> FailureAnalysisOutput:
             FailureSignal(
                 id="fs_sample_001",
                 title="判断根拠の不足",
-                severity="medium",
+                severity=FailureSeverity.MEDIUM,
                 evidence=["2 件の回答で根拠箇所への言及がなかった"],
                 likely_cause="例外条件を判断する説明が講座内で短い",
                 suspected_document_gap="判断基準の具体例が不足している",
                 target_sections=["## 対応方針"],
                 recommended_change="例外条件の判断例を 1 つ追加する",
+                affected_count=2,
                 sample_size=2,
                 confidence_note="少数回答に基づく傾向として扱う",
             )

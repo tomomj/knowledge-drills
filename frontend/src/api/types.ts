@@ -221,6 +221,7 @@ export type FailureSignal = {
   suspectedDocumentGap: string
   targetSections: string[]
   recommendedChange: string
+  affectedCount: number
   sampleSize: number
   confidenceNote: string | null
 }

@@ -27,4 +27,5 @@ acceptedFindings / rejectedFindings の各要素:
 - acceptedFindings は finalizer が Failure Signal の候補として検討できる所見だけにしてください。
 - 根拠が弱い、単発の可能性が高い、教材 patch に流すと危険な所見は rejectedFindings または risks に入れてください。
 - 設問品質が主因の可能性がある場合は、教材 patch を控えめにする guidance を残してください。
+- 人数は affectedCount / sampleSize に構造化されます。該当者だけを分母にした「3名中3名」「100%」のような表現が analyst 所見に含まれる場合は、finalizerGuidance で全回答者数を分母に直すよう明記してください。
 - finalizerGuidance には、どの accepted finding をどの target section / recommended change に結びつけるべきかを表示可能な文章で書いてください。
