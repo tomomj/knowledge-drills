@@ -29,6 +29,9 @@ class LocalAgentInvoker:
                 "failureTags": ["missing_exception"],
             }
         if task_name == "analyze_failures":
+            answers = cast(list[object], payload["answers"])
+            sample_size = len(answers)
+            affected_count = max(1, sample_size - 1)
             return {
                 "failureSignals": [
                     {
@@ -40,8 +43,8 @@ class LocalAgentInvoker:
                         "suspectedDocumentGap": "判断基準に例外条件の説明が不足",
                         "targetSections": ["## 判断基準"],
                         "recommendedChange": "例外条件と確認先を追記する",
-                        "affectedCount": 1,
-                        "sampleSize": 1,
+                        "affectedCount": affected_count,
+                        "sampleSize": sample_size,
                         "confidenceNote": "少数回答の傾向です。",
                     }
                 ],
