@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -126,7 +126,7 @@ function renderDrillAdmin() {
 function noGradedDrill(): DrillAdmin {
   return {
     ...drill,
-    answerCount: 2,
+    answerCount: 0,
     scoreSummary: {
       gradedAnswerCount: 0,
       averageScore: null,
@@ -196,22 +196,34 @@ describe('DrillAdminPage', () => {
     vi.useRealTimers()
   })
 
-  it('shows share URL, answer count, rubric summary, score summary, focus, and analyze button', async () => {
+  it('shows share URL, status, score summary, collapsed questions, and analyze button in side-first DOM order', async () => {
+    const user = userEvent.setup()
     renderDrillAdmin()
 
     await waitFor(() => expect(screen.getByText('/drills/share-token')).toBeTruthy())
-    expect(screen.getByText('回答数')).toBeTruthy()
-    expect(screen.getAllByText('判断理由を書いてください。').length).toBeGreaterThan(0)
-    expect(screen.getByText('根拠')).toBeTruthy()
-    expect(screen.getByText('模範解答')).toBeTruthy()
-    expect(screen.getByText('根拠に基づき判断する。')).toBeTruthy()
-    expect(screen.getByText('教材の根拠')).toBeTruthy()
-    expect(screen.getByText('## 方針')).toBeTruthy()
+    const side = screen.getByLabelText('ドリル補助情報')
+    const main = screen.getByLabelText('ドリル主内容')
+    expect(
+      side.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(screen.queryByText('Status')).toBeNull()
+    expect(screen.queryByText('実行可能')).toBeNull()
+    expect(screen.getByText('ドリルの状態')).toBeTruthy()
     expect(screen.getByText('例外条件を重点的に確認')).toBeTruthy()
     expect(screen.getByText('採点済み回答')).toBeTruthy()
-    expect(screen.getAllByText('3.0 / 4 点').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('3.0 / 4 点')).toHaveLength(1)
     expect(screen.getByText(/欠落: 例外条件/)).toBeTruthy()
     expect(screen.getByText(/タグ: 判断根拠不足/)).toBeTruthy()
+    expect(screen.getAllByText('2 件')).toHaveLength(1)
+    expect(screen.getAllByText('判断理由を書いてください。').length).toBeGreaterThan(0)
+    const questionDetails = screen.getByText('設問詳細を表示').closest('details')
+    expect(questionDetails?.hasAttribute('open')).toBe(false)
+    await user.click(within(questionDetails as HTMLElement).getByText('設問詳細を表示'))
+    expect(questionDetails?.hasAttribute('open')).toBe(true)
+    expect(within(questionDetails as HTMLElement).getByText('模範解答')).toBeTruthy()
+    expect(within(questionDetails as HTMLElement).getByText('根拠に基づき判断する。')).toBeTruthy()
+    expect(within(questionDetails as HTMLElement).getByText('教材の根拠')).toBeTruthy()
+    expect(within(questionDetails as HTMLElement).getByText('## 方針')).toBeTruthy()
     const button = screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement
     expect(button.disabled).toBe(false)
 
@@ -226,11 +238,14 @@ describe('DrillAdminPage', () => {
 
   it('disables analysis and shows guidance when there are no graded answers', async () => {
     mocks.getDrill.mockResolvedValueOnce(noGradedDrill())
+    mocks.getDrillAnswers.mockResolvedValueOnce({ ...answersResponse, answers: [] })
 
     renderDrillAdmin()
 
-    await screen.findByText('採点済み回答がまだありません')
+    await screen.findByText('共有 URL を受講者に配布しましょう。')
     expect(screen.getByText('未計測 / 4 点')).toBeTruthy()
+    expect(screen.queryByText('採点済み回答がまだありません')).toBeNull()
+    expect(screen.queryByText('まだ回答がありません。共有 URL を受講者に配布しましょう。')).toBeNull()
     const button = screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement
     expect(button.disabled).toBe(true)
   })
@@ -246,6 +261,8 @@ describe('DrillAdminPage', () => {
     vi.useFakeTimers()
     fireEvent.click(screen.getByRole('button', { name: '回答を分析する' }))
     expect(screen.getByText('回答を分析中です。')).toBeTruthy()
+    expect((screen.getByLabelText('設問一覧') as HTMLDetailsElement).open).toBe(false)
+    expect((screen.getByLabelText('回答一覧') as HTMLDetailsElement).open).toBe(false)
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1000)
@@ -281,6 +298,7 @@ describe('DrillAdminPage', () => {
       await vi.advanceTimersByTimeAsync(1000)
     })
     expect(screen.getByText('回答を収集')).toBeTruthy()
+    expect((screen.getByLabelText('設問一覧') as HTMLDetailsElement).open).toBe(false)
 
     await act(async () => {
       analysis.reject(
@@ -293,6 +311,8 @@ describe('DrillAdminPage', () => {
     })
 
     expect(screen.getByText('分析サービスが停止しています。')).toBeTruthy()
+    expect((screen.getByLabelText('設問一覧') as HTMLDetailsElement).open).toBe(true)
+    expect((screen.getByLabelText('回答一覧') as HTMLDetailsElement).open).toBe(true)
     const callsAfterFailure = mocks.getDrill.mock.calls.length
 
     await act(async () => {

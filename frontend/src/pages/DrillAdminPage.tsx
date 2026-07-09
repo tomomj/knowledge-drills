@@ -45,6 +45,8 @@ export function DrillAdminPage() {
   const [selectedAnswerId, setSelectedAnswerId] = useState<string | null>(null)
   const [answerQuery, setAnswerQuery] = useState('')
   const [copied, setCopied] = useState(false)
+  const [questionsOpen, setQuestionsOpen] = useState(true)
+  const [answersOpen, setAnswersOpen] = useState(true)
 
   useEffect(() => {
     let active = true
@@ -131,12 +133,16 @@ export function DrillAdminPage() {
 
   async function analyzeAnswers() {
     setAnalysisState({ status: 'loading' })
+    setQuestionsOpen(false)
+    setAnswersOpen(false)
     try {
       const result = await api.analyzeDrill(drill.courseId, drill.id)
       navigate(
         `/courses/${drill.courseId}/drill-runs/${drill.id}/analysis?patchId=${result.patchId}`,
       )
     } catch (error) {
+      setQuestionsOpen(true)
+      setAnswersOpen(true)
       setAnalysisState({ status: 'failed', message: analysisErrorMessage(error) })
     }
   }
@@ -196,154 +202,178 @@ export function DrillAdminPage() {
           <StatusBanner tone="error">{analysisState.message}</StatusBanner>
         ) : null}
 
-        <section className="stat-row" aria-label="ドリルの状態">
-          <div className="stat">
-            <div className="stat__label">Status</div>
-            <div className="stat__value">
-              <span className={`chip chip--${statusChip.tone}`}>{statusChip.label}</span>
-            </div>
-          </div>
-          <div className="stat">
-            <div className="stat__label">資料バージョン</div>
-            <div className="stat__value">v{drill.courseVersion}</div>
-          </div>
-          <div className="stat">
-            <div className="stat__label">回答数</div>
-            <div className="stat__value">
-              {drill.answerCount}
-              <span className="stat__unit">件</span>
-            </div>
-          </div>
-          <div className="stat">
-            <div className="stat__label">分析</div>
-            <div className="stat__value">
-              {drill.canAnalyze ? (
-                <span className="chip chip--accent">実行可能</span>
-              ) : (
-                <span className="chip chip--muted">回答待ち</span>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <ScoreSummaryPanel drill={drill} />
-
-        <AnalysisTimeline title="分析タイムライン" items={drill.analysisTimeline} />
-
-        <div className="card">
-          <div className="card__body share-row">
-            <span className="share-row__label">共有 URL</span>
-            <code>{drill.shareUrl ?? '-'}</code>
-            <button
-              type="button"
-              className="tag-btn"
-              onClick={copyShareUrl}
-              disabled={!drill.shareUrl}
-            >
-              {copied ? 'コピーしました' : 'コピー'}
-            </button>
-            {drill.shareUrl ? (
-              <a className="tag-btn" href={drill.shareUrl} target="_blank" rel="noreferrer">
-                プレビュー
-              </a>
-            ) : null}
-          </div>
-        </div>
-
-        <section className="question-stack">
-          {drill.questions.map((question) => (
-            <article className="card q-card" key={question.id}>
-              <div className="q-main">
-                <span className="q-num">{question.id}</span>
-                <h2>{question.question}</h2>
-                <p className="q-intent">
-                  <b>出題意図</b>
-                  {question.intent}
-                </p>
-              </div>
-              <div className="q-detail-grid">
-                <div className="q-answer-guide">
-                  <div className="q-answer-guide__block">
-                    <h3>模範解答</h3>
-                    <p>{question.idealAnswer}</p>
-                  </div>
-                  <div className="q-answer-guide__block">
-                    <h3>教材の根拠</h3>
-                    <ul>
-                      {question.sourceEvidence.map((evidence) => (
-                        <li key={`${evidence.sectionHeading}:${evidence.excerpt}`}>
-                          <b>{evidence.sectionHeading}</b>
-                          <span>{evidence.excerpt}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <aside className="q-rubric" aria-label={`${question.id} のルーブリック`}>
-                  <h3>ルーブリック</h3>
-                  <dl className="rubric-list">
-                    {question.rubric.map((item) => (
-                      <div key={item.criterion}>
-                        <dt>{item.criterion}</dt>
-                        <dd>{item.points} pts</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </aside>
-              </div>
-            </article>
-          ))}
-        </section>
-
-        <section style={{ display: 'grid', gap: 14 }} aria-label="回答一覧">
-          <h2 className="section-title">回答一覧</h2>
-          {answersState.status === 'loading' ? (
-            <StatusBanner tone="info">回答を読み込んでいます。</StatusBanner>
-          ) : null}
-          {answersState.status === 'failed' ? (
-            <StatusBanner tone="error">{answersState.message}</StatusBanner>
-          ) : null}
-          {answersState.status === 'ready' && answersState.answers.length === 0 ? (
-            <StatusBanner tone="info">
-              まだ回答がありません。共有 URL を受講者に配布しましょう。
-            </StatusBanner>
-          ) : null}
-          {answersState.status === 'ready' && answersState.answers.length > 0 ? (
-            <AnswerBrowser
-              answers={answersState.answers}
-              questions={drill.questions}
-              query={answerQuery}
-              onQueryChange={setAnswerQuery}
-              selectedAnswerId={selectedAnswerId}
-              onSelect={setSelectedAnswerId}
+        <section className="drill-grid">
+          <aside className="drill-grid__side" aria-label="ドリル補助情報">
+            <ShareUrlCard
+              drill={drill}
+              copied={copied}
+              onCopy={() => void copyShareUrl()}
             />
-          ) : null}
+            <DrillStatusCard drill={drill} statusChip={statusChip} />
+            <ScoreSummaryPanel drill={drill} />
+          </aside>
+
+          <div className="drill-grid__main" aria-label="ドリル主内容">
+            <AnalysisTimeline title="分析タイムライン" items={drill.analysisTimeline} />
+
+            <details
+              className="drill-section"
+              aria-label="設問一覧"
+              open={questionsOpen}
+              onToggle={(event) => setQuestionsOpen(event.currentTarget.open)}
+            >
+              <summary className="drill-section__summary">
+                <span className="section-title">設問一覧</span>
+                <span>{drill.questions.length} 問</span>
+              </summary>
+              <section className="question-stack">
+                {drill.questions.map((question) => (
+                  <details className="card q-card" key={question.id}>
+                    <summary className="q-main">
+                      <span className="q-num">{question.id}</span>
+                      <h2>{question.question}</h2>
+                      <p className="q-intent">
+                        <b>出題意図</b>
+                        {question.intent}
+                      </p>
+                      <span className="q-toggle">設問詳細を表示</span>
+                    </summary>
+                    <div className="q-detail-grid">
+                      <div className="q-answer-guide">
+                        <div className="q-answer-guide__block">
+                          <h3>模範解答</h3>
+                          <p>{question.idealAnswer}</p>
+                        </div>
+                        <div className="q-answer-guide__block">
+                          <h3>教材の根拠</h3>
+                          <ul>
+                            {question.sourceEvidence.map((evidence) => (
+                              <li key={`${evidence.sectionHeading}:${evidence.excerpt}`}>
+                                <b>{evidence.sectionHeading}</b>
+                                <span>{evidence.excerpt}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+
+                      <aside className="q-rubric" aria-label={`${question.id} のルーブリック`}>
+                        <h3>ルーブリック</h3>
+                        <dl className="rubric-list">
+                          {question.rubric.map((item) => (
+                            <div key={item.criterion}>
+                              <dt>{item.criterion}</dt>
+                              <dd>{item.points} pts</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </aside>
+                    </div>
+                  </details>
+                ))}
+              </section>
+            </details>
+
+            <details
+              className="drill-section"
+              aria-label="回答一覧"
+              open={answersOpen}
+              onToggle={(event) => setAnswersOpen(event.currentTarget.open)}
+            >
+              <summary className="drill-section__summary">
+                <span className="section-title">回答一覧</span>
+              </summary>
+              {answersState.status === 'loading' ? (
+                <StatusBanner tone="info">回答を読み込んでいます。</StatusBanner>
+              ) : null}
+              {answersState.status === 'failed' ? (
+                <StatusBanner tone="error">{answersState.message}</StatusBanner>
+              ) : null}
+              {answersState.status === 'ready' && answersState.answers.length > 0 ? (
+                <AnswerBrowser
+                  answers={answersState.answers}
+                  questions={drill.questions}
+                  query={answerQuery}
+                  onQueryChange={setAnswerQuery}
+                  selectedAnswerId={selectedAnswerId}
+                  onSelect={setSelectedAnswerId}
+                />
+              ) : null}
+            </details>
+          </div>
         </section>
       </main>
     </AppShell>
   )
 }
 
-type ScoreSummaryPanelProps = {
+type ShareUrlCardProps = {
   drill: DrillAdmin
+  copied: boolean
+  onCopy: () => void
 }
 
-function ScoreSummaryPanel({ drill }: ScoreSummaryPanelProps) {
+function ShareUrlCard({ drill, copied, onCopy }: ShareUrlCardProps) {
+  return (
+    <article className="card">
+      <div className="card__head">
+        <h2>共有 URL</h2>
+      </div>
+      <div className="card__body share-card">
+        <code>{drill.shareUrl ?? '-'}</code>
+        <div className="share-card__actions">
+          <button
+            type="button"
+            className="tag-btn"
+            onClick={onCopy}
+            disabled={!drill.shareUrl}
+          >
+            {copied ? 'コピーしました' : 'コピー'}
+          </button>
+          {drill.shareUrl ? (
+            <a className="tag-btn" href={drill.shareUrl} target="_blank" rel="noreferrer">
+              プレビュー
+            </a>
+          ) : null}
+        </div>
+        {drill.answerCount === 0 ? (
+          <p className="share-card__hint">共有 URL を受講者に配布しましょう。</p>
+        ) : null}
+      </div>
+    </article>
+  )
+}
+
+type DrillStatusCardProps = {
+  drill: DrillAdmin
+  statusChip: { label: string; tone: string }
+}
+
+function DrillStatusCard({ drill, statusChip }: DrillStatusCardProps) {
   const summary = drill.scoreSummary
   const gradedAnswerCount = summary?.gradedAnswerCount ?? 0
   const maxScore = summary?.maxScore ?? totalMaxScore(drill)
 
   return (
-    <section className="card score-summary" aria-labelledby="score-summary-title">
+    <article className="card">
       <div className="card__head">
-        <h2 id="score-summary-title">分析前の採点状況</h2>
+        <h2>ドリルの状態</h2>
       </div>
-      <div className="card__body score-summary__body">
-        <dl className="score-summary__stats">
+      <div className="card__body">
+        <dl className="drill-status-list">
           <div>
-            <dt>出題観点</dt>
-            <dd>{drill.drillFocus ?? '未設定'}</dd>
+            <dt>状態</dt>
+            <dd>
+              <span className={`chip chip--${statusChip.tone}`}>{statusChip.label}</span>
+            </dd>
+          </div>
+          <div>
+            <dt>資料バージョン</dt>
+            <dd>v{drill.courseVersion}</dd>
+          </div>
+          <div>
+            <dt>回答数</dt>
+            <dd>{drill.answerCount} 件</dd>
           </div>
           <div>
             <dt>採点済み回答</dt>
@@ -356,12 +386,27 @@ function ScoreSummaryPanel({ drill }: ScoreSummaryPanelProps) {
             </dd>
           </div>
         </dl>
+      </div>
+    </article>
+  )
+}
 
-        {gradedAnswerCount === 0 ? (
-          <StatusBanner tone="info">採点済み回答がまだありません</StatusBanner>
-        ) : null}
+type ScoreSummaryPanelProps = {
+  drill: DrillAdmin
+}
 
-        {summary && summary.questions.length > 0 && gradedAnswerCount > 0 ? (
+function ScoreSummaryPanel({ drill }: ScoreSummaryPanelProps) {
+  const summary = drill.scoreSummary
+
+  return (
+    <section className="card score-summary" aria-labelledby="score-summary-title">
+      <div className="card__head">
+        <h2 id="score-summary-title">設問別採点状況</h2>
+      </div>
+      <div className="card__body score-summary__body">
+        <p className="score-summary__focus">{drill.drillFocus ?? '出題観点は未設定です。'}</p>
+
+        {summary && summary.questions.length > 0 ? (
           <ul className="score-summary__questions" aria-label="設問別の採点状況">
             {summary.questions.map((question) => {
               const tags = [
@@ -377,6 +422,7 @@ function ScoreSummaryPanel({ drill }: ScoreSummaryPanelProps) {
                   <div className="score-summary__question-head">
                     <span className="q-num">{question.questionId}</span>
                     <span>
+                      平均{' '}
                       {formatScore(question.averageScore)} / {question.maxScore} 点
                     </span>
                     <span>{question.gradedAnswerCount} 件</span>

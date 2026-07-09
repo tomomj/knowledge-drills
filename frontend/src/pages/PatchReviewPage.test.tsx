@@ -1,10 +1,10 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiClientError } from '../api/client'
-import type { DocumentPatch } from '../api/types'
+import type { CourseDetail, DocumentPatch } from '../api/types'
 import { PatchReviewPage } from './PatchReviewPage'
 
 const patch: DocumentPatch = {
@@ -36,8 +36,19 @@ const patch: DocumentPatch = {
   ],
 }
 
+const course: CourseDetail = {
+  id: 'course-1',
+  title: 'テスト講座',
+  markdown: '# Before',
+  drillFocus: null,
+  version: 1,
+  latestDrillRunId: 'drill-1',
+  latestPatchId: 'patch-1',
+}
+
 const mocks = vi.hoisted(() => ({
   getPatch: vi.fn(),
+  getCourse: vi.fn(),
   applyPatch: vi.fn(),
   rejectPatch: vi.fn(),
   ApiClientError: class ApiClientError extends Error {
@@ -58,6 +69,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../api/client', () => ({
   api: {
     getPatch: mocks.getPatch,
+    getCourse: mocks.getCourse,
     applyPatch: mocks.applyPatch,
     rejectPatch: mocks.rejectPatch,
   },
@@ -77,26 +89,58 @@ function renderPatch() {
 describe('PatchReviewPage', () => {
   beforeEach(() => {
     mocks.getPatch.mockReset()
+    mocks.getCourse.mockReset()
     mocks.applyPatch.mockReset()
     mocks.rejectPatch.mockReset()
+    mocks.getCourse.mockResolvedValue(course)
   })
 
   afterEach(() => {
     cleanup()
   })
 
-  it('renders failure signals, confidence note, risk notes, and diff', async () => {
+  it('renders failure signals, confidence note, integrated risk notes, diff stats, and version label', async () => {
     mocks.getPatch.mockResolvedValueOnce(patch)
 
     renderPatch()
 
     await waitFor(() => expect(screen.getByText('提案中')).toBeTruthy())
     expect(screen.getByText('回答サンプル 2 件')).toBeTruthy()
+    expect(screen.queryByText('ドリル drill-1')).toBeNull()
     expect(screen.getByText(/該当 1 \/ サンプル 2 件/)).toBeTruthy()
     expect(screen.getByText(/少数回答の傾向です。/)).toBeTruthy()
+    expect(screen.getByText('リスクと注意点')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'リスクノート' })).toBeNull()
     expect(screen.getByText('既存運用との整合を確認')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('v1 → v2')).toBeTruthy())
+    expect(screen.getByText('+1 −1')).toBeTruthy()
     expect(screen.getByText(/--- base.md/)).toBeTruthy()
     expect(screen.queryByText('分析タイムライン')).toBeNull()
+  })
+
+  it('keeps diff and decisions usable while course version is still loading', async () => {
+    mocks.getPatch.mockResolvedValueOnce(patch)
+    mocks.getCourse.mockReturnValueOnce(new Promise(() => undefined))
+
+    renderPatch()
+
+    await screen.findByText('提案中')
+    expect(screen.getByRole('button', { name: '修正を適用する' })).toBeTruthy()
+    expect(screen.getByLabelText('Diff').textContent).toContain('# After')
+    expect(screen.queryByText(/v1 → v2/)).toBeNull()
+  })
+
+  it('continues review without version label when course lookup fails', async () => {
+    mocks.getPatch.mockResolvedValueOnce(patch)
+    mocks.getCourse.mockRejectedValueOnce(new Error('course lookup failed'))
+
+    renderPatch()
+
+    await screen.findByText('提案中')
+    expect(screen.getByRole('button', { name: '修正を適用する' })).toBeTruthy()
+    expect(screen.getByLabelText('Diff').textContent).toContain('# After')
+    await waitFor(() => expect(mocks.getCourse).toHaveBeenCalledWith('course-1'))
+    expect(screen.queryByText(/v1 → v2/)).toBeNull()
   })
 
   it('renders analysis timeline between patch summary and failure signals', async () => {
@@ -123,8 +167,15 @@ describe('PatchReviewPage', () => {
     await screen.findByText('回答を収集')
     expect(screen.getByText('分析タイムライン')).toBeTruthy()
     expect(screen.getByText('採点済み回答 2 件を確認しました。')).toBeTruthy()
-    expect(screen.getByText('採用レビュー: finding-1 のみ採用 (approvedFindingIds: finding-1)')).toBeTruthy()
-    expect(screen.getByText('受講者A: 根拠不足')).toBeTruthy()
+    const evidenceDetails = screen.getByText('根拠を表示').closest('details')
+    expect(evidenceDetails?.hasAttribute('open')).toBe(false)
+    await userEvent.click(screen.getByText('根拠を表示'))
+    expect(
+      within(evidenceDetails as HTMLElement).getByText(
+        '採用レビュー: finding-1 のみ採用 (approvedFindingIds: finding-1)',
+      ),
+    ).toBeTruthy()
+    expect(within(evidenceDetails as HTMLElement).getByText('受講者A: 根拠不足')).toBeTruthy()
 
     const summary = screen.getByText(/要約：判断基準を追記/)
     const timeline = screen.getByText('分析タイムライン')

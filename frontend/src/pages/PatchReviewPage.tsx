@@ -28,6 +28,7 @@ export function PatchReviewPage() {
   const [searchParams] = useSearchParams()
   const patchId = patchIdParam ?? searchParams.get('patchId')
   const [state, setState] = useState<PageState>({ status: 'loading' })
+  const [courseVersion, setCourseVersion] = useState<number | null>(null)
   const [ownerFeedback, setOwnerFeedback] = useState('')
   const [pendingDecision, setPendingDecision] = useState<Decision | null>(null)
 
@@ -43,6 +44,19 @@ export function PatchReviewPage() {
         if (active) {
           setState({ status: 'ready', patch })
           setOwnerFeedback(patch.ownerFeedback ?? '')
+          setCourseVersion(null)
+          void api
+            .getCourse(patch.courseId)
+            .then((course) => {
+              if (active) {
+                setCourseVersion(course.version)
+              }
+            })
+            .catch(() => {
+              if (active) {
+                setCourseVersion(null)
+              }
+            })
         }
       } catch (error) {
         if (active) {
@@ -100,6 +114,10 @@ export function PatchReviewPage() {
   const statusChip = patch ? PATCH_STATUS_CHIPS[patch.status] : null
   const courseUrl = patch ? `/courses/${patch.courseId}` : undefined
   const drillUrl = patch ? `/courses/${patch.courseId}/drill-runs/${patch.drillRunId}` : undefined
+  const versionLabel =
+    patch?.status === 'proposed' && courseVersion !== null
+      ? `v${courseVersion} → v${courseVersion + 1}`
+      : undefined
 
   return (
     <AppShell>
@@ -120,8 +138,6 @@ export function PatchReviewPage() {
                 {statusChip ? (
                   <span className={`chip chip--${statusChip.tone}`}>{statusChip.label}</span>
                 ) : null}
-                <span>ドリル {patch.drillRunId}</span>
-                <span className="meta-chips__sep">·</span>
                 <span>回答サンプル {sampleSize} 件</span>
               </div>
             ) : null}
@@ -155,28 +171,34 @@ export function PatchReviewPage() {
         {patch ? (
           <section className="patch-grid">
             <div className="patch-col">
-              <AnalysisTimeline title="分析タイムライン" items={patch.analysisTimeline} />
+              <AnalysisTimeline
+                title="分析タイムライン"
+                items={patch.analysisTimeline}
+                evidenceDisplay="collapsed"
+              />
 
               {patch.failureSignals.map((signal) => (
                 <FailureSignalItem key={signal.id} signal={signal} />
               ))}
 
-              <article className="card">
-                <div className="card__head">
-                  <h2>リスクノート</h2>
-                </div>
-                <div className="card__body">
+              {patch.riskNotes.length > 0 ? (
+                <section className="risk-notes" aria-labelledby="risk-notes-title">
+                  <h2 id="risk-notes-title">リスクと注意点</h2>
                   <ul className="plain-list">
                     {patch.riskNotes.map((note) => (
                       <li key={note}>{note}</li>
                     ))}
                   </ul>
-                </div>
-              </article>
+                </section>
+              ) : null}
             </div>
 
             <div className="patch-col">
-              <DiffViewer title="提案される変更" diffText={patch.diffText} />
+              <DiffViewer
+                title="提案される変更"
+                diffText={patch.diffText}
+                versionLabel={versionLabel}
+              />
               <div className="card">
                 <div className="card__body">
                   <label className="field">
