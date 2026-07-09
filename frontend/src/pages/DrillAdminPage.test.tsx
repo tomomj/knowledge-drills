@@ -250,6 +250,23 @@ describe('DrillAdminPage', () => {
     expect(button.disabled).toBe(true)
   })
 
+  it('shows a friendly message for generation failure without exposing internal text', async () => {
+    mocks.getDrill.mockResolvedValueOnce({
+      ...drill,
+      status: 'failed',
+      questions: [],
+      rubricSummary: [],
+      shareUrl: '/drills/failed-token',
+      canAnalyze: false,
+      errorMessage: 'drill generation failed',
+    })
+
+    renderDrillAdmin()
+
+    await screen.findByText(/教材の根拠を確認できませんでした。/)
+    expect(screen.queryByText(/drill generation failed/)).toBeNull()
+  })
+
   it('polls the timeline while analysis is pending and stops after navigating to patch review', async () => {
     const analysis = deferred<AnalysisStartResponse>()
     mocks.analyzeDrill.mockReturnValueOnce(analysis.promise)
