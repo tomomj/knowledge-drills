@@ -151,6 +151,48 @@ def test_generate_drill_normalizes_heading_only_source_evidence() -> None:
     )
 
 
+def test_generate_drill_normalizes_source_evidence_across_markdown_whitespace() -> None:
+    course_markdown = (
+        "# 顧客情報の取り扱い\n\n"
+        "## 本人確認\n\n"
+        "契約内容、請求情報、登録メールアドレスなどの個人情報を案内する前に、"
+        "本人確認を行う。本人確認では、登録氏名、登録メールアドレス、契約番号のうち"
+        "二つ以上が一致していることを確認する。\n\n"
+        "本人確認が完了しない場合は、個人情報を含む回答をしてはならない。"
+        "その場合は、本人確認に必要な情報を案内し、確認完了後に改めて回答する。"
+    )
+    generated_excerpt = (
+        "本人確認では、登録氏名、登録メールアドレス、契約番号のうち二つ以上が"
+        "一致していることを確認する。本人確認が完了しない場合は、個人情報を含む"
+        "回答をしてはならない。その場合は、本人確認に必要な情報を案内し、確認完了後に"
+        "改めて回答する。"
+    )
+    service, _course_repository, drill_repository = _service(
+        {
+            "questions": [
+                _question_payload("q1", excerpt=generated_excerpt),
+                _question_payload("q2", excerpt="本人確認"),
+                _question_payload("q3", excerpt="本人確認"),
+            ]
+        },
+        course=Course(
+            id="course-1",
+            owner_user_id="owner-1",
+            title="講座",
+            markdown=course_markdown,
+        ),
+    )
+
+    drill_run = service.generate_drill("course-1", "owner-1")
+
+    saved = drill_repository.get(drill_run.id)
+    assert saved is not None
+    assert saved.status == "ready"
+    normalized_excerpt = saved.questions[0].source_evidence[0].excerpt
+    assert normalized_excerpt in course_markdown
+    assert "\n\n" in normalized_excerpt
+
+
 @pytest.mark.parametrize("excerpt", ["## 存在しない方針", "   "])
 def test_generate_drill_marks_run_failed_when_source_evidence_is_not_in_course(
     excerpt: str,
