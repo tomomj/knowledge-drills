@@ -177,9 +177,14 @@ export function PatchReviewPage() {
                 evidenceDisplay="collapsed"
               />
 
-              {patch.failureSignals.map((signal) => (
-                <FailureSignalItem key={signal.id} signal={signal} />
-              ))}
+              {patch.failureSignals.length > 0 ? (
+                <section className="signal-group" aria-labelledby="failure-signals-title">
+                  <h2 id="failure-signals-title">検出されたつまずき</h2>
+                  {patch.failureSignals.map((signal) => (
+                    <FailureSignalItem key={signal.id} signal={signal} />
+                  ))}
+                </section>
+              ) : null}
 
               {patch.riskNotes.length > 0 ? (
                 <section className="risk-notes" aria-labelledby="risk-notes-title">
@@ -260,7 +265,7 @@ function FailureSignalItem({ signal }: { signal: FailureSignal }) {
   return (
     <article className={`card signal signal--${signal.severity}`}>
       <div className="signal__head">
-        <h2>{signal.title}</h2>
+        <h3>{signal.title}</h3>
         <span className={`chip chip--${severity.tone}`}>{severity.label}</span>
       </div>
       <p className="signal__meta">

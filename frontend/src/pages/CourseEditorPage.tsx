@@ -314,32 +314,44 @@ type ScoredMetricsRun = CourseMetricsRun & {
 
 type ScoreProgression = {
   runs: ScoredMetricsRun[]
-  totalRateDelta: number
+  stepIndexes: number[]
+  omittedCount: number
+  uniformMaxScore: boolean
 }
 
 const SPARKLINE_WIDTH = 180
 const SPARKLINE_HEIGHT = 64
 const SPARKLINE_PADDING = 8
+const MAX_VISIBLE_STEPS = 4
 
 function ScoreProgressionCard({ progression }: { progression: ScoreProgression }) {
+  const { runs, stepIndexes, omittedCount, uniformMaxScore } = progression
+  const first = runs[0]
+  const last = runs[runs.length - 1]
+  const improved = scoreRate(last) >= scoreRate(first)
+  const summary = uniformMaxScore
+    ? `平均 ${formatMetricScore(first.averageScore)} → ${formatMetricScore(last.averageScore)} 点`
+    : `スコア率 ${formatRatePercent(first)} → ${formatRatePercent(last)}`
   return (
     <article className="card metrics-card" aria-label="改善メトリクス">
       <div className="card__head">
         <h2>スコアの推移</h2>
-        <span
-          className={`chip chip--${progression.totalRateDelta >= 0 ? 'success' : 'warning'}`}
-        >
-          {formatScoreRateDelta(progression.totalRateDelta)}
-        </span>
+        <span className={`chip chip--${improved ? 'success' : 'warning'}`}>{summary}</span>
       </div>
       <div className="card__body metrics-card__body">
-        <ScoreSparkline runs={progression.runs} />
+        <ScoreSparkline runs={runs} />
         <div className="metrics-flow">
-          {progression.runs.map((run, index) => {
-            const nextRun = progression.runs[index + 1]
-            const intervalDelta = nextRun ? scoreRateDelta(run, nextRun) : null
+          {stepIndexes.map((runIndex, position) => {
+            const run = runs[runIndex]
+            const nextRunIndex = stepIndexes[position + 1]
+            const nextRun = nextRunIndex !== undefined ? runs[nextRunIndex] : null
+            const intervalDelta =
+              nextRun && nextRunIndex === runIndex + 1 && nextRun.maxScore === run.maxScore
+                ? nextRun.averageScore - run.averageScore
+                : null
+            const showsOmission = position === 0 && omittedCount > 0
             return (
-              <div className="metrics-flow__segment" key={`${run.drillRunId}-${index}`}>
+              <div className="metrics-flow__segment" key={`${run.drillRunId}-${runIndex}`}>
                 <MetricRunStep run={run} />
                 {intervalDelta !== null ? (
                   <span
@@ -347,8 +359,11 @@ function ScoreProgressionCard({ progression }: { progression: ScoreProgression }
                       intervalDelta >= 0 ? 'up' : 'down'
                     }`}
                   >
-                    {formatScoreRateDelta(intervalDelta)}
+                    {formatScoreDelta(intervalDelta)}
                   </span>
+                ) : null}
+                {showsOmission ? (
+                  <span className="metrics-flow__skip">… {omittedCount} 版省略</span>
                 ) : null}
               </div>
             )
@@ -385,7 +400,7 @@ function ScoreSparkline({ runs }: { runs: ScoredMetricsRun[] }) {
     <svg
       className="metrics-sparkline"
       role="img"
-      aria-label="バージョンごとのスコア率の推移"
+      aria-label="バージョンごとの平均点の推移"
       viewBox={`0 0 ${SPARKLINE_WIDTH} ${SPARKLINE_HEIGHT}`}
       preserveAspectRatio="none"
     >
@@ -452,9 +467,16 @@ function buildScoreProgression(metrics: CourseMetricsResponse | null): ScoreProg
     return null
   }
 
+  const capped = runs.length > MAX_VISIBLE_STEPS
+  const stepIndexes = capped
+    ? [0, runs.length - 2, runs.length - 1]
+    : runs.map((_, index) => index)
+
   return {
     runs,
-    totalRateDelta: scoreRateDelta(runs[0], runs[runs.length - 1]),
+    stepIndexes,
+    omittedCount: capped ? runs.length - stepIndexes.length : 0,
+    uniformMaxScore: runs.every((run) => run.maxScore === runs[0].maxScore),
   }
 }
 
@@ -479,12 +501,12 @@ function scoreRate(run: ScoredMetricsRun): number {
   return run.averageScore / run.maxScore
 }
 
-function scoreRateDelta(before: ScoredMetricsRun, after: ScoredMetricsRun): number {
-  return (scoreRate(after) - scoreRate(before)) * 100
+function formatRatePercent(run: ScoredMetricsRun): string {
+  return `${Math.round(scoreRate(run) * 100)}%`
 }
 
-function formatScoreRateDelta(delta: number): string {
-  return `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} pp`
+function formatScoreDelta(delta: number): string {
+  return `${delta >= 0 ? '+' : ''}${delta.toFixed(1)} 点`
 }
 
 function validateCourse(title: string, markdown: string, drillFocus: string): string | null {

@@ -106,6 +106,8 @@ describe('PatchReviewPage', () => {
 
     await waitFor(() => expect(screen.getByText('提案中')).toBeTruthy())
     expect(screen.getByText('回答サンプル 2 件')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '検出されたつまずき' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '根拠不足' })).toBeTruthy()
     expect(screen.queryByText('ドリル drill-1')).toBeNull()
     expect(screen.getByText(/該当 1 \/ サンプル 2 件/)).toBeTruthy()
     expect(screen.getByText(/少数回答の傾向です。/)).toBeTruthy()
