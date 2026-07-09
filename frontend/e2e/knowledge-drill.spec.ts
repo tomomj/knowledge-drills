@@ -79,9 +79,9 @@ test.describe('Knowledge Drill E2E', () => {
 
     await expect(page).toHaveURL(/\/courses\/[0-9a-f]+\/drill-runs\/[0-9a-f]+$/)
     await expect(page.getByRole('heading', { name: 'ドリル確認' })).toBeVisible()
-    await expect(page.locator('.share-row code')).toContainText('/drills/')
+    await expect(page.locator('.share-card code')).toContainText('/drills/')
     await expect(page.getByText('回答数')).toBeVisible()
-    await expect(page.getByText('回答待ち')).toBeVisible()
+    await expect(page.getByRole('button', { name: '回答を分析する' })).toBeDisabled()
     await expect(page.locator('.q-card h2')).toHaveCount(3)
     await expect(page.getByText('4 pts')).toHaveCount(3)
   })
@@ -114,7 +114,6 @@ test.describe('Knowledge Drill E2E', () => {
     )
 
     await page.goto(`/courses/${seed.courseId}/drill-runs/${seed.drillRunId}`)
-    await expect(page.getByText('実行可能')).toBeVisible()
     await expect(page.getByRole('button', { name: '回答を分析する' })).toBeEnabled()
     await expect(page.getByText('E2E Learner').first()).toBeVisible()
     await expect(page.getByText('採点済み', { exact: true })).toBeVisible()
@@ -134,7 +133,7 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(page.getByText('提案中')).toBeVisible()
     await expect(page.getByText(/要約：/)).toBeVisible()
     await expect(page.getByRole('heading', { name: '例外条件の説明不足' })).toBeVisible()
-    await expect(page.getByText('リスクノート')).toBeVisible()
+    await expect(page.getByText('リスクと注意点')).toBeVisible()
     await expect(page.getByLabel('Diff')).toContainText('### 例外条件')
 
     await page.getByLabel(/オーナーコメント/).fill('E2E で適用確認')

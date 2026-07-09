@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { AnalysisTimeline, type AnalysisTimelineItemView } from './AnalysisTimeline'
 
@@ -55,6 +56,10 @@ const items: AnalysisTimelineItemView[] = [
 ]
 
 describe('AnalysisTimeline', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
   it('renders grouped categories, status chips, titles, summaries, and evidence entries', () => {
     render(<AnalysisTimeline title="分析タイムライン" items={items} />)
 
@@ -80,6 +85,32 @@ describe('AnalysisTimeline', () => {
     expect(screen.getByText('根拠 2')).toBeTruthy()
     expect(screen.getByText('根拠 3')).toBeTruthy()
     expect(screen.getByText('根拠 4')).toBeTruthy()
+    expect(screen.getByText('2分')).toBeTruthy()
+  })
+
+  it('renders running and pending steps with state-specific content', () => {
+    render(<AnalysisTimeline title="分析タイムライン" items={items} />)
+
+    expect(screen.getByText('実行中')).toBeTruthy()
+    expect(screen.getByLabelText('実行中')).toBeTruthy()
+    expect(screen.queryByText('採点済み回答を待っています。')).toBeNull()
+    expect(screen.queryByText('回答 0 件')).toBeNull()
+  })
+
+  it('collapses evidence when requested and expands it on interaction', async () => {
+    const user = userEvent.setup()
+    render(<AnalysisTimeline title="分析タイムライン" items={items} evidenceDisplay="collapsed" />)
+
+    const details = screen
+      .getAllByText('根拠を表示')
+      .map((summary) => summary.closest('details'))
+      .find((candidate) => candidate?.textContent?.includes('根拠 1'))
+    expect(details?.hasAttribute('open')).toBe(false)
+
+    await user.click(within(details as HTMLElement).getByText('根拠を表示'))
+
+    expect(details?.hasAttribute('open')).toBe(true)
+    expect(within(details as HTMLElement).getByText('根拠 1')).toBeTruthy()
   })
 
   it('renders review-derived evidence text in timeline items', () => {
