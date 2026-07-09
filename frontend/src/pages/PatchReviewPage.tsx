@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, ApiClientError } from '../api/client'
 import type { DocumentPatch, FailureSignal, PatchStatus } from '../api/types'
@@ -228,10 +228,24 @@ function PatchStatusBanner({ patch }: { patch: DocumentPatch }) {
     return <StatusBanner tone="warning">このパッチは古くなっています。再分析が必要です。</StatusBanner>
   }
   if (patch.status === 'applied') {
-    return <StatusBanner tone="success">パッチを適用しました。</StatusBanner>
+    return (
+      <StatusBanner tone="success">
+        パッチを適用しました。教材は新しいバージョンに更新されています。{' '}
+        <Link className="side-link" to={`/courses/${patch.courseId}`}>
+          講座管理でスコアの推移を確認 →
+        </Link>
+      </StatusBanner>
+    )
   }
   if (patch.status === 'rejected') {
-    return <StatusBanner tone="info">パッチを却下しました。</StatusBanner>
+    return (
+      <StatusBanner tone="info">
+        パッチを却下しました。却下理由は次回の分析で考慮されます。{' '}
+        <Link className="side-link" to={`/courses/${patch.courseId}/drill-runs/${patch.drillRunId}`}>
+          ドリル確認へ戻る →
+        </Link>
+      </StatusBanner>
+    )
   }
   return null
 }
