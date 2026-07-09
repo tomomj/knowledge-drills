@@ -33,6 +33,7 @@ def test_failure_analysis_agent_declares_schema_and_constraints() -> None:
     assert failure_analysis_agent.output_schema is FailureAnalysisOutput
     instruction = failure_analysis_agent.instruction
     assert isinstance(instruction, str)
+    assert "affectedCount" in instruction
     assert "sampleSize" in instruction
     assert "confidenceNote" in instruction
     assert "受講者を責めない" in instruction
@@ -138,7 +139,23 @@ def test_failure_signal_requires_core_fields_and_sample_size() -> None:
             suspected_document_gap="例が不足",
             target_sections=["## 方針"],
             recommended_change="例を追記",
+            affected_count=0,
             sample_size=0,
+        )
+
+
+def test_failure_signal_rejects_affected_count_over_sample_size() -> None:
+    with pytest.raises(ValidationError):
+        FailureSignal(
+            title="判断基準の混同",
+            severity="medium",
+            evidence=["q1 の不足点が複数回答に出た"],
+            likely_cause="説明が薄い",
+            suspected_document_gap="例が不足",
+            target_sections=["## 方針"],
+            recommended_change="例を追記",
+            affected_count=3,
+            sample_size=2,
         )
 
 
@@ -153,6 +170,7 @@ def test_failure_analysis_output_accepts_optional_perspectives() -> None:
                 suspected_document_gap="例外時の判断基準が薄い",
                 target_sections=["## 対応方針"],
                 recommended_change="例外条件を追記する",
+                affected_count=2,
                 sample_size=2,
             )
         ]
@@ -214,6 +232,7 @@ def test_failure_analysis_review_loop_schemas_use_camel_case_contracts() -> None
                 suspected_document_gap="判断基準の例外条件が不足",
                 target_sections=["## 判断基準"],
                 recommended_change="例外条件の判断例を追加する",
+                affected_count=2,
                 sample_size=2,
             )
         ],
@@ -224,6 +243,7 @@ def test_failure_analysis_review_loop_schemas_use_camel_case_contracts() -> None
         "finding-1"
     )
     assert critic_review.model_dump(by_alias=True)["approvedFindingIds"] == ["finding-1"]
+    assert output.model_dump(by_alias=True)["failureSignals"][0]["affectedCount"] == 2
     assert output.model_dump(by_alias=True)["reviewNotes"][0]["timelineStep"] == (
         "decide_patch_strategy"
     )
@@ -239,6 +259,7 @@ def test_local_analysis_and_patch_samples_are_schema_valid() -> None:
     patch = build_sample_document_patch_output()
 
     assert isinstance(analysis, FailureAnalysisOutput)
+    assert analysis.failure_signals[0].affected_count == 2
     assert analysis.failure_signals[0].sample_size == 2
     assert analysis.failure_signals[0].confidence_note
     assert len(analysis.perspectives) == 3

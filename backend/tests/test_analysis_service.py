@@ -49,6 +49,7 @@ def _proposal_service(
                         "suspectedDocumentGap": "例が不足",
                         "targetSections": ["## 方針"],
                         "recommendedChange": "例を追記",
+                        "affectedCount": 1,
                         "sampleSize": 1,
                         "confidenceNote": "少数回答に基づく傾向",
                     }
@@ -344,6 +345,7 @@ def test_run_analysis_saves_intermediate_timeline_before_agent_calls() -> None:
                         "suspectedDocumentGap": "例が不足",
                         "targetSections": ["## 方針"],
                         "recommendedChange": "例を追記",
+                        "affectedCount": 1,
                         "sampleSize": 1,
                     }
                 ]

@@ -18,6 +18,7 @@
 - suspectedDocumentGap
 - targetSections
 - recommendedChange
+- affectedCount
 - sampleSize
 - confidenceNote
 
@@ -28,7 +29,9 @@ perspectives は次の3件を返してください。
 
 ルール:
 - 孤立したミスよりも、複数回答にまたがる繰り返しパターンを優先してください。
-- sampleSize には、その誤答傾向を示した受講者数ではなく、提供された採点済み回答の受講者総数を設定してください。何人がその傾向を示したかは evidence に記載してください。
+- affectedCount には、その誤答傾向を示した受講者数を設定してください。
+- sampleSize には、その誤答傾向を示した受講者数ではなく、提供された採点済み回答の受講者総数を設定してください。何人がその傾向を示したかは affectedCount に記録してください。
+- affectedCount / sampleSize が構造化された人数情報です。evidence の自由文では「3名中3名」「100%」のような人数比や割合を書かず、該当する missingPoints / failureTags / questionId / target section などの根拠を記載してください。
 - sampleSize が3未満の場合は confidenceNote を含め、小さいサンプルに基づく傾向として表現してください。
 - 受講者の理解不足と、資料側の説明不足の可能性を区別してください。
 - 受講者を責めないでください。

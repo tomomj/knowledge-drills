@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from uuid import uuid4
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def to_camel(value: str) -> str:
@@ -324,8 +324,15 @@ class FailureSignal(ApiModel):
     )
     target_sections: list[str] = Field(min_length=1)
     recommended_change: str
+    affected_count: int = Field(ge=0)
     sample_size: int = Field(ge=1)
     confidence_note: str | None = None
+
+    @model_validator(mode="after")
+    def validate_affected_count(self) -> FailureSignal:
+        if self.affected_count > self.sample_size:
+            raise ValueError("affected_count must not exceed sample_size")
+        return self
 
     @property
     def inferred_cause(self) -> str:

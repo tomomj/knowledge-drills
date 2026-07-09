@@ -58,7 +58,7 @@ export function PatchReviewPage() {
 
   const patch = state.status === 'ready' ? state.patch : state.status === 'failed' ? state.patch : null
   const sampleSize = useMemo(
-    () => patch?.failureSignals.reduce((total, signal) => total + signal.sampleSize, 0) ?? 0,
+    () => patch?.failureSignals.reduce((total, signal) => Math.max(total, signal.sampleSize), 0) ?? 0,
     [patch],
   )
   const canDecide = patch?.status === 'proposed' && pendingDecision === null
@@ -228,7 +228,7 @@ function FailureSignalItem({ signal }: { signal: FailureSignal }) {
         <span className={`chip chip--${severity.tone}`}>{severity.label}</span>
       </div>
       <p className="signal__meta">
-        サンプル {signal.sampleSize} 件
+        該当 {signal.affectedCount} / サンプル {signal.sampleSize} 件
         {signal.confidenceNote ? ` · ${signal.confidenceNote}` : ''}
       </p>
       <dl className="signal-facts">
