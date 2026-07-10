@@ -129,6 +129,42 @@ def test_generate_drill_snapshots_drill_focus_and_sends_it_to_agent() -> None:
     assert saved_after_course_update.drill_focus == "例外条件を重点的に出す"
 
 
+def test_generate_drill_snapshots_course_title_and_markdown() -> None:
+    service, course_repository, drill_repository = _service(
+        {
+            "questions": [
+                _question_payload("q1"),
+                _question_payload("q2"),
+                _question_payload("q3"),
+            ]
+        }
+    )
+
+    drill_run = service.generate_drill("course-1", "owner-1")
+
+    saved = drill_repository.get(drill_run.id)
+    assert saved is not None
+    assert saved.course_title == "講座"
+    assert saved.course_markdown == "# Body\n\n## 方針\n根拠を確認します。"
+
+    course = course_repository.get("course-1")
+    assert course is not None
+    course_repository.update(
+        course.model_copy(
+            update={
+                "title": "更新後の講座",
+                "markdown": "# 更新後の本文",
+                "version": course.version + 1,
+            }
+        )
+    )
+
+    saved_after_course_update = drill_repository.get(drill_run.id)
+    assert saved_after_course_update is not None
+    assert saved_after_course_update.course_title == "講座"
+    assert saved_after_course_update.course_markdown == "# Body\n\n## 方針\n根拠を確認します。"
+
+
 def test_generate_drill_normalizes_heading_only_source_evidence() -> None:
     service, _course_repository, drill_repository = _service(
         {

@@ -1141,6 +1141,79 @@ a.tag-btn {
   line-height: 1.7;
 }
 
+.learner-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.course-material summary {
+  cursor: pointer;
+  padding: 14px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.course-material[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.course-material__body {
+  padding: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.course-material__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.course-material__head h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.markdown-view {
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.markdown-view h3,
+.markdown-view h4,
+.markdown-view h5,
+.markdown-view h6 {
+  margin: 6px 0 0;
+  font-size: 14.5px;
+}
+
+.markdown-view p {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.markdown-view ul,
+.markdown-view ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.markdown-view pre {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 12.5px;
+}
+
 /* ============ 資料修正案 ============ */
 .meta-chips {
   display: flex;
