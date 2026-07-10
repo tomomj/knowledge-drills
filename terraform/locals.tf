@@ -43,6 +43,15 @@ locals {
   firestore_database_id   = "${local.project_name}-${local.environment}"
   firestore_location      = local.region
 
+  # Uptime monitoring keeps the hackathon demo URLs observable through judging.
+  # 通知先メールアドレスは仮置き。確定したらここだけ変更する。
+  alert_email = "tomo.sandbox.address@gmail.com"
+
+  # 無料枠に収める控えめな設定: 15 分間隔 + 最小構成の 3 リージョン。
+  uptime_check_period  = "900s"
+  uptime_check_timeout = "10s"
+  uptime_check_regions = ["ASIA_PACIFIC", "USA_OREGON", "EUROPE"]
+
   frontend_cloud_run_origins = [
     google_cloud_run_v2_service.frontend.uri,
     "https://${local.frontend_service_name}-${local.project_number}.${local.region}.run.app",
@@ -61,6 +70,7 @@ locals {
     "firestore.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
+    "monitoring.googleapis.com",
     "run.googleapis.com",
     "serviceusage.googleapis.com",
     "sts.googleapis.com",
