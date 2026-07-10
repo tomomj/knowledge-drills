@@ -15,27 +15,33 @@ Failure Analysis Review Loop は、既存の Hackathon Feedback Loop に対し�
 
 ## Boundary Context
 
-- **In scope**: failure analysis agent の `analyst_parallel -> review_loop -> finalizer` 化、critic / reviewer 用 schema・prompt、`FailureAnalysisOutput.reviewNotes` の optional 追加、Backend の timeline 変換、既存 UI での表示確認。
+- **In scope**: 複数観点の所見収集、根拠評価と承認レビューの反復、承認結果に基づく早期終了または継続、承認済み所見だけを使う最終化、`FailureAnalysisOutput.reviewNotes` の optional 追加、Backend の timeline 変換、既存 UI での表示確認。
 - **Out of scope**: ADK event streaming、SSE / WebSocket、専用 workflow viewer、新しい patch review agent、Chain-of-thought の保存・表示、既存 5 step timeline の大幅な再設計。
 - **Adjacent expectations**: `hackathon-feedback-loop` の既存契約、`AnalysisTimeline` component、`AgentRuntimeClient` / `AdkAgentInvoker` の task mapping を維持する。受講者向け API には review note を出さない。
 
 ## Requirements
 
-### Requirement 1: Agent workflow の検証ループ化
+### Requirement 1: 根拠評価と承認レビューの反復
 
 **Objective:** As a 講座オーナー, I want 誤答分析が並列分析後に根拠検証とレビューを受ける, so that 根拠の弱い改善提案が patch に流れにくくなる
 
 #### Acceptance Criteria
 
-1. When 回答分析が実行される, the 誤答分析機能 shall `analyst_parallel` で複数観点の所見を並列に集める
-2. When 並列分析が完了する, the 誤答分析機能 shall `evidence_critic` が `EvidenceReviewOutput` として採用所見・棄却所見・finalizer への指示・リスク・修正履歴を state に保存する
-3. When `evidence_critic` が評価を返す, the 誤答分析機能 shall `critic_reviewer` が `CriticReviewOutput` として `verdict`、`issues`、`revisionInstructions`、`approvedFindingIds`、`riskNotes` を state に保存する
-4. If `critic_reviewer` が `approved` を返す, the 誤答分析機能 shall `exit_loop` により review loop を終了する
-5. If `critic_reviewer` が `needs_revision` を返す, the 誤答分析機能 shall 次 iteration の `evidence_critic` が reviewer 指摘を読んで評価を修正できる
-6. The 誤答分析機能 shall review loop に最大 iteration 数を設定し、無限ループを防ぐ
-7. The 誤答分析機能 shall 最後の `finalizer` だけが backend に返す `FailureAnalysisOutput` を生成する
-8. The `finalizer` shall `criticReview.approvedFindingIds` に含まれる finding だけを Failure Signal の根拠として採用し、自由文から承認済み扱いを推測しない
-9. If review loop が最大 iteration に到達しても `verdict=approved` にならない, the `finalizer` shall 最新の `approvedFindingIds` が非空ならその finding だけを採用し、`approvedFindingIds` が空なら有効な `FailureAnalysisOutput` を生成せず分析失敗として扱わせる
+1. When 回答分析が開始される, the 誤答分析機能 shall 根拠評価を開始する前に、定義された複数観点から所見を収集する
+2. When 必要な所見の収集が完了する, the 誤答分析機能 shall 各所見を入力情報に照らして評価し、採用候補または棄却候補に分類して、その根拠、リスク、および最終化への指示を記録する
+3. When 根拠評価が完了する, the 誤答分析機能 shall 評価とは別の承認レビューを行い、承認または修正要求の判定、問題点、修正指示、承認対象、および残存リスクを記録する
+4. When 承認レビューが完了する, the 誤答分析機能 shall レビュー結果を保存した後に、その同じレビュー結果を使って反復の終了または継続を決定する
+5. If 承認レビューが承認を返し、承認対象の参照が一意かつ採用候補に含まれる、または承認対象ゼロが明示される, the 誤答分析機能 shall 追加の根拠評価・承認レビューを実行せず、直ちに最終化へ進む
+6. If 承認レビューが修正要求を返し、反復上限に達していない, the 誤答分析機能 shall 問題点と修正指示を次の根拠評価に反映して評価・レビュー cycle を継続する
+7. When 修正要求を受けて次の根拠評価を行う, the 誤答分析機能 shall 前回指摘への対応内容と未解決事項を記録する
+8. The 誤答分析機能 shall 評価・レビュー cycle に有限の反復上限を設ける
+9. The 誤答分析機能 shall 各レビュー対象を収集済み所見とその出所・根拠へ追跡可能にし、同一 cycle の採用候補と棄却候補を重複させない
+10. If レビュー判定、承認対象、または所見参照に重複、不明な参照、もしくは採用・棄却間の矛盾がある, the 誤答分析機能 shall その cycle を承認済みとして扱わない
+11. When 承認レビューが承認される, the 誤答分析機能 shall そのレビューで明示的に承認された所見だけを Failure Signal の根拠として使用する
+12. The 誤答分析機能 shall 承認状態を要約、理由、その他の自由文から推測しない
+13. If 反復上限到達時に最新レビューが修正要求であるが有効な承認対象が存在する, the 誤答分析機能 shall その承認対象だけを部分採用し、未解決事項と残存リスクを最終結果に明示する
+14. If 構造的に有効な最新レビューに承認対象が存在しない, the 誤答分析機能 shall 未承認所見を含めず、Failure Signal が空の最終結果と見送り理由を返して patch を提案しない
+15. When 評価・レビュー cycle が終了する, the 誤答分析機能 shall 外部契約に適合する最終結果を一度だけ生成し、中間評価または中間レビューを最終結果として返さない
 
 ### Requirement 2: 安定した FailureAnalysis 契約
 
@@ -75,8 +81,9 @@ Failure Analysis Review Loop は、既存の Hackathon Feedback Loop に対し�
 1. When オーナーが Drill Admin で分析を開始する, the frontend shall 既存 polling により review 結果を含む timeline を表示する
 2. When オーナーが Patch Review を開く, the frontend shall patch summary と failure signals の間に review 結果を含む timeline を表示する
 3. The frontend shall 専用 workflow viewer を追加せず、既存 `AnalysisTimeline` component を使う
-4. If timeline evidence が 3 件を超える場合, the backend shall evidence を最大 3 件に制御し、the frontend shall 受け取った evidence をそのまま表示する
-5. The implementation shall backend / frontend server を起動した手動 smoke で、分析開始から timeline 表示まで確認できる
+4. If timeline evidence が 3 件を超える場合, the backend shall evidence を最大 3 件に制御する
+5. When frontend が timeline evidence を受け取る, the frontend shall 受け取った evidence をそのまま表示する
+6. The implementation shall backend / frontend server を起動した手動 smoke で、分析開始から timeline 表示まで確認できる
 
 ### Requirement 5: 回帰検証と撤退経路
 
@@ -84,9 +91,9 @@ Failure Analysis Review Loop は、既存の Hackathon Feedback Loop に対し�
 
 #### Acceptance Criteria
 
-1. The Agent shall `KNOWLEDGE_DRILL_AGENT_ANALYSIS_MODE=single` による従来方式の撤退経路を維持する
-2. The Agent tests shall workflow 構造、finalizer の `output_schema`、中間 agent の `output_key`、`EvidenceReviewOutput`、`CriticReviewOutput.verdict`、`approvedFindingIds` を検証する
+1. The Agent shall review loop を使わずに従来方式で誤答分析を実行できる撤退経路を維持する
+2. The Agent tests shall 初回承認による早期終了、修正要求後の再評価、反復上限時の部分採用、承認対象ゼロ時の見送り、不正な所見参照の拒否、および最終結果が一度だけ生成されることを検証する
 3. The Backend tests shall `reviewNotes` あり・なし、既存 evidence との併存、最大 3 件制限、`timelineStep` による振り分けを検証する
 4. The Frontend tests shall review 結果を含む timeline item が表示されることを検証する
 5. The implementation shall 実行可能な範囲で agent / backend / frontend のテストを通し、実行できない検証は理由を記録する
-6. The implementation shall review loop の LLM 呼び出し増加を踏まえ、local default 60 秒と production Terraform 120 秒の timeout で足りるかを smoke で確認し、不足する場合は `KNOWLEDGE_DRILLS_AGENT_TIMEOUT_SECONDS` または Terraform の timeout 設定変更を明示する
+6. When review loop を有効にする, the implementation shall local と production の設定済み timeout budget で分析が完了するかを smoke で確認し、不足する場合は必要な設定変更を記録する

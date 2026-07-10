@@ -214,7 +214,7 @@ class CriticReviewOutput(AgentModel):
     verdict: Literal["approved", "needs_revision"]
     issues: list[str] = Field(default_factory=list)
     revision_instructions: list[str] = Field(default_factory=list)
-    approved_finding_ids: list[str] = Field(default_factory=list)
+    approved_finding_ids: list[str]
     risk_notes: list[str] = Field(default_factory=list)
 
 
