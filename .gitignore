@@ -45,4 +45,4 @@ logs/
 *.log
 
 # ローカル作業メモ
-docs/*.local.md
+/docs/local/
