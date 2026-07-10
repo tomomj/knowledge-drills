@@ -43,3 +43,6 @@ sa-*.json
 # ログ
 logs/
 *.log
+
+# ローカル作業メモ
+docs/*.local.md
