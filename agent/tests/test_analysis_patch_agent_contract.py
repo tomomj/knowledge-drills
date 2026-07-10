@@ -10,6 +10,11 @@ from knowledge_drill_agent.agent import (
     create_failure_analysis_agent,
     document_patch_agent,
 )
+from knowledge_drill_agent.failure_analysis_workflow import (
+    ApprovedFindingsGate,
+    ReviewLoopGate,
+    ensure_partial_review_note,
+)
 from knowledge_drill_agent.samples import (
     build_sample_document_patch_output,
     build_sample_failure_analysis_output,
@@ -50,11 +55,12 @@ def test_composite_failure_analysis_agent_runs_lenses_then_synthesis() -> None:
     assert isinstance(composite, SequentialAgent)
     assert composite.name == "failure_analysis_agent"
     assert composite.parent_agent is None
-    assert len(composite.sub_agents) == 3
+    assert len(composite.sub_agents) == 4
 
     analyst_parallel = composite.sub_agents[0]
     review_loop = composite.sub_agents[1]
-    finalizer = composite.sub_agents[2]
+    approved_findings_gate = composite.sub_agents[2]
+    finalizer = composite.sub_agents[3]
     assert isinstance(analyst_parallel, ParallelAgent)
     assert analyst_parallel.name == "analyst_parallel"
     assert isinstance(review_loop, LoopAgent)
@@ -80,29 +86,48 @@ def test_composite_failure_analysis_agent_runs_lenses_then_synthesis() -> None:
         assert analyst_agent.input_schema is FailureAnalysisInput
         assert analyst_agent.output_schema is None
 
-    assert len(review_loop.sub_agents) == 2
+    assert len(review_loop.sub_agents) == 3
     evidence_critic = review_loop.sub_agents[0]
     critic_reviewer = review_loop.sub_agents[1]
+    review_gate = review_loop.sub_agents[2]
     assert isinstance(evidence_critic, Agent)
     assert isinstance(critic_reviewer, Agent)
     assert evidence_critic.name == "evidence_critic"
     assert evidence_critic.output_key == "evidence_review"
     assert evidence_critic.output_schema is EvidenceReviewOutput
+    assert isinstance(evidence_critic.instruction, str)
+    assert "critic_review?" in evidence_critic.instruction
+    assert "criticReview.issues / revisionInstructions" in evidence_critic.instruction
+    assert "revisionNotes" in evidence_critic.instruction
     assert critic_reviewer.name == "critic_reviewer"
     assert critic_reviewer.output_key == "critic_review"
     assert critic_reviewer.output_schema is CriticReviewOutput
     assert critic_reviewer.tools == []
+    assert isinstance(critic_reviewer.instruction, str)
+    assert "approvedFindingIds は必須 field" in critic_reviewer.instruction
+    assert "明示的に空配列 `[]`" in critic_reviewer.instruction
+    assert isinstance(review_gate, ReviewLoopGate)
+
+    assert isinstance(approved_findings_gate, ApprovedFindingsGate)
 
     assert finalizer.name == "failure_analysis_finalizer"
     assert finalizer.model == "gemini-contract-probe"
     assert finalizer.input_schema is FailureAnalysisInput
     assert finalizer.output_schema is FailureAnalysisOutput
     assert finalizer.output_key is None
+    assert finalizer.after_model_callback is ensure_partial_review_note
     assert isinstance(finalizer.instruction, str)
     assert "misconception_findings" in finalizer.instruction
     assert "doc_gap_findings" in finalizer.instruction
     assert "question_quality_findings" in finalizer.instruction
+    assert "approved_findings" in finalizer.instruction
+    assert "review_termination_reason" in finalizer.instruction
     assert "approvedFindingIds" in finalizer.instruction
+    assert "唯一の finding source" in finalizer.instruction
+    assert "issues、revisionInstructions、riskNotes" in finalizer.instruction
+    assert "approved_findings が空の場合" in finalizer.instruction
+    assert "failureSignals は空配列" in finalizer.instruction
+    assert "patch 提案を見送" in finalizer.instruction
     assert "severity は low / medium / high" in finalizer.instruction
 
 
@@ -218,6 +243,25 @@ def test_failure_analysis_output_accepts_optional_perspectives() -> None:
     )
 
 
+def test_failure_analysis_output_accepts_no_approved_signals() -> None:
+    output = FailureAnalysisOutput(
+        failure_signals=[],
+        review_notes=[
+            AnalysisReviewNote(
+                id="no-approved-findings",
+                source="finalizer",
+                timeline_step="decide_patch_strategy",
+                title="patch 提案の見送り",
+                summary="承認された所見がないため patch 提案を見送ります。",
+                evidence=["approvedFindingIds: (なし)"],
+            )
+        ],
+    )
+
+    assert output.failure_signals == []
+    assert output.review_notes[0].source == "finalizer"
+
+
 def test_failure_analysis_review_loop_schemas_use_camel_case_contracts() -> None:
     accepted = ReviewedFinding(
         finding_id="finding-1",
@@ -277,7 +321,15 @@ def test_failure_analysis_review_loop_schemas_use_camel_case_contracts() -> None
 
 def test_critic_review_rejects_unknown_verdict() -> None:
     with pytest.raises(ValidationError):
-        CriticReviewOutput(verdict=cast(Any, "rejected"))
+        CriticReviewOutput(
+            verdict=cast(Any, "rejected"),
+            approved_finding_ids=[],
+        )
+
+
+def test_critic_review_requires_explicit_approved_finding_ids() -> None:
+    with pytest.raises(ValidationError):
+        CriticReviewOutput.model_validate({"verdict": "approved"})
 
 
 def test_local_analysis_and_patch_samples_are_schema_valid() -> None:
