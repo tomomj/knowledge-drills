@@ -3,6 +3,11 @@ from pathlib import Path
 from google.adk.agents import Agent, BaseAgent, LoopAgent, ParallelAgent, SequentialAgent
 
 from knowledge_drill_agent.config import AnalysisMode, get_agent_settings
+from knowledge_drill_agent.failure_analysis_workflow import (
+    ApprovedFindingsGate,
+    ReviewLoopGate,
+    ensure_partial_review_note,
+)
 from knowledge_drill_agent.schemas import (
     CriticReviewOutput,
     DocumentPatchInput,
@@ -154,9 +159,10 @@ def create_composite_failure_analysis_agent(model: str | None = None) -> BaseAge
     review_loop = LoopAgent(
         name="review_loop",
         description="根拠評価とレビューを最大3回まで繰り返す。",
-        sub_agents=[evidence_critic, critic_reviewer],
+        sub_agents=[evidence_critic, critic_reviewer, ReviewLoopGate()],
         max_iterations=3,
     )
+    approved_findings_gate = ApprovedFindingsGate()
     finalizer = Agent(
         name="failure_analysis_finalizer",
         model=_resolve_model(model),
@@ -164,11 +170,12 @@ def create_composite_failure_analysis_agent(model: str | None = None) -> BaseAge
         instruction=_load_prompt("failure_analysis_finalizer.md"),
         input_schema=FailureAnalysisInput,
         output_schema=FailureAnalysisOutput,
+        after_model_callback=ensure_partial_review_note,
     )
     return SequentialAgent(
         name="failure_analysis_agent",
         description="並列分析、根拠評価、レビュー、最終化により Failure Signal を抽出する。",
-        sub_agents=[analyst_parallel, review_loop, finalizer],
+        sub_agents=[analyst_parallel, review_loop, approved_findings_gate, finalizer],
     )
 
 

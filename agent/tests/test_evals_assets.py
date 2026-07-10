@@ -88,6 +88,17 @@ def test_configs_use_one_integrated_rubric_per_agent() -> None:
         assert len(rubrics) == 1, f"{name}: LLM judge rubric は統合して1つにする"
 
 
+def test_failure_analysis_eval_uses_current_bounded_judge() -> None:
+    config = json.loads(
+        (EVALS_DIR / "failure_analysis" / "test_config.json").read_text("utf-8")
+    )
+    criterion = config["criteria"]["rubric_based_final_response_quality_v1"]
+    judge_options = criterion["judge_model_options"]
+
+    assert judge_options["judge_model"] == "gemini-3.1-flash-lite"
+    assert judge_options["num_samples"] == 3
+
+
 def test_quick_eval_cases_exist() -> None:
     quick_eval_cases = _load_quick_eval_cases()
     assert set(quick_eval_cases) == set(AGENT_EVAL_DIRS)
