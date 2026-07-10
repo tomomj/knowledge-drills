@@ -111,7 +111,7 @@ test.describe('Knowledge Drill E2E', () => {
 
     await page.getByRole('button', { name: '回答に進む' }).click()
 
-    await expect(page.getByText('教材を確認する')).toBeVisible()
+    await expect(page.getByText('教材を確認する')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '回答に進む' })).toHaveCount(0)
 
     await page.getByLabel('お名前').fill('E2E Learner')
@@ -207,7 +207,7 @@ test.describe('Knowledge Drill E2E', () => {
 
     await page.getByRole('button', { name: '回答に進む' }).click()
 
-    await expect(page.getByText('教材を確認する')).toBeVisible()
+    await expect(page.getByText('教材を確認する')).toHaveCount(0)
     await expect(page.getByText('ルーブリック')).toHaveCount(0)
     await expect(page.getByText('模範解答')).toHaveCount(0)
     await expect(page.getByText(/idealAnswer/i)).toHaveCount(0)

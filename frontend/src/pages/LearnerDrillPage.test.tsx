@@ -103,7 +103,7 @@ describe('LearnerDrillPage', () => {
     expect(screen.queryByRole('button', { name: '回答を提出する' })).toBeNull()
   })
 
-  it('shows questions after proceeding, with the material collapsed but available', async () => {
+  it('shows questions after proceeding, without any material reference', async () => {
     const user = userEvent.setup()
     mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
 
@@ -115,16 +115,9 @@ describe('LearnerDrillPage', () => {
     expect(screen.getByLabelText('お名前')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '回答に進む' })).toBeNull()
 
-    const material = screen.getByText('教材を確認する').closest('details')
-    expect(material?.open).toBe(false)
-
-    await user.click(screen.getByText('教材を確認する'))
-    expect(material?.open).toBe(true)
-    expect(screen.getByText('業務に直接関係する支出を申請できます。')).toBeTruthy()
-
-    await user.type(screen.getByLabelText(/判断理由を書いてください。/), '根拠です')
-    await user.click(screen.getByText('教材を確認する'))
-    expect(material?.open).toBe(false)
+    expect(screen.queryByText('教材を確認する')).toBeNull()
+    expect(screen.queryByText('教材バージョン v2')).toBeNull()
+    expect(screen.queryByText('業務に直接関係する支出を申請できます。')).toBeNull()
   })
 
   it('skips the reading step when courseMarkdown is empty', async () => {
