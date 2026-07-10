@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom'
 import { api, ApiClientError } from '../api/client'
 import type { LearnerDrill, SubmitAnswerResponse } from '../api/types'
 import { AppShell } from '../components/common/AppShell'
+import { MarkdownView } from '../components/common/MarkdownView'
 import { StatusBanner } from '../components/common/StatusBanner'
 
 type PageState =
@@ -103,6 +104,7 @@ export function LearnerDrillPage() {
       <AppShell variant="learner">
         <main className="page page--narrow">
           <StatusBanner tone="success">提出が完了しました。</StatusBanner>
+          <p className="learner-note">回答は教材改善の分析に使われます。</p>
           <section className="question-stack" aria-label="フィードバック">
             {state.result.feedback.map((feedback, index) => (
               <article className="card feedback-item" key={`${feedback}-${index}`}>
@@ -129,7 +131,7 @@ export function LearnerDrillPage() {
         <section className="learner-hero" aria-labelledby="learner-title">
           <p className="eyebrow">Learner</p>
           <h1 id="learner-title">確認ドリル</h1>
-          <p>資料の理解度を確認する {totalCount} 問です。自分の言葉で回答してください。</p>
+          <p>教材を読んでから回答してください。回答は教材改善の分析に匿名で利用されます。</p>
         </section>
 
         {state.status === 'failed' ? (
@@ -139,6 +141,19 @@ export function LearnerDrillPage() {
 
         {drill ? (
           <>
+            {drill.courseMarkdown ? (
+              <details className="card course-material" open>
+                <summary>教材を確認する</summary>
+                <div className="course-material__body">
+                  <div className="course-material__head">
+                    <h2>{drill.courseTitle}</h2>
+                    <span className="chip chip--muted">教材バージョン v{drill.courseVersion}</span>
+                  </div>
+                  <MarkdownView markdown={drill.courseMarkdown} />
+                </div>
+              </details>
+            ) : null}
+
             <div className="progress-line" aria-label="回答の進捗">
               <div className="progress-track">
                 <div

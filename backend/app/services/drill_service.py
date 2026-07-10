@@ -79,6 +79,8 @@ class DrillService:
             id=uuid4().hex,
             course_id=course.id,
             course_version=course.version,
+            course_title=course.title,
+            course_markdown=course.markdown,
             drill_focus=course.drill_focus,
             status=DrillRunStatus.GENERATING,
         )
@@ -254,14 +256,31 @@ class DrillService:
         if drill_run is None or not is_distributable_drill_status(drill_run.status):
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
 
+        course_title, course_markdown = self._resolve_learner_course_snapshot(drill_run)
         return LearnerDrillResponse(
             drill_run_id=drill_run.id,
             course_id=drill_run.course_id,
+            course_title=course_title,
+            course_markdown=course_markdown,
+            course_version=drill_run.course_version,
             questions=[
                 LearnerDrillQuestionResponse.from_domain(question)
                 for question in drill_run.questions
             ],
         )
+
+    def _resolve_learner_course_snapshot(self, drill_run: DrillRun) -> tuple[str, str]:
+        course_title = drill_run.course_title
+        course_markdown = drill_run.course_markdown
+        if course_title is None or course_markdown is None:
+            # スナップショットを持たない既存 drill run は現行 course の値にフォールバックする
+            course = self._course_repository.get(drill_run.course_id)
+            if course is not None:
+                course_title = course_title if course_title is not None else course.title
+                course_markdown = (
+                    course_markdown if course_markdown is not None else course.markdown
+                )
+        return course_title or "", course_markdown or ""
 
     def _validate_and_normalize_questions(
         self,

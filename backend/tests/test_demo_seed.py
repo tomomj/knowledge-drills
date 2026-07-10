@@ -72,6 +72,34 @@ def test_demo_seed_inserts_two_owned_courses_and_content(client: TestClient) -> 
     assert "+## 例外と期限" in patch.json()["diffText"]
 
 
+def test_demo_seed_drill_runs_snapshot_version_matched_course(client: TestClient) -> None:
+    courses = {course["title"]: course for course in client.get("/api/courses").json()["courses"]}
+    definitions = {definition.title: definition for definition in demo_course_definitions()}
+
+    for title, definition in definitions.items():
+        course = courses[title]
+        app_state = client.app.state  # type: ignore[attr-defined]
+        drill_runs = {
+            drill_run.course_version: drill_run
+            for drill_run in app_state.drill_repository.list_by_course(course["id"])
+        }
+        for drill in definition.drills:
+            drill_run = drill_runs[drill.course_version]
+            assert drill_run.course_title == definition.title
+            assert drill_run.course_markdown == (
+                definition.markdown_versions[drill.course_version - 1]
+            )
+
+            learner = client.get(f"/api/drills/{drill_run.share_token}")
+            assert learner.status_code == 200
+            payload = learner.json()
+            assert payload["courseTitle"] == definition.title
+            assert payload["courseMarkdown"] == (
+                definition.markdown_versions[drill.course_version - 1]
+            )
+            assert payload["courseVersion"] == drill.course_version
+
+
 def test_demo_seed_is_once_only_even_after_me_and_deletion(client: TestClient) -> None:
     seeded = client.get("/api/courses").json()["courses"]
 

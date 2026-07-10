@@ -89,7 +89,14 @@ class DemoSeedService:
             self._course_repository.update(course)
 
         for drill in definition.drills:
-            self._seed_drill(owner_user_id, definition.slug, course.id, drill)
+            self._seed_drill(
+                owner_user_id,
+                definition.slug,
+                course.id,
+                drill,
+                course_title=definition.title,
+                course_markdown=definition.markdown_versions[drill.course_version - 1],
+            )
 
         if definition.patch is not None:
             patch_id = _seed_id(owner_user_id, definition.slug, definition.patch.id_suffix)
@@ -140,6 +147,9 @@ class DemoSeedService:
         course_slug: str,
         course_id: str,
         definition: DemoDrillDefinition,
+        *,
+        course_title: str,
+        course_markdown: str,
     ) -> None:
         drill_run_id = _seed_id(owner_user_id, course_slug, definition.id_suffix)
         share_token = _seed_id(owner_user_id, course_slug, definition.share_token_suffix)
@@ -149,6 +159,8 @@ class DemoSeedService:
                 id=drill_run_id,
                 course_id=course_id,
                 course_version=definition.course_version,
+                course_title=course_title,
+                course_markdown=course_markdown,
                 drill_focus=None,
                 status=definition.status,
                 questions=list(definition.questions),

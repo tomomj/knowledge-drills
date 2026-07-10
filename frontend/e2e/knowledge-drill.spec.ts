@@ -95,6 +95,15 @@ test.describe('Knowledge Drill E2E', () => {
     await page.goto(seed.shareUrl)
 
     await expect(page.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
+    await expect(
+      page.getByText('教材を読んでから回答してください。回答は教材改善の分析に匿名で利用されます。'),
+    ).toBeVisible()
+    await expect(page.getByText('教材を確認する')).toBeVisible()
+    await expect(page.getByText('教材バージョン v1')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'A事業部' })).toBeVisible()
+    await expect(
+      page.getByText('緊急障害は問い合わせ種別に関係なくサポート窓口へ送る。'),
+    ).toBeVisible()
     await expect(page.getByText('4 pts')).toHaveCount(0)
     await expect(page.getByText('業務判断の根拠を確認する')).toHaveCount(0)
 
@@ -109,6 +118,7 @@ test.describe('Knowledge Drill E2E', () => {
     await page.getByRole('button', { name: '回答を提出する' }).click()
 
     await expect(page.getByText('提出が完了しました。')).toBeVisible()
+    await expect(page.getByText('回答は教材改善の分析に使われます。')).toBeVisible()
     await expect(page.getByText('判断理由は示せています。例外条件も添えてください。')).toHaveCount(
       3,
     )
@@ -183,6 +193,8 @@ test.describe('Knowledge Drill E2E', () => {
     await page.goto(adminDrill.shareUrl ?? '')
 
     await expect(page.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
+    await expect(page.getByText('教材を確認する')).toBeVisible()
+    await expect(page.getByText('教材バージョン v1')).toBeVisible()
     await expect(page.getByText('ルーブリック')).toHaveCount(0)
     await expect(page.getByText('模範解答')).toHaveCount(0)
     await expect(page.getByText(/idealAnswer/i)).toHaveCount(0)
