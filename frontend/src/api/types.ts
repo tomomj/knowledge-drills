@@ -155,6 +155,9 @@ export type DrillGenerationStartResponse = {
 export type LearnerDrill = {
   drillRunId: string
   courseId: string
+  courseTitle: string
+  courseMarkdown: string
+  courseVersion: number
   questions: LearnerQuestion[]
 }
 

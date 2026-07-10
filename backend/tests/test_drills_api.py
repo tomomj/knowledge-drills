@@ -323,6 +323,9 @@ def test_get_learner_drill_by_share_token_accepts_analysis_lifecycle_statuses(
         DrillRun(
             id="drill-1",
             course_id="course-1",
+            course_version=2,
+            course_title="講座",
+            course_markdown="# Body\n\n## 方針\n根拠を確認します。",
             status=status,
             questions=[_question()],
             share_token="share-token",
@@ -335,9 +338,84 @@ def test_get_learner_drill_by_share_token_accepts_analysis_lifecycle_statuses(
     assert response.status_code == 200
     payload = response.json()
     assert payload["drillRunId"] == "drill-1"
+    assert payload["courseTitle"] == "講座"
+    assert payload["courseMarkdown"] == "# Body\n\n## 方針\n根拠を確認します。"
+    assert payload["courseVersion"] == 2
     assert payload["questions"][0]["question"] == "判断理由を書いてください。"
     assert "rubric" not in payload["questions"][0]
     assert "idealAnswer" not in payload["questions"][0]
+    assert "sourceEvidence" not in payload["questions"][0]
+    assert "intent" not in payload["questions"][0]
+    assert "analysisTimeline" not in payload
+    assert "drillFocus" not in payload
+
+
+def test_get_learner_drill_snapshots_course_at_generation_time(client: TestClient) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(
+            id="course-1",
+            owner_user_id="local-owner",
+            title="更新後の講座",
+            markdown="# 更新後の本文",
+            version=2,
+        )
+    )
+    app.state.drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            course_version=1,
+            course_title="生成時の講座",
+            course_markdown="# 生成時の本文",
+            status=DrillRunStatus.READY,
+            questions=[_question()],
+            share_token="share-token",
+        )
+    )
+    app.state.share_token_repository.reserve("share-token", drill_run_id="drill-1")
+
+    response = client.get("/api/drills/share-token")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["courseTitle"] == "生成時の講座"
+    assert payload["courseMarkdown"] == "# 生成時の本文"
+    assert payload["courseVersion"] == 1
+
+
+def test_get_learner_drill_falls_back_to_current_course_without_snapshot(
+    client: TestClient,
+) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(
+            id="course-1",
+            owner_user_id="local-owner",
+            title="現行の講座",
+            markdown="# 現行の本文",
+            version=3,
+        )
+    )
+    app.state.drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            course_version=3,
+            status=DrillRunStatus.READY,
+            questions=[_question()],
+            share_token="share-token",
+        )
+    )
+    app.state.share_token_repository.reserve("share-token", drill_run_id="drill-1")
+
+    response = client.get("/api/drills/share-token")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["courseTitle"] == "現行の講座"
+    assert payload["courseMarkdown"] == "# 現行の本文"
+    assert payload["courseVersion"] == 3
 
 
 @pytest.mark.parametrize("status", [DrillRunStatus.GENERATING, DrillRunStatus.FAILED])
