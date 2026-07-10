@@ -10,6 +10,9 @@ import { LearnerDrillPage } from './LearnerDrillPage'
 const learnerDrill: LearnerDrill = {
   drillRunId: 'drill-1',
   courseId: 'course-1',
+  courseTitle: '経費精算の判断基準',
+  courseMarkdown: '# 経費精算\n\n## 基本方針\n業務に直接関係する支出を申請できます。',
+  courseVersion: 2,
   questions: [
     { id: 'q1', question: '判断理由を書いてください。', maxScore: 4 },
     { id: 'q2', question: '例外条件を書いてください。', maxScore: 4 },
@@ -71,6 +74,44 @@ describe('LearnerDrillPage', () => {
     expect(screen.queryByText('idealAnswer')).toBeNull()
   })
 
+  it('starts with the purpose statement and the course material open', async () => {
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+
+    renderLearner()
+
+    await waitFor(() => expect(screen.getByLabelText(/判断理由を書いてください。/)).toBeTruthy())
+    expect(
+      screen.getByText('教材を読んでから回答してください。回答は教材改善の分析に匿名で利用されます。'),
+    ).toBeTruthy()
+    expect(screen.getByText('教材を確認する')).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '経費精算の判断基準' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '基本方針' })).toBeTruthy()
+    expect(screen.getByText('業務に直接関係する支出を申請できます。')).toBeTruthy()
+    expect(screen.getByText('教材バージョン v2')).toBeTruthy()
+
+    const material = screen.getByText('教材を確認する').closest('details')
+    expect(material?.open).toBe(true)
+  })
+
+  it('keeps the course material available while answering via the toggle', async () => {
+    const user = userEvent.setup()
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+
+    renderLearner()
+
+    await screen.findByLabelText(/判断理由を書いてください。/)
+    const material = screen.getByText('教材を確認する').closest('details')
+    expect(material?.open).toBe(true)
+
+    await user.click(screen.getByText('教材を確認する'))
+    expect(material?.open).toBe(false)
+
+    await user.type(screen.getByLabelText(/判断理由を書いてください。/), '根拠です')
+    await user.click(screen.getByText('教材を確認する'))
+    expect(material?.open).toBe(true)
+    expect(screen.getByText('業務に直接関係する支出を申請できます。')).toBeTruthy()
+  })
+
   it('does not render drill content for invalid token', async () => {
     mocks.getLearnerDrill.mockRejectedValueOnce(
       new ApiClientError(404, { code: 'invalid_share_token', message: 'invalid' }),
@@ -122,6 +163,7 @@ describe('LearnerDrillPage', () => {
       ],
     })
     await waitFor(() => expect(screen.getByText('提出が完了しました。')).toBeTruthy())
+    expect(screen.getByText('回答は教材改善の分析に使われます。')).toBeTruthy()
     expect(screen.getByText('根拠が明確です。')).toBeTruthy()
     expect(screen.queryByText('idealAnswer')).toBeNull()
   })
