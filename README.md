@@ -109,21 +109,22 @@ flowchart LR
 |---|---|---|---|
 | unit（pytest / vitest） | なし | ロジック・スキーマ境界 | 全 PR |
 | E2E（Playwright, local モード） | なし | デモ導線・画面の配線 | CI 成功後の PR |
-| **Agent Eval（`adk eval` + LLM-as-a-judge）** | **実 Gemini** | 4 エージェントの応答品質 | `agent/**` 差分の PR / main push |
+| **Agent Eval（`adk eval` + LLM-as-a-judge）** | **実 Gemini** | 4 エージェントの応答品質 | 全 PR（`agent/**` 差分がなければ自動 skip） |
 | フルスタック E2E（opt-in） | 実 Gemini | backend ↔ ADK の接続 | `E2E_LLM=1` 手動 |
 
 - Agent Eval は rubric ベースの LLM judge（`rubric_based_final_response_quality_v1`）で
   「採点は回答に書かれた内容だけを根拠にしているか」等を判定します。経費精算・情シス・勤怠の
   3 ジャンルを 4 エージェント縦断で共有し、単一ジャンルへの過学習を検出します
-- **main push では Agent Eval がデプロイゲート**になります。`agent/**` の変更は
-  LLM-as-a-judge を通過しない限り Cloud Run にデプロイされません。無関係な変更は
-  ゲートをバイパスする path ベースの選択的ゲートです
+- **Agent Eval は main への必須チェック（branch protection required check）**です。
+  `agent/**` の変更は LLM-as-a-judge を通過しない限り main にマージできず、
+  main へのマージは即 Cloud Run にデプロイされます。agent に差分がない PR では
+  eval は自動 skip され、チェックは通過扱いになります
 
 ### 証拠リンク
 
 | 主張 | 一次証拠 |
 |---|---|
-| eval が通らないと main にデプロイされない | [main push での Agent Eval 成功 run](https://github.com/tomomj/knowledge-drills/actions/runs/29068390062)、ゲート実装は [`backend-cd.yml`](.github/workflows/backend-cd.yml) の `wait-for-agent-eval` |
+| eval が通らないと main にマージできない | [劣化プロンプトの実演 PR #66](https://github.com/tomomj/knowledge-drills/pull/66)（Agent Eval が fail し、マージ不可のまま展示中）、[Agent Eval 成功 run](https://github.com/tomomj/knowledge-drills/actions/runs/29068390062) |
 | eval の中身 | [`agent/evals/`](agent/evals/) — grading 4 / drill_generator 3 / failure_analysis 2 / document_patch 2 ケース、judge rubric は各 `test_config.json` |
 | エージェント出力の検証境界 | `backend/app/services/drill_service.py` の出題根拠実在チェック・rubric 合計検証 |
 
@@ -195,9 +196,10 @@ PR だけで実行する。
 - `.github/workflows/backend-ci.yml`: `backend/**` / `agent/**` の通常 CI
 - `.github/workflows/frontend-ci.yml`: `frontend/**`
 - `.github/workflows/e2e.yml`: CI 成功後にデモ導線の Playwright E2E を実行する
-- `.github/workflows/agent-eval.yml`: `agent/**` 差分時に eval 専用 WIF で実 Gemini eval を実行する
-- `.github/workflows/backend-cd.yml` / `frontend-cd.yml`: main push で Cloud Run へデプロイ。
-  agent 変更時は Agent Eval の成功を待ってからデプロイする
+- `.github/workflows/agent-eval.yml`: 全 PR で実行し、`agent/**` 差分時のみ eval 専用 WIF で
+  実 Gemini eval を実行する（差分がなければ skip）。main への required check
+- `.github/workflows/backend-cd.yml` / `frontend-cd.yml`: main push で Cloud Run へデプロイする。
+  エージェント品質は PR の Agent Eval required check で担保済みのため、マージ後は待たずにデプロイする
 
 `agent-eval.yml` は deploy 用 service account ではなく、Terraform が作成する
 eval 専用 service account を使う。Terraform apply 後、repository variables に
