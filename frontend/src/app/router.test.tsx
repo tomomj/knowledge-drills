@@ -27,6 +27,9 @@ const firebaseUser: AuthStateUser = {
 const learnerDrill: LearnerDrill = {
   drillRunId: 'drill-1',
   courseId: 'course-1',
+  courseTitle: '教材タイトル',
+  courseMarkdown: '# 教材\n\n## 方針\n根拠を確認します。',
+  courseVersion: 1,
   questions: [
     { id: 'q1', question: '判断理由を書いてください。', maxScore: 4 },
     { id: 'q2', question: '例外条件を書いてください。', maxScore: 4 },
@@ -101,7 +104,7 @@ describe('AppRouter auth boundaries', () => {
     mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
     const { confirmCurrentUser } = renderRoute('/drills/share-token', null)
 
-    await waitFor(() => expect(screen.getByLabelText(/判断理由を書いてください。/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: '回答に進む' })).toBeTruthy())
 
     expect(screen.queryByRole('button', { name: 'Google でログイン' })).toBeNull()
     expect(confirmCurrentUser).not.toHaveBeenCalled()

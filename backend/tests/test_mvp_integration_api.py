@@ -150,6 +150,9 @@ def test_full_mvp_flow_from_course_to_patch_apply(client: TestClient) -> None:
     assert learner_response.status_code == 200
     learner_payload = learner_response.json()
     assert len(learner_payload["questions"]) == 3
+    assert learner_payload["courseTitle"] == "講座"
+    assert learner_payload["courseMarkdown"] == "## 判断基準\n根拠を確認する。"
+    assert learner_payload["courseVersion"] == 1
     _assert_forbidden_keys_absent(
         learner_payload,
         {"drillFocus", "scoreSummary", "analysisTimeline", "metrics", "rubric", "idealAnswer"},

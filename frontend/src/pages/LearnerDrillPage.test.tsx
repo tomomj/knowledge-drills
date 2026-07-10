@@ -10,6 +10,9 @@ import { LearnerDrillPage } from './LearnerDrillPage'
 const learnerDrill: LearnerDrill = {
   drillRunId: 'drill-1',
   courseId: 'course-1',
+  courseTitle: '経費精算の判断基準',
+  courseMarkdown: '# 経費精算\n\n## 基本方針\n業務に直接関係する支出を申請できます。',
+  courseVersion: 2,
   questions: [
     { id: 'q1', question: '判断理由を書いてください。', maxScore: 4 },
     { id: 'q2', question: '例外条件を書いてください。', maxScore: 4 },
@@ -50,6 +53,11 @@ function renderLearner(path = '/drills/share-token') {
   )
 }
 
+async function proceedToAnswering(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole('button', { name: '回答に進む' })
+  await user.click(screen.getByRole('button', { name: '回答に進む' }))
+}
+
 describe('LearnerDrillPage', () => {
   beforeEach(() => {
     mocks.getLearnerDrill.mockReset()
@@ -61,14 +69,67 @@ describe('LearnerDrillPage', () => {
   })
 
   it('renders learner questions without rubric or ideal answer', async () => {
+    const user = userEvent.setup()
     mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
 
     renderLearner()
 
+    await proceedToAnswering(user)
     await waitFor(() => expect(screen.getByLabelText(/判断理由を書いてください。/)).toBeTruthy())
     expect(screen.getAllByRole('textbox')).toHaveLength(4)
     expect(screen.queryByText('rubric')).toBeNull()
     expect(screen.queryByText('idealAnswer')).toBeNull()
+  })
+
+  it('starts with the reading step: full course material and no questions', async () => {
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+
+    renderLearner()
+
+    await screen.findByRole('button', { name: '回答に進む' })
+    expect(
+      screen.getByText('教材を読んでから回答してください。回答は教材改善の分析に匿名で利用されます。'),
+    ).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '経費精算の判断基準' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '基本方針' })).toBeTruthy()
+    expect(screen.getByText('業務に直接関係する支出を申請できます。')).toBeTruthy()
+    expect(screen.getByText('教材バージョン v2')).toBeTruthy()
+    expect(screen.getByText('経費精算の判断基準').closest('details')).toBeNull()
+
+    expect(screen.queryByText('教材を確認する')).toBeNull()
+    expect(screen.queryByLabelText('お名前')).toBeNull()
+    expect(screen.queryByText(/判断理由を書いてください。/)).toBeNull()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: '回答を提出する' })).toBeNull()
+  })
+
+  it('shows questions after proceeding, without any material reference', async () => {
+    const user = userEvent.setup()
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+
+    renderLearner()
+
+    await proceedToAnswering(user)
+
+    await screen.findByLabelText(/判断理由を書いてください。/)
+    expect(screen.getByLabelText('お名前')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '回答に進む' })).toBeNull()
+
+    expect(screen.queryByText('教材を確認する')).toBeNull()
+    expect(screen.queryByText('教材バージョン v2')).toBeNull()
+    expect(screen.queryByText('業務に直接関係する支出を申請できます。')).toBeNull()
+  })
+
+  it('skips the reading step when courseMarkdown is empty', async () => {
+    mocks.getLearnerDrill.mockResolvedValueOnce({ ...learnerDrill, courseMarkdown: '' })
+
+    renderLearner()
+
+    await screen.findByLabelText(/判断理由を書いてください。/)
+    expect(screen.getByLabelText('お名前')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '回答を提出する' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '回答に進む' })).toBeNull()
+    expect(screen.queryByText('教材を確認する')).toBeNull()
   })
 
   it('does not render drill content for invalid token', async () => {
@@ -88,6 +149,7 @@ describe('LearnerDrillPage', () => {
 
     renderLearner()
 
+    await proceedToAnswering(user)
     await screen.findByLabelText(/判断理由を書いてください。/)
     await user.click(screen.getByRole('button', { name: '回答を提出する' }))
 
@@ -106,6 +168,7 @@ describe('LearnerDrillPage', () => {
 
     renderLearner()
 
+    await proceedToAnswering(user)
     await screen.findByLabelText(/判断理由を書いてください。/)
     await user.type(screen.getByLabelText('お名前'), '受講者A')
     await user.type(screen.getByLabelText(/判断理由を書いてください。/), '根拠です')
@@ -122,6 +185,7 @@ describe('LearnerDrillPage', () => {
       ],
     })
     await waitFor(() => expect(screen.getByText('提出が完了しました。')).toBeTruthy())
+    expect(screen.getByText('回答は教材改善の分析に使われます。')).toBeTruthy()
     expect(screen.getByText('根拠が明確です。')).toBeTruthy()
     expect(screen.queryByText('idealAnswer')).toBeNull()
   })
@@ -138,6 +202,7 @@ describe('LearnerDrillPage', () => {
 
     renderLearner()
 
+    await proceedToAnswering(user)
     await screen.findByLabelText(/判断理由を書いてください。/)
     await user.type(screen.getByLabelText('お名前'), '受講者A')
     await user.type(screen.getByLabelText(/判断理由を書いてください。/), '根拠です')

@@ -239,6 +239,8 @@ class DrillRun(ApiModel):
     id: str
     course_id: str
     course_version: int = 1
+    course_title: str | None = None
+    course_markdown: str | None = None
     drill_focus: str | None = Field(default=None, max_length=500)
     status: DrillRunStatus
     questions: list[DrillQuestion] = Field(default_factory=list)
@@ -455,6 +457,9 @@ class DrillAnswersResponse(ApiModel):
 class LearnerDrillResponse(ApiModel):
     drill_run_id: str
     course_id: str
+    course_title: str
+    course_markdown: str
+    course_version: int
     questions: list[LearnerDrillQuestionResponse]
 
 
@@ -542,4 +547,5 @@ class DrillGenerationStartResponse(ApiModel):
 
 
 class AnalysisStartResponse(ApiModel):
-    patch_id: str
+    # patch_id が None の場合、承認された所見がなく patch 提案を見送ったことを表す。
+    patch_id: str | None = None

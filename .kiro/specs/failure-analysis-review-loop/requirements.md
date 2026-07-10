@@ -31,7 +31,7 @@ Failure Analysis Review Loop は、既存の Hackathon Feedback Loop に対し�
 2. When 必要な所見の収集が完了する, the 誤答分析機能 shall 各所見を入力情報に照らして評価し、採用候補または棄却候補に分類して、その根拠、リスク、および最終化への指示を記録する
 3. When 根拠評価が完了する, the 誤答分析機能 shall 評価とは別の承認レビューを行い、承認または修正要求の判定、問題点、修正指示、承認対象、および残存リスクを記録する
 4. When 承認レビューが完了する, the 誤答分析機能 shall レビュー結果を保存した後に、その同じレビュー結果を使って反復の終了または継続を決定する
-5. If 承認レビューが承認を返し、承認対象が一意かつ非空で採用候補に含まれる, the 誤答分析機能 shall 追加の根拠評価・承認レビューを実行せず、直ちに最終化へ進む
+5. If 承認レビューが承認を返し、承認対象の参照が一意かつ採用候補に含まれる、または承認対象ゼロが明示される, the 誤答分析機能 shall 追加の根拠評価・承認レビューを実行せず、直ちに最終化へ進む
 6. If 承認レビューが修正要求を返し、反復上限に達していない, the 誤答分析機能 shall 問題点と修正指示を次の根拠評価に反映して評価・レビュー cycle を継続する
 7. When 修正要求を受けて次の根拠評価を行う, the 誤答分析機能 shall 前回指摘への対応内容と未解決事項を記録する
 8. The 誤答分析機能 shall 評価・レビュー cycle に有限の反復上限を設ける
@@ -40,7 +40,7 @@ Failure Analysis Review Loop は、既存の Hackathon Feedback Loop に対し�
 11. When 承認レビューが承認される, the 誤答分析機能 shall そのレビューで明示的に承認された所見だけを Failure Signal の根拠として使用する
 12. The 誤答分析機能 shall 承認状態を要約、理由、その他の自由文から推測しない
 13. If 反復上限到達時に最新レビューが修正要求であるが有効な承認対象が存在する, the 誤答分析機能 shall その承認対象だけを部分採用し、未解決事項と残存リスクを最終結果に明示する
-14. If 反復上限到達時に有効な承認対象が存在しない, the 誤答分析機能 shall 未承認所見を含む分析結果を返さず、明示的な分析失敗として扱う
+14. If 構造的に有効な最新レビューに承認対象が存在しない, the 誤答分析機能 shall 未承認所見を含めず、Failure Signal が空の最終結果と見送り理由を返して patch を提案しない
 15. When 評価・レビュー cycle が終了する, the 誤答分析機能 shall 外部契約に適合する最終結果を一度だけ生成し、中間評価または中間レビューを最終結果として返さない
 
 ### Requirement 2: 安定した FailureAnalysis 契約
@@ -92,7 +92,7 @@ Failure Analysis Review Loop は、既存の Hackathon Feedback Loop に対し�
 #### Acceptance Criteria
 
 1. The Agent shall review loop を使わずに従来方式で誤答分析を実行できる撤退経路を維持する
-2. The Agent tests shall 初回承認による早期終了、修正要求後の再評価、反復上限時の部分採用と分析失敗、不正な所見参照の拒否、および最終結果が一度だけ生成されることを検証する
+2. The Agent tests shall 初回承認による早期終了、修正要求後の再評価、反復上限時の部分採用、承認対象ゼロ時の見送り、不正な所見参照の拒否、および最終結果が一度だけ生成されることを検証する
 3. The Backend tests shall `reviewNotes` あり・なし、既存 evidence との併存、最大 3 件制限、`timelineStep` による振り分けを検証する
 4. The Frontend tests shall review 結果を含む timeline item が表示されることを検証する
 5. The implementation shall 実行可能な範囲で agent / backend / frontend のテストを通し、実行できない検証は理由を記録する
