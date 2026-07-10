@@ -15,9 +15,12 @@ type PageState =
   | { status: 'invalidToken'; message: string }
   | { status: 'failed'; message: string }
 
+type LearnerPhase = 'reading' | 'answering'
+
 export function LearnerDrillPage() {
   const { shareToken } = useParams()
   const [state, setState] = useState<PageState>({ status: 'loading' })
+  const [phase, setPhase] = useState<LearnerPhase>('reading')
   const [learnerName, setLearnerName] = useState('')
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const submittingRef = useRef(false)
@@ -120,6 +123,7 @@ export function LearnerDrillPage() {
   const drill = state.status === 'ready' || state.status === 'submitting' ? state.drill : null
   const isSubmitting = state.status === 'submitting'
   const submitError = state.status === 'ready' ? state.submitError : null
+  const isReading = phase === 'reading' && Boolean(drill?.courseMarkdown)
   const answeredCount = drill
     ? drill.questions.filter((question) => answers[question.id]?.trim()).length
     : 0
@@ -139,10 +143,35 @@ export function LearnerDrillPage() {
         ) : null}
         {submitError ? <StatusBanner tone="error">{submitError}</StatusBanner> : null}
 
-        {drill ? (
+        {drill && isReading ? (
+          <>
+            <section className="card course-material" aria-label="教材">
+              <div className="course-material__body">
+                <div className="course-material__head">
+                  <h2>{drill.courseTitle}</h2>
+                  <span className="chip chip--muted">教材バージョン v{drill.courseVersion}</span>
+                </div>
+                <MarkdownView markdown={drill.courseMarkdown} />
+              </div>
+            </section>
+
+            <div className="submit-row">
+              <span className="submit-row__note">教材を読み終えたら回答へ進んでください</span>
+              <button
+                type="button"
+                className="btn btn--primary btn--lg"
+                onClick={() => setPhase('answering')}
+              >
+                回答に進む
+              </button>
+            </div>
+          </>
+        ) : null}
+
+        {drill && !isReading ? (
           <>
             {drill.courseMarkdown ? (
-              <details className="card course-material" open>
+              <details className="card course-material">
                 <summary>教材を確認する</summary>
                 <div className="course-material__body">
                   <div className="course-material__head">
