@@ -116,12 +116,12 @@ resource "google_iam_workload_identity_pool_provider" "github_actions_agent_eval
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = local.github_eval_wif_provider_id
   display_name                       = "GitHub Actions Agent Eval"
-  description                        = "Trust GitHub Actions OIDC tokens for Agent Eval only."
+  description                        = "Trust GitHub Actions OIDC tokens for Agent Eval on pull requests, main pushes, and manual runs."
   disabled                           = false
   attribute_condition = join(" && ", [
     "assertion.repository == \"${local.github_repository}\"",
     "assertion.workflow == \"Agent Eval\"",
-    "(assertion.event_name == \"pull_request\" || assertion.event_name == \"workflow_dispatch\")",
+    "(assertion.event_name == \"pull_request\" || assertion.event_name == \"workflow_dispatch\" || (assertion.event_name == \"push\" && assertion.ref == \"refs/heads/main\"))",
   ])
 
   attribute_mapping = {
