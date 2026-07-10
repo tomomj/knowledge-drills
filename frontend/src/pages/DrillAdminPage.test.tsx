@@ -338,6 +338,42 @@ describe('DrillAdminPage', () => {
     expect(mocks.getDrill).toHaveBeenCalledTimes(callsAfterFailure)
   })
 
+  it('shows a skip banner and stays on the page when analysis completes without a patch', async () => {
+    mocks.analyzeDrill.mockResolvedValueOnce({ patchId: null })
+    const skippedDrill: DrillAdmin = {
+      ...drill,
+      status: 'analyzed',
+      analysisTimeline: [
+        {
+          id: 'create_patch',
+          title: '修正案を作成',
+          status: 'skipped',
+          summary: '承認された Failure Signal がないため patch 提案を見送りました',
+          evidence: [],
+          completedAt: null,
+        },
+      ],
+    }
+    mocks.getDrill.mockResolvedValueOnce(drill).mockResolvedValue(skippedDrill)
+
+    renderDrillAdmin()
+
+    await screen.findByText('/drills/share-token')
+    fireEvent.click(screen.getByRole('button', { name: '回答を分析する' }))
+
+    await screen.findByText(
+      '分析は完了しました。承認された所見がなかったため、パッチ提案は見送られました。',
+    )
+    expect(screen.queryByText('Patch Review')).toBeNull()
+    await waitFor(() =>
+      expect(
+        screen.getByText('承認された Failure Signal がないため patch 提案を見送りました'),
+      ).toBeTruthy(),
+    )
+    expect((screen.getByLabelText('設問一覧') as HTMLDetailsElement).open).toBe(true)
+    expect((screen.getByLabelText('回答一覧') as HTMLDetailsElement).open).toBe(true)
+  })
+
   it('maps agent invocation failure to a retryable Japanese message', async () => {
     mocks.analyzeDrill.mockRejectedValueOnce(
       new mocks.ApiClientError(502, {

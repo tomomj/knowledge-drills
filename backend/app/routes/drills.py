@@ -34,10 +34,11 @@ def get_drill_admin(
     )
 
 
-@router.post("/{drill_run_id}/analysis", response_model=DocumentPatch)
+@router.post("/{drill_run_id}/analysis", response_model=DocumentPatch | None)
 def analyze_drill(
     request: Request,
     drill_run_id: str,
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
-) -> DocumentPatch:
+) -> DocumentPatch | None:
+    # None は承認された所見がなく patch 提案を見送ったことを表す。
     return get_analysis_service(request).run_analysis(drill_run_id, current_user.uid)

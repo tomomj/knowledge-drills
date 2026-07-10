@@ -542,4 +542,5 @@ class DrillGenerationStartResponse(ApiModel):
 
 
 class AnalysisStartResponse(ApiModel):
-    patch_id: str
+    # patch_id が None の場合、承認された所見がなく patch 提案を見送ったことを表す。
+    patch_id: str | None = None
