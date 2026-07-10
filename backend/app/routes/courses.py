@@ -193,4 +193,4 @@ def analyze_course_drill(
         current_user.uid,
     )
     patch = get_analysis_service(request).run_analysis(drill_run_id, current_user.uid)
-    return AnalysisStartResponse(patch_id=patch.id)
+    return AnalysisStartResponse(patch_id=patch.id if patch is not None else None)

@@ -42,7 +42,8 @@ reviewNotes は critic / reviewer / finalizer の表示用要約です。各要�
 - criticReview.approvedFindingIds に含まれる findingId だけを Failure Signal の根拠として採用してください。
 - verdict、summary、rationale などの自由文から「承認済み」と推測してはいけません。
 - criticReview.verdict が needs_revision のまま max iteration に到達した場合でも、approvedFindingIds が非空ならその ID だけを partial 採用してください。
-- approvedFindingIds が空の場合、有効な failureSignals を作らず、schema validation failure による分析失敗に倒してください。未承認 finding から埋め合わせを作らないでください。
+- approvedFindingIds が空の場合、failureSignals は空配列で返してください。これは「patch を提案しない」という正当な見送り判断です。未承認 finding から埋め合わせを作らないでください。
+- failureSignals を空で返す場合は、source=finalizer / timelineStep=decide_patch_strategy の reviewNote に、所見が承認されなかったため patch 提案を見送る判断であることを記録してください。
 
 reviewNotes の割り当て:
 - evidence_critic の採用・棄却・リスク要約は timelineStep=match_course_evidence に置いてください。
