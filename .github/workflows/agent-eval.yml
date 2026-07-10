@@ -1,16 +1,10 @@
 name: Agent Eval
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "agent/**"
-      - ".github/workflows/agent-eval.yml"
+  # 全 PR で実行する（required check のため paths フィルタは付けない）。
+  # agent/ に差分がない PR は wait-for-prerequisite-ci が should_run_eval=false を
+  # 返して eval ジョブが skipped になり、required check は通過扱いになる。
   pull_request:
-    paths:
-      - "agent/**"
-      - ".github/workflows/agent-eval.yml"
   workflow_dispatch:
     inputs:
       profile:
@@ -53,7 +47,7 @@ jobs:
         id: manual
         if: github.event_name != 'pull_request'
         run: |
-          echo "push / workflow_dispatch runs execute eval directly."
+          echo "workflow_dispatch runs execute eval directly."
           echo "should_run_eval=true" >> "$GITHUB_OUTPUT"
 
       - name: Wait for Backend and Frontend CI
@@ -75,7 +69,11 @@ jobs:
             });
             const paths = files.map((file) => file.filename);
 
-            const shouldRunEval = paths.some((path) => path.startsWith("agent/"));
+            const shouldRunEval = paths.some(
+              (path) =>
+                path.startsWith("agent/") ||
+                path === ".github/workflows/agent-eval.yml",
+            );
             core.setOutput("should_run_eval", shouldRunEval ? "true" : "false");
             if (!shouldRunEval) {
               core.info("No agent files changed; skipping ADK eval.");
