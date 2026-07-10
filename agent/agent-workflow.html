@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knowledge Drills — Agent Workflow</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --ink: #1a2233;
+    --muted: #66707f;
+    --line: #d8dde6;
+    --arrow: #9aa3b3;
+    --blue-bg: #e8f0fe;   --blue-bd: #6c8ebf;
+    --green-bg: #e6f4e6;  --green-bd: #82b366;
+    --orange-bg: #ffeedd; --orange-bd: #d79b00;
+    --purple-bg: #f0e6f7; --purple-bd: #9673a6;
+    --yellow-bg: #fff6d9; --yellow-bd: #d6b656;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14171e;
+      --surface: #1d222c;
+      --ink: #e6eaf2;
+      --muted: #9aa3b5;
+      --line: #333b4a;
+      --arrow: #6b7488;
+      --blue-bg: #1b2c47;   --blue-bd: #5f84bd;
+      --green-bg: #1c3320;  --green-bd: #6aa35a;
+      --orange-bg: #3d2a12; --orange-bd: #c08a2a;
+      --purple-bg: #33253f; --purple-bd: #9678a8;
+      --yellow-bg: #38311a; --yellow-bd: #b39a3e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Hiragino Sans", "Noto Sans JP", -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .page { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .lede { color: var(--muted); margin: 0 0 40px; font-size: 13px; }
+  h2 { font-size: 16px; margin: 52px 0 20px; color: var(--muted); font-weight: 600;
+       text-transform: uppercase; letter-spacing: .04em; }
+  h2:first-of-type { margin-top: 0; }
+
+  .node {
+    border: 1.5px solid var(--line);
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 12px 18px;
+    text-align: center;
+  }
+  .node b { display: block; font-size: 14px; }
+  .node span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .blue   { background: var(--blue-bg);   border-color: var(--blue-bd); }
+  .green  { background: var(--green-bg);  border-color: var(--green-bd); }
+  .orange { background: var(--orange-bg); border-color: var(--orange-bd); }
+  .purple { background: var(--purple-bg); border-color: var(--purple-bd); }
+  .yellow { background: var(--yellow-bg); border-color: var(--yellow-bd); }
+
+  /* horizontal flow */
+  .flow { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+  .flow .node { flex: 1 1 150px; }
+  .ar { color: var(--arrow); font-size: 22px; padding: 0 8px; flex: 0 0 auto; }
+  .ar small { display: block; font-size: 10.5px; color: var(--muted); line-height: 1.2; }
+  .flow-note { color: var(--muted); font-size: 12px; margin-top: 10px; text-align: center; }
+
+  /* vertical arrow */
+  .var { text-align: center; color: var(--arrow); font-size: 22px; padding: 8px 0; }
+  .var small { font-size: 11px; color: var(--muted); vertical-align: middle; margin-right: 6px; }
+
+  /* task fan-out */
+  .fan { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .fan .node { text-align: left; }
+  .fan .node b { font-size: 13.5px; }
+  .fan .task {
+    font-family: "SF Mono", Menlo, monospace; font-size: 11.5px;
+    color: var(--muted); display: block; margin-bottom: 6px;
+  }
+
+  /* failure analysis internals */
+  .stagebox {
+    border: 1.5px dashed var(--line);
+    border-radius: 14px;
+    padding: 14px;
+  }
+  .stagebox .cap { font-size: 12px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+  .row3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .looprow { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px; }
+  .looprow .node { flex: 0 1 250px; }
+  .loopmark { color: var(--arrow); font-size: 20px; padding: 0 10px; }
+  .foot { color: var(--muted); font-size: 12px; margin-top: 44px; border-top: 1px solid var(--line); padding-top: 14px; }
+  code { font-family: "SF Mono", Menlo, monospace; font-size: .92em; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Knowledge Drills — Agent Workflow</h1>
+  <p class="lede">backend が task ごとに ADK の leaf agent を直接実行する（root_agent への転送はしない）</p>
+
+  <!-- ============================================================ -->
+  <h2>全体フロー</h2>
+  <div class="flow">
+    <div class="node blue"><b>Frontend</b><span>教材・回答・分析</span></div>
+    <div class="ar">→</div>
+    <div class="node green"><b>Backend API</b><span>検証と Firestore 保存</span></div>
+    <div class="ar">→<small>task_name<br>+ JSON</small></div>
+    <div class="node orange"><b>ADK Runner</b><span>task ごとに 1 Agent</span></div>
+    <div class="ar">→</div>
+    <div class="node purple"><b>Gemini</b><span>JSON で応答</span></div>
+  </div>
+  <p class="flow-note">応答はスキーマ検証してから backend が保存・反映する（失敗時は retry）</p>
+
+  <!-- ============================================================ -->
+  <h2>4つのタスクと担当 Agent</h2>
+  <div class="fan">
+    <div class="node purple">
+      <span class="task">generate_drill</span>
+      <b>drill_generator_agent</b>
+      <span>教材から実務シナリオ型ドリルを3問つくる</span>
+    </div>
+    <div class="node purple">
+      <span class="task">grade_answer</span>
+      <b>grading_agent</b>
+      <span>rubric に沿って回答を採点しフィードバックする</span>
+    </div>
+    <div class="node purple">
+      <span class="task">analyze_failures</span>
+      <b>failure_analysis_agent</b>
+      <span>誤答の傾向から Failure Signal を抽出する ↓詳細</span>
+    </div>
+    <div class="node purple">
+      <span class="task">propose_document_patch</span>
+      <b>document_patch_agent</b>
+      <span>弱点を補う最小限の教材修正案をつくる</span>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2>failure_analysis_agent の中身（3ステージ）</h2>
+
+  <div class="stagebox">
+    <div class="cap">1. 並列分析 — 3つの視点で同時に分析</div>
+    <div class="row3">
+      <div class="node yellow"><b>受講者の誤解</b><span>つまずきパターン</span></div>
+      <div class="node yellow"><b>教材のギャップ</b><span>説明不足・曖昧さ</span></div>
+      <div class="node yellow"><b>設問の品質</b><span>誤答を誘発していないか</span></div>
+    </div>
+  </div>
+
+  <div class="var">▼</div>
+
+  <div class="stagebox">
+    <div class="cap">2. レビューループ — 3回くり返して所見を絞り込む</div>
+    <div class="looprow">
+      <div class="node orange"><b>evidence_critic</b><span>根拠の強さで採用・棄却</span></div>
+      <div class="ar">→</div>
+      <div class="node orange"><b>critic_reviewer</b><span>判断を独立レビュー</span></div>
+      <div class="loopmark">⟳ ×3</div>
+    </div>
+  </div>
+
+  <div class="var">▼</div>
+
+  <div class="stagebox">
+    <div class="cap">3. 最終化</div>
+    <div class="looprow">
+      <div class="node purple"><b>finalizer</b><span>承認された所見だけを整形</span></div>
+      <div class="ar">→</div>
+      <div class="node blue"><b>FailureAnalysisOutput</b><span>failureSignals として backend へ</span></div>
+    </div>
+  </div>
+
+  <p class="foot">
+    ソース: <code>agent/knowledge_drill_agent/agent.py</code> ／
+    ADK の <code>SequentialAgent → ParallelAgent + LoopAgent(max_iterations=3)</code> 構成。
+    環境変数 <code>KNOWLEDGE_DRILL_AGENT_ANALYSIS_MODE=single</code> で単一 Agent モードに切替可。
+  </p>
+
+</div>
+</body>
+</html>
