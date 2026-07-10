@@ -104,7 +104,7 @@ describe('AppRouter auth boundaries', () => {
     mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
     const { confirmCurrentUser } = renderRoute('/drills/share-token', null)
 
-    await waitFor(() => expect(screen.getByLabelText(/判断理由を書いてください。/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: '回答に進む' })).toBeTruthy())
 
     expect(screen.queryByRole('button', { name: 'Google でログイン' })).toBeNull()
     expect(confirmCurrentUser).not.toHaveBeenCalled()
