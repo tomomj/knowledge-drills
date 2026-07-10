@@ -184,7 +184,8 @@ class AnalysisReviewNote(AgentModel):
 
 
 class FailureAnalysisOutput(AgentModel):
-    failure_signals: list[FailureSignal] = Field(min_length=1)
+    # 空リストは「承認できる所見がなく patch 提案を見送る」という正当な判断を表す。
+    failure_signals: list[FailureSignal] = Field(default_factory=list)
     perspectives: list[AnalysisPerspective] = Field(default_factory=list)
     review_notes: list[AnalysisReviewNote] = Field(default_factory=list)
 

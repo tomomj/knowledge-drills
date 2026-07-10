@@ -189,13 +189,17 @@ Knowledge Drills も同じで、workflow は固定、判断は入力依存、最
 
 ### 次の周回: このプロダクト自身も改善ループの途中にいる
 
-正直に書くと、まだやれていない判断が 2 つある。
+実はこの記事の初稿では「まだやれていない判断が 2 つある」と書いていた。
 承認された所見がゼロ件のときに patch 起案そのものを見送る分岐と、
 人間が却下した patch の理由を次の分析入力に還元する「却下からの学習」だ。
-現状は分析が終わると必ず patch 提案まで進み、却下履歴はエージェントに渡っていない。
 
-どちらも、invoker と schema の信頼境界は変えずに、分析入力へ判断材料を足すだけで実現できる見立てで、
-次の拡張の最優先に置いている。ドキュメントと同じで、プロダクトも一周ごとに良くしていく。
+このうち**見送り分岐は、提出前に一周まわして実装した**。critic / reviewer が所見を
+1 件も承認しなかった場合、分析は patch を作らずに正常完了し、「所見が承認されなかったため
+見送った」という判断がタイムラインに残る。「patch を出さない」も、根拠つきの立派な出力である。
+
+残るは「却下からの学習」。invoker と schema の信頼境界は変えずに、分析入力へ判断材料を
+足すだけで実現できる見立てで、次の拡張の最優先に置いている。
+ドキュメントと同じで、プロダクトも一周ごとに良くしていく。
 
 ### Agent Engine をあえて使わなかった
 
@@ -222,7 +226,7 @@ Knowledge Drills も同じで、workflow は固定、判断は入力依存、最
 | 主張 | 証拠 |
 |---|---|
 | eval が通らないと main にデプロイされない | main push での Agent Eval 成功 run: [actions/runs/29068390062](https://github.com/tomomj/knowledge-drills/actions/runs/29068390062) / ゲート実装: [`backend-cd.yml` の `wait-for-agent-eval`](https://github.com/tomomj/knowledge-drills/blob/main/.github/workflows/backend-cd.yml) |
-| eval が劣化を実際にブロックする | 採点プロンプトを意図的に劣化させた実演 PR: 【ブロック実演 PR URL】 |
+| eval が劣化を実際にブロックする | 採点プロンプトを意図的に劣化させた実演 PR: [#66](https://github.com/tomomj/knowledge-drills/pull/66)（[Agent Eval が fail した run](https://github.com/tomomj/knowledge-drills/actions/runs/29082680790)。マージ不可の状態を展示） |
 | eval は 4 エージェントを縦断して品質を判定する | 下の evalset 構成表 + [`agent/evals/`](https://github.com/tomomj/knowledge-drills/tree/main/agent/evals) |
 | パッチは判断ログ付きで起案・適用される | デモ講座のパッチレビュー画面（分析タイムライン + diff + 棄却された所見） |
 | 改善はスコアで閉じる | 経費精算講座 v1 1.8 → v3 3.6（シードデータのデモ）+ 参加ガイド講座の実測【提出前に追記】 |
