@@ -403,6 +403,166 @@ resource "google_service_account_iam_member" "agent_eval_workload_identity_user"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${local.github_repository}"
 }
 
+resource "google_monitoring_notification_channel" "email_alerts" {
+  project      = local.project_id
+  display_name = "Knowledge Drills ${local.environment} alerts email"
+  type         = "email"
+
+  labels = {
+    email_address = local.alert_email
+  }
+
+  depends_on = [
+    google_project_service.required["monitoring.googleapis.com"],
+  ]
+}
+
+resource "google_monitoring_uptime_check_config" "frontend" {
+  project      = local.project_id
+  display_name = "${local.frontend_service_name}-uptime"
+  timeout      = local.uptime_check_timeout
+  period       = local.uptime_check_period
+
+  selected_regions = local.uptime_check_regions
+
+  http_check {
+    path         = "/"
+    port         = 443
+    use_ssl      = true
+    validate_ssl = true
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+
+    labels = {
+      project_id = local.project_id
+      host       = trimprefix(google_cloud_run_v2_service.frontend.uri, "https://")
+    }
+  }
+
+  depends_on = [
+    google_project_service.required["monitoring.googleapis.com"],
+  ]
+}
+
+resource "google_monitoring_uptime_check_config" "backend" {
+  project      = local.project_id
+  display_name = "${local.backend_service_name}-uptime"
+  timeout      = local.uptime_check_timeout
+  period       = local.uptime_check_period
+
+  selected_regions = local.uptime_check_regions
+
+  http_check {
+    path         = "/health"
+    port         = 443
+    use_ssl      = true
+    validate_ssl = true
+  }
+
+  monitored_resource {
+    type = "uptime_url"
+
+    labels = {
+      project_id = local.project_id
+      host       = trimprefix(google_cloud_run_v2_service.backend.uri, "https://")
+    }
+  }
+
+  depends_on = [
+    google_project_service.required["monitoring.googleapis.com"],
+  ]
+}
+
+resource "google_monitoring_alert_policy" "frontend_uptime" {
+  project      = local.project_id
+  display_name = "${local.frontend_service_name} uptime failure"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Uptime check failed for ${local.frontend_service_name}"
+
+    condition_threshold {
+      filter = join(" AND ", [
+        "resource.type = \"uptime_url\"",
+        "metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\"",
+        "metric.labels.check_id = \"${google_monitoring_uptime_check_config.frontend.uptime_check_id}\"",
+      ])
+      comparison      = "COMPARISON_GT"
+      threshold_value = 1
+      duration        = "60s"
+
+      aggregations {
+        alignment_period     = "1200s"
+        per_series_aligner   = "ALIGN_NEXT_OLDER"
+        cross_series_reducer = "REDUCE_COUNT_FALSE"
+        group_by_fields = [
+          "resource.label.project_id",
+          "resource.label.host",
+        ]
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [
+    google_monitoring_notification_channel.email_alerts.id,
+  ]
+
+  documentation {
+    content   = "Frontend Cloud Run (${local.frontend_service_name}) の uptime check が複数リージョンで失敗しています。Cloud Run のステータスと直近のデプロイを確認してください。"
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "backend_uptime" {
+  project      = local.project_id
+  display_name = "${local.backend_service_name} uptime failure"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Uptime check failed for ${local.backend_service_name}"
+
+    condition_threshold {
+      filter = join(" AND ", [
+        "resource.type = \"uptime_url\"",
+        "metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\"",
+        "metric.labels.check_id = \"${google_monitoring_uptime_check_config.backend.uptime_check_id}\"",
+      ])
+      comparison      = "COMPARISON_GT"
+      threshold_value = 1
+      duration        = "60s"
+
+      aggregations {
+        alignment_period     = "1200s"
+        per_series_aligner   = "ALIGN_NEXT_OLDER"
+        cross_series_reducer = "REDUCE_COUNT_FALSE"
+        group_by_fields = [
+          "resource.label.project_id",
+          "resource.label.host",
+        ]
+      }
+
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [
+    google_monitoring_notification_channel.email_alerts.id,
+  ]
+
+  documentation {
+    content   = "Backend Cloud Run (${local.backend_service_name}) の `/health` uptime check が複数リージョンで失敗しています。Cloud Run のステータスと直近のデプロイを確認してください。"
+    mime_type = "text/markdown"
+  }
+}
+
 output "frontend_url" {
   value = google_cloud_run_v2_service.frontend.uri
 }

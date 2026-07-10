@@ -103,6 +103,9 @@ def test_composite_failure_analysis_agent_runs_lenses_then_synthesis() -> None:
     assert critic_reviewer.output_key == "critic_review"
     assert critic_reviewer.output_schema is CriticReviewOutput
     assert critic_reviewer.tools == []
+    assert isinstance(critic_reviewer.instruction, str)
+    assert "approvedFindingIds は必須 field" in critic_reviewer.instruction
+    assert "明示的に空配列 `[]`" in critic_reviewer.instruction
     assert isinstance(review_gate, ReviewLoopGate)
 
     assert isinstance(approved_findings_gate, ApprovedFindingsGate)
@@ -122,6 +125,9 @@ def test_composite_failure_analysis_agent_runs_lenses_then_synthesis() -> None:
     assert "approvedFindingIds" in finalizer.instruction
     assert "唯一の finding source" in finalizer.instruction
     assert "issues、revisionInstructions、riskNotes" in finalizer.instruction
+    assert "approved_findings が空の場合" in finalizer.instruction
+    assert "failureSignals は空配列" in finalizer.instruction
+    assert "patch 提案を見送" in finalizer.instruction
     assert "severity は low / medium / high" in finalizer.instruction
 
 
@@ -237,6 +243,25 @@ def test_failure_analysis_output_accepts_optional_perspectives() -> None:
     )
 
 
+def test_failure_analysis_output_accepts_no_approved_signals() -> None:
+    output = FailureAnalysisOutput(
+        failure_signals=[],
+        review_notes=[
+            AnalysisReviewNote(
+                id="no-approved-findings",
+                source="finalizer",
+                timeline_step="decide_patch_strategy",
+                title="patch 提案の見送り",
+                summary="承認された所見がないため patch 提案を見送ります。",
+                evidence=["approvedFindingIds: (なし)"],
+            )
+        ],
+    )
+
+    assert output.failure_signals == []
+    assert output.review_notes[0].source == "finalizer"
+
+
 def test_failure_analysis_review_loop_schemas_use_camel_case_contracts() -> None:
     accepted = ReviewedFinding(
         finding_id="finding-1",
@@ -296,7 +321,15 @@ def test_failure_analysis_review_loop_schemas_use_camel_case_contracts() -> None
 
 def test_critic_review_rejects_unknown_verdict() -> None:
     with pytest.raises(ValidationError):
-        CriticReviewOutput(verdict=cast(Any, "rejected"))
+        CriticReviewOutput(
+            verdict=cast(Any, "rejected"),
+            approved_finding_ids=[],
+        )
+
+
+def test_critic_review_requires_explicit_approved_finding_ids() -> None:
+    with pytest.raises(ValidationError):
+        CriticReviewOutput.model_validate({"verdict": "approved"})
 
 
 def test_local_analysis_and_patch_samples_are_schema_valid() -> None:

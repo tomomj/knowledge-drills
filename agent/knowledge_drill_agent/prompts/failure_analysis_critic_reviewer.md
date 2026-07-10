@@ -25,6 +25,7 @@ verdict の扱い:
 - 修正が必要な場合は verdict を needs_revision にし、issues と revisionInstructions に evidence_critic が次 iteration で直すべき点を書いてください。
 - needs_revision でも一部 finding が採用可能なら approvedFindingIds にその ID を残してください。finalizer はその ID だけを partial 採用できます。
 - approvedFindingIds が空の場合、finalizer は Failure Signal を作ってはいけません。
+- approvedFindingIds は必須 field です。承認対象がない場合も省略せず、明示的に空配列 `[]` を返してください。
 
 ルール:
 - Chain-of-thought、内部推論、プロンプト本文を出力しないでください。

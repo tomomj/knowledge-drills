@@ -108,7 +108,8 @@ graph TB
     ReviewGate -->|valid approved / escalate| ApprovedGate
     Loop -->|max iterations| ApprovedGate
     ApprovedGate -->|valid full or partial selection| Finalizer
-    ApprovedGate -->|no valid approved finding| Failure[explicit analysis failure]
+    ApprovedGate -->|valid explicit zero selection| Finalizer
+    ApprovedGate -->|malformed or untraceable review| Failure[explicit analysis failure]
     Finalizer --> Runtime
     Runtime --> Schemas
     Schemas --> AnalysisSvc
@@ -192,7 +193,9 @@ sequenceDiagram
     A->>A: validate and select approved findings
     alt valid full or partial selection
         A-->>F: approved_findings + termination reason
-    else no valid approved finding
+    else valid explicit zero selection
+        A-->>F: empty approved_findings + patch skip reason
+    else malformed or untraceable review
         A-->>B: explicit analysis failure
     end
     F-->>B: FailureAnalysisOutput + perspectives + reviewNotes
@@ -243,7 +246,7 @@ graph LR
 - `review_gate` は保存済み `EvidenceReviewOutput` と `CriticReviewOutput` を決定論的に検証し、有効な承認だけで `EventActions(escalate=True)` を返す
 - `approved_findings_gate` は loop 終了後に最新 state を再検証し、finalizer が参照できる承認済み finding だけを `approved_findings` に保存する
 - `finalizer` は `approved_findings` を Failure Signal の唯一の finding source として最終 JSON を一度だけ返す
-- review loop が max iteration に到達して `verdict=needs_revision` のままでも、`approvedFindingIds` が非空ならその finding だけを partial 採用する。`approvedFindingIds` が空なら未承認 finding を採用せず、有効な `FailureAnalysisOutput` を作らない
+- review loop が max iteration に到達して `verdict=needs_revision` のままでも、`approvedFindingIds` が非空ならその finding だけを partial 採用する。構造的に有効なレビューで `approvedFindingIds` が空なら、未承認 finding を採用せず、空の `failureSignals` と見送り理由を返す
 - finalizer 以外の中間出力は backend API contract に直接出さない
 
 **State Keys**
@@ -283,18 +286,20 @@ class CriticReviewOutput(AgentModel):
     verdict: Literal["approved", "needs_revision"]
     issues: list[str] = Field(default_factory=list)
     revision_instructions: list[str] = Field(default_factory=list)
-    approved_finding_ids: list[str] = Field(default_factory=list)
+    approved_finding_ids: list[str]
     risk_notes: list[str] = Field(default_factory=list)
 ```
 
 - `evidence_critic` は前回の `critic_review.revisionInstructions` と `issues` を読み、`revision_notes` に何を修正したかを残す
 - `critic_reviewer` は review を state に保存するだけで、終了判定を prompt や tool call に委ねない
-- `review_gate` は accepted / rejected の ID がそれぞれ一意かつ相互排他で、accepted finding の ID・source・evidence が非空であり、`verdict=approved`、`approved_finding_ids` が一意かつ非空、採用候補の ID に包含される場合にだけ loop を終了する
-- `verdict=needs_revision`、重複 ID、不明 ID、採用・棄却間の矛盾、accepted finding の追跡情報不足は承認として扱わず、反復上限までは次 cycle を実行する
+- `review_gate` は accepted / rejected の ID がそれぞれ一意かつ相互排他で、全 finding の ID・source・evidence が非空であり、`verdict=approved`、`approved_finding_ids` が一意かつ採用候補の ID に包含される場合に loop を終了する。空の `approved_finding_ids` は field が明示されている場合に限り、見送り判断として許可する
+- `approved_finding_ids` field 自体は必須とし、省略された review を暗黙の空選択に補完しない
+- `verdict=needs_revision`、重複 ID、不明 ID、採用・棄却間の矛盾、accepted / rejected finding の追跡情報不足は承認として扱わず、反復上限までは次 cycle を実行する
 - `approved_finding_ids` は finalizer が採用してよい finding の allowlist であり、`verdict` の自由文や `summary` から推測してはならない
 - `approved_findings_gate` は max iteration 到達時に `verdict=needs_revision` でも、cycle 全体に重複・不明参照・矛盾・追跡情報不足がなく、有効な `approved_finding_ids` が非空で、かつ `issues`、`revision_instructions`、`risk_notes` がそれぞれ非空・非空白なら、その ID だけを部分採用し、`review_termination_reason=max_iterations_partial` を保存する
 - `approved_finding_ids` に有効 ID と不明・重複・矛盾 ID が混在する場合は valid ID だけを救済せず、選択全体を無効として fail closed にする
-- 有効な承認対象がない場合、`approved_findings_gate` は `FailureAnalysisApprovalError` を送出し、finalizer を実行しない
+- 構造的に有効だが承認対象がない場合、`approved_findings_gate` は空の `approved_findings` と `approved_no_findings` または `max_iterations_no_findings` を保存し、finalizer の callback が `failureSignals=[]` と見送り `reviewNote` を保証する
+- 重複、不明参照、採用・棄却間の矛盾、追跡情報不足などレビュー構造が不正な場合だけ、`FailureAnalysisApprovalError` を送出して finalizer を実行しない
 - 部分採用時は finalizer の `after_model_callback` がモデル出力を schema 検証したうえで、最新 `issues`、`revision_instructions`、`risk_notes` を evidence に持つ固定 ID の監査 `reviewNote` を決定論的に追加する。モデルが `reviewNotes=[]` を返してもこの note は必ず最終 JSON に含まれる
 - finalizer は raw analyst state を `perspectives` と表示用 `reviewNotes` の要約にだけ使用でき、Failure Signal の finding source には `approved_findings` だけを使用する
 
@@ -322,7 +327,7 @@ def ensure_partial_review_note(
 - state 値は Pydantic model、dict、JSON string のいずれでも同じ schema へ正規化する
 - `ReviewLoopGate` は state を変更せず、valid approval のときだけ `EventActions(escalate=True)` を持つ event を返す
 - `ApprovedFindingsGate` は validation 済み finding と終了理由を `EventActions.state_delta` で保存する
-- `ensure_partial_review_note` は `review_termination_reason=max_iterations_partial` の最終応答だけを対象に、`FailureAnalysisOutput` の camelCase JSON 契約を維持したまま監査 note を置換または追加する
+- `ensure_partial_review_note` は `review_termination_reason=max_iterations_partial` の監査 note と、承認対象ゼロ時の `failureSignals=[]` / 見送り note を、`FailureAnalysisOutput` の camelCase JSON 契約を維持したまま決定論的に保証する
 - control agent は LLM を呼ばず、レビュー自由文から承認状態や ID を推測しない
 
 ### Backend
@@ -398,6 +403,6 @@ Backend は各 step の evidence を次の順で作る。
 | review loop が出力を不安定にする | patch 生成失敗 | finalizer のみ `output_schema`、中間は state に閉じる |
 | UI に情報を出しすぎる | demo で読みにくい | 既存 timeline に要約と最大 3 evidence で表示 |
 | ADK loop が長くなる | latency 増加・timeout | `max_iterations=3`、timeout smoke、single mode fallback |
-| reviewer が approve しない | final output が止まる | `approvedFindingIds` と未解決事項・修正指示・残存リスクがすべて非空ならその ID だけ partial 採用し、callback で監査 note を保証する。不足時は分析失敗とし、未承認 finding は採用しない |
+| reviewer が approve しない | 不要な patch または final output 停止 | `approvedFindingIds` と監査情報が有効なら部分採用し、承認対象ゼロなら空の Failure Signal と見送り note を返す。構造不正時だけ分析失敗とする |
 | reviewer の structured output と loop 終了 tool が競合する | review state が欠落し、誤った分岐になる | reviewer は state 保存に限定し、後続の deterministic `ReviewLoopGate` が終了判定する |
 | 不明・重複 finding ID が承認される | 未検証 finding が Failure Signal に混入する | loop 内と finalizer 前の二段階で ID 集合を検証し、fail closed にする |

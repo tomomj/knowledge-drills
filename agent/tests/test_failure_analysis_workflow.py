@@ -277,6 +277,21 @@ def test_first_valid_approval_exits_loop_and_runs_finalizer_once(encoding: str) 
     assert state["finalizer_approved_findings"] == state["approved_findings"]
 
 
+def test_approved_no_findings_exits_loop_and_runs_finalizer_once() -> None:
+    workflow, evidence_agent, reviewer_agent, finalizer = _build_workflow(
+        [_evidence_review(accepted=[], rejected=[_finding("rejected-1")])],
+        [_critic_review("approved", [])],
+    )
+
+    state = asyncio.run(_execute_workflow(workflow))
+
+    assert evidence_agent.calls == 1
+    assert reviewer_agent.calls == 1
+    assert finalizer.calls == 1
+    assert state["approved_findings"] == []
+    assert state["review_termination_reason"] == "approved_no_findings"
+
+
 def test_revision_cycle_reads_prior_review_and_records_revision_notes() -> None:
     first_review = _critic_review(
         "needs_revision",
@@ -403,6 +418,76 @@ def test_partial_finalizer_injects_complete_audit_note_once() -> None:
 
 
 @pytest.mark.parametrize(
+    ("critic_review", "expected_reason"),
+    [
+        (_critic_review("approved", []), "approved_no_findings"),
+        (
+            _critic_review("needs_revision", [], issues=["承認可能な所見がない"]),
+            "max_iterations_no_findings",
+        ),
+    ],
+    ids=["approved", "max-iterations"],
+)
+def test_no_approved_findings_forces_skip_output_and_review_note(
+    critic_review: dict[str, object],
+    expected_reason: str,
+) -> None:
+    model_output = build_sample_failure_analysis_output().model_copy(
+        update={"review_notes": []}
+    )
+    fake_model = _FakeFinalizerLlm(
+        model="fake-finalizer",
+        response_json=model_output.model_dump_json(by_alias=True),
+    )
+    finalizer = Agent(
+        name="failure_analysis_finalizer",
+        model=fake_model,
+        instruction="Return the final failure analysis JSON.",
+        output_schema=FailureAnalysisOutput,
+        after_model_callback=ensure_partial_review_note,
+    )
+    workflow = SequentialAgent(
+        name="no_findings_finalizer_workflow",
+        sub_agents=[ApprovedFindingsGate(), finalizer],
+    )
+
+    state, events = asyncio.run(
+        _execute_with_initial_state(
+            workflow,
+            {
+                "evidence_review": _evidence_review(
+                    accepted=[], rejected=[_finding("rejected-1")]
+                ),
+                "critic_review": critic_review,
+            },
+        )
+    )
+
+    finalizer_events = [
+        event
+        for event in events
+        if event.author == "failure_analysis_finalizer" and event.is_final_response()
+    ]
+    assert fake_model.calls == 1
+    assert len(finalizer_events) == 1
+    final_content = finalizer_events[0].content
+    assert final_content is not None
+    final_json = "".join(
+        part.text or "" for part in (final_content.parts or []) if not part.thought
+    )
+    output = FailureAnalysisOutput.model_validate_json(final_json)
+    assert output.failure_signals == []
+    skip_notes = [
+        note for note in output.review_notes if note.id == "no-approved-findings"
+    ]
+    assert len(skip_notes) == 1
+    assert skip_notes[0].source == "finalizer"
+    assert skip_notes[0].timeline_step == "decide_patch_strategy"
+    assert "見送り" in skip_notes[0].summary
+    assert state["review_termination_reason"] == expected_reason
+
+
+@pytest.mark.parametrize(
     "audit_override",
     [
         {"issues": []},
@@ -479,21 +564,31 @@ def test_partial_adoption_requires_complete_nonblank_audit_context(
             _critic_review("approved", ["finding-1"]),
         ),
         (
+            _evidence_review(
+                accepted=[],
+                rejected=[_finding("rejected-1", evidence=[])],
+            ),
+            _critic_review("approved", []),
+        ),
+        (
             _evidence_review(),
             {
-                **_critic_review("needs_revision", []),
-                "issues": ["summary says finding-1 can be approved"],
+                "verdict": "approved",
+                "issues": [],
+                "revisionInstructions": [],
+                "riskNotes": [],
             },
         ),
     ],
     ids=[
-        "empty-selection",
+        "empty-selection-without-audit",
         "mixed-valid-and-unknown-selection",
         "duplicate-approved-id",
         "accepted-rejected-conflict",
         "duplicate-accepted-id",
         "missing-accepted-evidence",
-        "free-text-is-not-an-approval",
+        "missing-rejected-evidence",
+        "missing-explicit-approved-finding-ids",
     ],
 )
 def test_invalid_or_unapproved_selection_fails_closed_before_finalizer(
@@ -532,17 +627,24 @@ def test_json_payload_with_unapproved_free_text_is_not_inferred() -> None:
     evidence_json = json.dumps(_evidence_review(), ensure_ascii=False)
     critic_json = json.dumps(
         {
-            **_critic_review("needs_revision", []),
+            **_critic_review(
+                "needs_revision",
+                [],
+                issues=["finding-1 は承認可能"],
+            ),
             "issues": ["finding-1 は承認可能"],
         },
         ensure_ascii=False,
     )
-    workflow, _, _, finalizer = _build_workflow(
+    workflow, evidence_agent, reviewer_agent, finalizer = _build_workflow(
         [evidence_json],
         [critic_json],
     )
 
-    with pytest.raises(FailureAnalysisApprovalError):
-        asyncio.run(_execute_workflow(workflow))
+    state = asyncio.run(_execute_workflow(workflow))
 
-    assert finalizer.calls == 0
+    assert evidence_agent.calls == 3
+    assert reviewer_agent.calls == 3
+    assert finalizer.calls == 1
+    assert state["approved_findings"] == []
+    assert state["review_termination_reason"] == "max_iterations_no_findings"

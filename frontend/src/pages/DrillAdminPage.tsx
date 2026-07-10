@@ -20,6 +20,7 @@ type AnswersState =
 
 type AnalysisState =
   | { status: 'loading' }
+  | { status: 'skipped' }
   | { status: 'failed'; message: string }
 
 const ANSWER_STATUS_CHIPS: Record<DrillAnswer['status'], { label: string; tone: string }> = {
@@ -137,6 +138,19 @@ export function DrillAdminPage() {
     setAnswersOpen(false)
     try {
       const result = await api.analyzeDrill(drill.courseId, drill.id)
+      if (result.patchId === null) {
+        // 承認された所見がなくパッチ提案が見送られた場合は、このページで結果を表示する
+        setQuestionsOpen(true)
+        setAnswersOpen(true)
+        setAnalysisState({ status: 'skipped' })
+        try {
+          const refreshed = await api.getDrill(drill.courseId, drill.id)
+          setState({ status: 'ready', drill: refreshed })
+        } catch {
+          // 再取得に失敗しても見送り結果の表示は維持する
+        }
+        return
+      }
       navigate(
         `/courses/${drill.courseId}/drill-runs/${drill.id}/analysis?patchId=${result.patchId}`,
       )
@@ -197,6 +211,11 @@ export function DrillAdminPage() {
         ) : null}
         {analysisState?.status === 'loading' ? (
           <StatusBanner tone="info">回答を分析中です。</StatusBanner>
+        ) : null}
+        {analysisState?.status === 'skipped' ? (
+          <StatusBanner tone="info">
+            分析は完了しました。承認された所見がなかったため、パッチ提案は見送られました。
+          </StatusBanner>
         ) : null}
         {analysisState?.status === 'failed' && analysisState.message ? (
           <StatusBanner tone="error">{analysisState.message}</StatusBanner>

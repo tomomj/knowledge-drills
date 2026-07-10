@@ -24,7 +24,7 @@ _ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
 class FailureAnalysisApprovalError(RuntimeError):
-    """Raised when the review loop has no structurally valid approved findings."""
+    """Raised when the review loop state is structurally invalid."""
 
 
 @dataclass(frozen=True)
@@ -106,20 +106,22 @@ def _validate_review_selection(
             "accepted and rejected finding IDs must be disjoint"
         )
 
-    for finding in evidence_review.accepted_findings:
+    reviewed_findings = [
+        *evidence_review.accepted_findings,
+        *evidence_review.rejected_findings,
+    ]
+    for finding in reviewed_findings:
         if not finding.source or not finding.evidence:
             raise FailureAnalysisApprovalError(
-                "accepted findings require source and evidence"
+                "reviewed findings require source and evidence"
             )
         if any(not item.strip() for item in finding.evidence):
             raise FailureAnalysisApprovalError(
-                "accepted finding evidence must be non-empty"
+                "reviewed finding evidence must be non-empty"
             )
 
-    if not approved_ids or any(not finding_id.strip() for finding_id in approved_ids):
-        raise FailureAnalysisApprovalError(
-            "approved finding IDs must be non-empty"
-        )
+    if any(not finding_id.strip() for finding_id in approved_ids):
+        raise FailureAnalysisApprovalError("approved finding IDs must be non-empty")
     if _has_duplicate(approved_ids):
         raise FailureAnalysisApprovalError("approved finding IDs must be unique")
 
@@ -186,11 +188,17 @@ class ApprovedFindingsGate(BaseAgent):
         selection = _validate_review_selection(ctx.session.state)
         if selection.critic_review.verdict == "needs_revision":
             _validate_partial_audit_context(selection.critic_review)
-        termination_reason = (
-            "approved"
-            if selection.critic_review.verdict == "approved"
-            else "max_iterations_partial"
-        )
+        has_approved_findings = bool(selection.approved_findings)
+        if selection.critic_review.verdict == "approved":
+            termination_reason = (
+                "approved" if has_approved_findings else "approved_no_findings"
+            )
+        else:
+            termination_reason = (
+                "max_iterations_partial"
+                if has_approved_findings
+                else "max_iterations_no_findings"
+            )
         approved_findings = [
             finding.model_dump(by_alias=True)
             for finding in selection.approved_findings
@@ -211,19 +219,16 @@ def ensure_partial_review_note(
     callback_context: CallbackContext,
     llm_response: LlmResponse,
 ) -> LlmResponse | None:
-    """Inject a deterministic audit note into partial-adoption final output."""
-    if callback_context.state.get("review_termination_reason") != (
-        "max_iterations_partial"
-    ):
+    """Guarantee audit notes for partial adoption and no-finding outcomes."""
+    termination_reason = callback_context.state.get("review_termination_reason")
+    if termination_reason not in {
+        "max_iterations_partial",
+        "approved_no_findings",
+        "max_iterations_no_findings",
+    }:
         return None
     if llm_response.partial or not llm_response.content or not llm_response.content.parts:
         return None
-
-    critic_review = _normalize_state_model(
-        CriticReviewOutput,
-        callback_context.state.get("critic_review"),
-    )
-    _validate_partial_audit_context(critic_review)
 
     response_text = "".join(
         part.text
@@ -231,29 +236,47 @@ def ensure_partial_review_note(
         if part.text and not part.thought
     )
     output = FailureAnalysisOutput.model_validate_json(response_text)
-    audit_note_id = "partial-adoption-audit"
-    audit_note = AnalysisReviewNote(
-        id=audit_note_id,
-        source="critic_reviewer",
-        timeline_step="decide_patch_strategy",
-        title="反復上限での部分採用",
-        summary=(
-            "反復上限に達したため、明示的に承認された所見だけを部分採用しました。"
-        ),
-        evidence=[
-            *(f"未解決事項: {issue}" for issue in critic_review.issues),
-            *(
-                f"修正指示: {instruction}"
-                for instruction in critic_review.revision_instructions
+    if termination_reason == "max_iterations_partial":
+        critic_review = _normalize_state_model(
+            CriticReviewOutput,
+            callback_context.state.get("critic_review"),
+        )
+        _validate_partial_audit_context(critic_review)
+        audit_note_id = "partial-adoption-audit"
+        audit_note = AnalysisReviewNote(
+            id=audit_note_id,
+            source="critic_reviewer",
+            timeline_step="decide_patch_strategy",
+            title="反復上限での部分採用",
+            summary=(
+                "反復上限に達したため、明示的に承認された所見だけを部分採用しました。"
             ),
-            *(f"残存リスク: {risk}" for risk in critic_review.risk_notes),
-        ],
-    )
+            evidence=[
+                *(f"未解決事項: {issue}" for issue in critic_review.issues),
+                *(
+                    f"修正指示: {instruction}"
+                    for instruction in critic_review.revision_instructions
+                ),
+                *(f"残存リスク: {risk}" for risk in critic_review.risk_notes),
+            ],
+        )
+        updated_output = output
+    else:
+        audit_note_id = "no-approved-findings"
+        audit_note = AnalysisReviewNote(
+            id=audit_note_id,
+            source="finalizer",
+            timeline_step="decide_patch_strategy",
+            title="patch 提案の見送り",
+            summary="承認された所見がないため patch 提案を見送ります。",
+            evidence=["approvedFindingIds: (なし)"],
+        )
+        updated_output = output.model_copy(update={"failure_signals": []})
     review_notes = [
         note for note in output.review_notes if note.id != audit_note_id
     ]
     review_notes.append(audit_note)
-    updated_output = output.model_copy(update={"review_notes": review_notes})
+    updated_output = updated_output.model_copy(update={"review_notes": review_notes})
     updated_content = types.Content(
         role=llm_response.content.role,
         parts=[types.Part(text=updated_output.model_dump_json(by_alias=True))],

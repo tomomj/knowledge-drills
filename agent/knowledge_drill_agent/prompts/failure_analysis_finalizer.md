@@ -45,7 +45,9 @@ reviewNotes は critic / reviewer / finalizer の表示用要約です。各要�
 - misconception_findings / doc_gap_findings / question_quality_findings の raw analyst state は perspectives と表示用 reviewNotes の要約にだけ使用し、Failure Signal の finding source には使用しないでください。
 - evidenceReview の rejectedFindings、criticReview の自由文、summary、rationale から「承認済み」と推測してはいけません。
 - review_termination_reason が max_iterations_partial の場合は、criticReview の最新 issues、revisionInstructions、riskNotes を critic_reviewer または finalizer の reviewNotes に明示してください。
-- approved_findings は deterministic gate で非空かつ検証済みです。そこにない finding から埋め合わせを作らないでください。
+- approved_findings は deterministic gate で検証済みです。そこにない finding から埋め合わせを作らないでください。
+- approved_findings が空の場合、failureSignals は空配列で返してください。これは「patch を提案しない」という正当な見送り判断です。
+- failureSignals を空で返す場合は、source=finalizer / timelineStep=decide_patch_strategy の reviewNote に、所見が承認されなかったため patch 提案を見送る判断であることを記録してください。
 
 reviewNotes の割り当て:
 - evidence_critic の採用・棄却・リスク要約は timelineStep=match_course_evidence に置いてください。
