@@ -191,7 +191,7 @@ async def _execute_workflow(workflow: SequentialAgent) -> dict[str, Any]:
 
 
 async def _execute_with_initial_state(
-    workflow: SequentialAgent,
+    workflow: BaseAgent,
     initial_state: dict[str, object],
 ) -> tuple[dict[str, Any], list[Event]]:
     app_name = "failure_analysis_finalizer_test"
@@ -220,6 +220,28 @@ async def _execute_with_initial_state(
     )
     assert session is not None
     return dict(session.state), events
+
+
+@pytest.mark.parametrize(
+    "gate",
+    [ReviewLoopGate(), ApprovedFindingsGate()],
+    ids=["review-loop-gate", "approved-findings-gate"],
+)
+def test_control_gate_events_keep_current_invocation_id(gate: BaseAgent) -> None:
+    _, events = asyncio.run(
+        _execute_with_initial_state(
+            gate,
+            {
+                "evidence_review": _evidence_review(),
+                "critic_review": _critic_review("approved", ["finding-1"]),
+            },
+        )
+    )
+
+    assert events
+    invocation_ids = {event.invocation_id for event in events}
+    assert "" not in invocation_ids
+    assert len(invocation_ids) == 1
 
 
 @pytest.mark.parametrize("encoding", ["model", "dict", "json"])

@@ -46,6 +46,20 @@ def _has_duplicate(values: list[str]) -> bool:
     return len(values) != len(set(values))
 
 
+def _control_event(
+    ctx: InvocationContext,
+    *,
+    author: str,
+    actions: EventActions | None = None,
+) -> Event:
+    return Event(
+        invocation_id=ctx.invocation_id,
+        author=author,
+        branch=ctx.branch,
+        actions=actions or EventActions(),
+    )
+
+
 def _validate_partial_audit_context(critic_review: CriticReviewOutput) -> None:
     required_audit_fields = {
         "issues": critic_review.issues,
@@ -142,14 +156,18 @@ class ReviewLoopGate(BaseAgent):
         try:
             selection = _validate_review_selection(ctx.session.state)
         except FailureAnalysisApprovalError:
-            yield Event(author=self.name)
+            yield _control_event(ctx, author=self.name)
             return
 
         if selection.critic_review.verdict == "approved":
-            yield Event(author=self.name, actions=EventActions(escalate=True))
+            yield _control_event(
+                ctx,
+                author=self.name,
+                actions=EventActions(escalate=True),
+            )
             return
 
-        yield Event(author=self.name)
+        yield _control_event(ctx, author=self.name)
 
 
 class ApprovedFindingsGate(BaseAgent):
@@ -177,7 +195,8 @@ class ApprovedFindingsGate(BaseAgent):
             finding.model_dump(by_alias=True)
             for finding in selection.approved_findings
         ]
-        yield Event(
+        yield _control_event(
+            ctx,
             author=self.name,
             actions=EventActions(
                 state_delta={
