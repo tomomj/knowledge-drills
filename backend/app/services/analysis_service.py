@@ -29,6 +29,7 @@ from app.utils.diff import build_unified_diff
 logger = logging.getLogger("app.analysis")
 
 ANALYSIS_FAILED_MESSAGE = "analysis failed"
+PATCH_SKIPPED_MESSAGE = "承認された Failure Signal がないため patch 提案を見送りました"
 ANALYSIS_STEPS: tuple[tuple[str, str], ...] = (
     ("collect_answers", "回答データを収集"),
     ("detect_failure_patterns", "つまずき箇所を特定"),
@@ -98,7 +99,7 @@ class AnalysisService:
         self,
         drill_run_id: str,
         owner_user_id: str | None = None,
-    ) -> DocumentPatch:
+    ) -> DocumentPatch | None:
         if self._course_repository is None or self._agent_client is None:
             raise RuntimeError("AnalysisService dependencies are not configured")
 
@@ -131,6 +132,14 @@ class AnalysisService:
                 ],
             )
         )
+        if not failure_analysis.failure_signals:
+            logger.info(
+                "patch proposal skipped course_id=%s drill_run_id=%s "
+                "reason=no_approved_failure_signals",
+                course.id,
+                drill_run.id,
+            )
+            return None
         patch_response = self._agent_client.propose_document_patch(
             DocumentPatchRequest(
                 course_markdown=course.markdown,
@@ -150,7 +159,7 @@ class AnalysisService:
             failure_signals=failure_analysis.failure_signals,
         )
 
-    def run_analysis(self, drill_run_id: str, owner_user_id: str) -> DocumentPatch:
+    def run_analysis(self, drill_run_id: str, owner_user_id: str) -> DocumentPatch | None:
         if self._course_repository is None or self._patch_repository is None:
             raise RuntimeError("AnalysisService dependencies are not configured")
 
@@ -186,7 +195,8 @@ class AnalysisService:
             )
             raise
 
-        self._patch_repository.create(patch)
+        if patch is not None:
+            self._patch_repository.create(patch)
         analyzed = drill_run.model_copy(update={"status": DrillRunStatus.ANALYZED})
         self._drill_repository.update(analyzed)
         course = self._course_repository.get(drill_run.course_id)
@@ -196,8 +206,8 @@ class AnalysisService:
             course.id,
             latest_drill_run_id=drill_run.id,
             latest_drill_status=analyzed.status,
-            latest_patch_id=patch.id,
-            latest_patch_status=patch.status,
+            latest_patch_id=patch.id if patch is not None else None,
+            latest_patch_status=patch.status if patch is not None else None,
         )
         return patch
 
@@ -205,7 +215,7 @@ class AnalysisService:
         self,
         drill_run: DrillRun,
         owner_user_id: str,
-    ) -> tuple[DocumentPatch, DrillRun]:
+    ) -> tuple[DocumentPatch | None, DrillRun]:
         if self._course_repository is None or self._agent_client is None:
             raise RuntimeError("AnalysisService dependencies are not configured")
 
@@ -274,11 +284,16 @@ class AnalysisService:
         recommended_changes = _unique_strings(
             signal.recommended_change for signal in failure_analysis.failure_signals
         )
+        patch_skipped = not failure_analysis.failure_signals
         drill_run = self._update_timeline(
             drill_run,
             "decide_patch_strategy",
             AnalysisStepStatus.COMPLETED,
-            summary="教材修正方針を選定しました",
+            summary=(
+                "承認された所見がないため patch 見送りを判断しました"
+                if patch_skipped
+                else "教材修正方針を選定しました"
+            ),
             evidence=_merge_timeline_evidence(
                 _review_note_evidence(
                     failure_analysis,
@@ -287,6 +302,21 @@ class AnalysisService:
                 recommended_changes,
             ),
         )
+
+        if patch_skipped:
+            drill_run = self._update_timeline(
+                drill_run,
+                "create_patch",
+                AnalysisStepStatus.SKIPPED,
+                summary=PATCH_SKIPPED_MESSAGE,
+            )
+            logger.info(
+                "patch proposal skipped course_id=%s drill_run_id=%s "
+                "reason=no_approved_failure_signals",
+                course.id,
+                drill_run.id,
+            )
+            return None, drill_run
 
         drill_run = self._update_timeline(
             drill_run,

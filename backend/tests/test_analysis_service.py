@@ -229,6 +229,7 @@ def test_generate_patch_proposal_uses_only_graded_answers_and_builds_diff() -> N
 
     patch = service.generate_patch_proposal("drill-1")
 
+    assert patch is not None
     analysis_payload = invocations[0][1]
     answers = cast(list[object], analysis_payload["answers"])
     grading_results = cast(list[object], analysis_payload["gradingResults"])
@@ -262,6 +263,7 @@ def test_run_analysis_persists_patch_and_latest_state() -> None:
 
     patch = service.run_analysis("drill-1", "owner-1")
 
+    assert patch is not None
     saved_patch = patch_repository.get(patch.id)
     saved_drill = drill_repository.get("drill-1")
     saved_course = course_repository.get("course-1")
@@ -304,6 +306,115 @@ def test_run_analysis_persists_patch_and_latest_state() -> None:
         "例を追記",
     ]
     assert saved_patch.analysis_timeline == saved_drill.analysis_timeline
+
+
+def test_run_analysis_skips_patch_proposal_when_no_failure_signal_is_approved() -> None:
+    invocations: list[tuple[str, dict[str, object]]] = []
+    client = InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    patch_repository = PatchRepository(client)
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
+    )
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    answer_repository.create(
+        id="graded-answer",
+        drill_run_id="drill-1",
+        learner_name="受講者1",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+
+    def invoke(task_name: str, payload: dict[str, object]) -> dict[str, object]:
+        invocations.append((task_name, payload))
+        return {
+            "failureSignals": [],
+            "reviewNotes": [
+                {
+                    "id": "finalizer-skip",
+                    "source": "finalizer",
+                    "timelineStep": "decide_patch_strategy",
+                    "title": "見送り判断",
+                    "summary": "承認された所見がないため patch 提案を見送ります",
+                    "evidence": ["approvedFindingIds: (なし)"],
+                }
+            ],
+        }
+
+    service = AnalysisService(
+        drill_repository,
+        answer_repository,
+        course_repository=course_repository,
+        patch_repository=patch_repository,
+        agent_client=AgentRuntimeClient(invoker=invoke),
+    )
+
+    patch = service.run_analysis("drill-1", "owner-1")
+
+    saved_drill = drill_repository.get("drill-1")
+    saved_course = course_repository.get("course-1")
+    assert patch is None
+    assert [task_name for task_name, _payload in invocations] == ["analyze_failures"]
+    assert saved_drill is not None
+    assert saved_course is not None
+    assert saved_drill.status == "analyzed"
+    assert saved_drill.error_message is None
+    assert saved_course.latest_drill_status == "analyzed"
+    assert saved_course.latest_patch_id is None
+    assert saved_course.latest_patch_status is None
+    timeline = {item.id: item for item in saved_drill.analysis_timeline}
+    assert timeline["decide_patch_strategy"].status == AnalysisStepStatus.COMPLETED
+    assert timeline["decide_patch_strategy"].summary == (
+        "承認された所見がないため patch 見送りを判断しました"
+    )
+    assert timeline["decide_patch_strategy"].evidence == [
+        "見送り判断: 承認された所見がないため patch 提案を見送ります (approvedFindingIds: (なし))"
+    ]
+    assert timeline["create_patch"].status == AnalysisStepStatus.SKIPPED
+    assert timeline["create_patch"].summary == (
+        "承認された Failure Signal がないため patch 提案を見送りました"
+    )
+
+
+def test_generate_patch_proposal_returns_none_when_no_failure_signal_is_approved() -> None:
+    invocations: list[tuple[str, dict[str, object]]] = []
+    client = InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
+    )
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.ANALYZING)
+    )
+    answer_repository.create(
+        id="graded-answer",
+        drill_run_id="drill-1",
+        learner_name="受講者1",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+
+    def invoke(task_name: str, payload: dict[str, object]) -> dict[str, object]:
+        invocations.append((task_name, payload))
+        return {"failureSignals": []}
+
+    service = AnalysisService(
+        drill_repository,
+        answer_repository,
+        course_repository=course_repository,
+        agent_client=AgentRuntimeClient(invoker=invoke),
+    )
+
+    patch = service.generate_patch_proposal("drill-1")
+
+    assert patch is None
+    assert [task_name for task_name, _payload in invocations] == ["analyze_failures"]
 
 
 def test_run_analysis_saves_intermediate_timeline_before_agent_calls() -> None:
