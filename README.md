@@ -117,6 +117,14 @@ flowchart LR
   LLM-as-a-judge を通過しない限り Cloud Run にデプロイされません。無関係な変更は
   ゲートをバイパスする path ベースの選択的ゲートです
 
+### 証拠リンク
+
+| 主張 | 一次証拠 |
+|---|---|
+| eval が通らないと main にデプロイされない | [main push での Agent Eval 成功 run](https://github.com/tomomj/knowledge-drills/actions/runs/29068390062)、ゲート実装は [`backend-cd.yml`](.github/workflows/backend-cd.yml) の `wait-for-agent-eval` |
+| eval の中身 | [`agent/evals/`](agent/evals/) — grading 4 / drill_generator 3 / failure_analysis 2 / document_patch 2 ケース、judge rubric は各 `test_config.json` |
+| エージェント出力の検証境界 | `backend/app/services/drill_service.py` の出題根拠実在チェック・rubric 合計検証 |
+
 ## 構成
 
 | ディレクトリ | 内容 |
