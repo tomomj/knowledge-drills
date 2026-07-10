@@ -170,19 +170,6 @@ export function LearnerDrillPage() {
 
         {drill && !isReading ? (
           <>
-            {drill.courseMarkdown ? (
-              <details className="card course-material">
-                <summary>教材を確認する</summary>
-                <div className="course-material__body">
-                  <div className="course-material__head">
-                    <h2>{drill.courseTitle}</h2>
-                    <span className="chip chip--muted">教材バージョン v{drill.courseVersion}</span>
-                  </div>
-                  <MarkdownView markdown={drill.courseMarkdown} />
-                </div>
-              </details>
-            ) : null}
-
             <div className="progress-line" aria-label="回答の進捗">
               <div className="progress-track">
                 <div
