@@ -216,7 +216,8 @@ Knowledge Drills も同じで、workflow は固定、判断は入力依存、最
 - E2E テスト（demo loop / knowledge drill）を PR でゲート
 - `adk eval` の evalset + judge rubric で、プロンプト変更によるエージェント出力の品質回帰を検知
 
-プロンプトを直したらエージェントの評価が走り、落ちればデプロイできない。
+プロンプトを直したらエージェントの評価が走り、落ちれば main にマージできない
+（branch protection の required check）。マージされたものだけが Cloud Run へデプロイされる。
 エージェントの振る舞いも、テストで守られたデプロイ可能な成果物として扱っている。
 
 ## 証拠室: この記事の主張を 30 秒で確かめる
@@ -225,8 +226,7 @@ Knowledge Drills も同じで、workflow は固定、判断は入力依存、最
 
 | 主張 | 証拠 |
 |---|---|
-| eval が通らないと main にデプロイされない | main push での Agent Eval 成功 run: [actions/runs/29068390062](https://github.com/tomomj/knowledge-drills/actions/runs/29068390062) / ゲート実装: [`backend-cd.yml` の `wait-for-agent-eval`](https://github.com/tomomj/knowledge-drills/blob/main/.github/workflows/backend-cd.yml) |
-| eval が劣化を実際にブロックする | 採点プロンプトを意図的に劣化させた実演 PR: [#66](https://github.com/tomomj/knowledge-drills/pull/66)（[Agent Eval が fail した run](https://github.com/tomomj/knowledge-drills/actions/runs/29082680790)。マージ不可の状態を展示） |
+| eval が劣化を検出し、通らないと main にマージできない | 採点プロンプトを意図的に劣化させた実演 PR [#66](https://github.com/tomomj/knowledge-drills/pull/66)（[Agent Eval が fail した run](https://github.com/tomomj/knowledge-drills/actions/runs/29082680790)。マージ不可のまま展示中）/ 通常時の [Agent Eval 成功 run](https://github.com/tomomj/knowledge-drills/actions/runs/29068390062) |
 | eval は 4 エージェントを縦断して品質を判定する | 下の evalset 構成表 + [`agent/evals/`](https://github.com/tomomj/knowledge-drills/tree/main/agent/evals) |
 | パッチは判断ログ付きで起案・適用される | デモ講座のパッチレビュー画面（分析タイムライン + diff + 棄却された所見） |
 | 改善はスコアで閉じる | 経費精算講座 v1 1.8 → v3 3.6（シードデータのデモ）+ 参加ガイド講座の実測【提出前に追記】 |
