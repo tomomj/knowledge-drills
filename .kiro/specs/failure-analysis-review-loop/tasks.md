@@ -11,7 +11,7 @@
   - _Boundary: agent schemas_
 - [x] 1.2 (P) critic / reviewer / finalizer prompt を作る
   - `evidence_critic` は analyst outputs を採用・棄却・risk・finalizer guidance に評価する
-  - `critic_reviewer` は evidence review の妥当性だけをレビューし、`verdict=approved` なら `exit_loop` を呼ぶ
+  - `critic_reviewer` は evidence review の妥当性だけをレビューし、structured review を state に保存する
   - `critic_reviewer` は finalizer が採用してよい finding を `approvedFindingIds` に明示する
   - `finalizer` は `approvedFindingIds` に含まれる finding だけを使い、空なら valid な `FailureAnalysisOutput` を作らない
   - max iteration 到達時は `approvedFindingIds` が非空なら partial 採用、空なら分析失敗に倒す方針を prompt に明記する
@@ -20,8 +20,7 @@
   - _Boundary: agent prompts_
 - [x] 1.3 review loop 付き composed agent を実装する
   - `analyst_parallel` の output_key を `misconception_findings` / `doc_gap_findings` / `question_quality_findings` に整理する
-  - `LoopAgent(max_iterations=3)` に `evidence_critic` と `critic_reviewer` を配置する
-  - `critic_reviewer` に `exit_loop` tool を持たせる
+  - `LoopAgent(max_iterations=3)` に `evidence_critic` と `critic_reviewer` を配置し、bounded review loop の baseline を作る
   - `finalizer` のみが `output_schema=FailureAnalysisOutput` を持つことを維持する
   - `KNOWLEDGE_DRILL_AGENT_ANALYSIS_MODE=single` の撤退経路を壊さない
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 5.1_
@@ -34,6 +33,20 @@
   - _Requirements: 1.8, 1.9, 2.4, 5.2, 5.5_
   - _Boundary: agent tests, eval assets_
   - _Depends: 1.3_
+- [x] 1.5 review の保存・終了判定・承認対象確定を分離する
+  - `critic_reviewer` は `CriticReviewOutput` の保存だけを担当し、tool による loop 制御を持たせない
+  - LLM を呼ばない `ReviewLoopGate` が保存済みの review と finding ID 集合を検証し、有効な承認だけで loop を早期終了する
+  - 修正要求または不正な参照では次 cycle を継続し、次の根拠評価が前回の問題点と修正指示を参照できる状態を維持する
+  - accepted / rejected ID の一意性・排他性、accepted finding の source / evidence、approved ID の一意性・包含関係を検証し、構造不正が1件でもあれば cycle 全体を無効にする
+  - loop 後の `ApprovedFindingsGate` が有効な承認対象だけを `approved_findings` に保存し、構造的に有効な needs_revision は部分採用、不正 cycle または承認対象なしは明示的な分析失敗に分岐する
+  - finalizer は raw analyst state を perspectives / reviewNotes の要約だけに使い、`approved_findings` だけを Failure Signal の finding source として使用して一度だけ実行する
+  - 部分採用時は最新の issues / revisionInstructions / riskNotes を最終 reviewNotes に残す
+  - ADK Runner を使い、初回承認、修正後承認、前回指摘と修正指示の参照・revisionNotes への記録、上限時の部分採用と未解決事項の出力、承認対象なしの失敗、不明・重複・矛盾 ID の拒否、自由文では承認を推測しないこと、finalizer の単一実行を検証する
+  - agent の pytest、ruff、mypy を実行し、1.5 反映後の回帰結果を記録する
+  - single mode と既存 response contract を維持する
+  - _Requirements: 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.10, 1.11, 1.12, 1.13, 1.14, 1.15, 5.1, 5.2, 5.5_
+  - _Boundary: agent failure analysis workflow, prompts, agent tests_
+  - _Depends: 1.4_
 
 - [x] 2. Backend 契約と timeline mapping を追加する
 - [x] 2.1 backend schema に optional `reviewNotes` を追加する
@@ -93,10 +106,11 @@
   - Patch Review で同じ timeline が patch に保存されていることを確認する
   - server URL、確認手順、観測結果、分析所要時間、使用した `KNOWLEDGE_DRILLS_AGENT_TIMEOUT_SECONDS` を記録する
   - _Requirements: 4.1, 4.2, 4.5, 5.5, 5.6_
-  - _Depends: 1.4, 2.3, 3.2, 4.1, 4.2_
+  - _Depends: 1.4, 1.5, 2.3, 3.2, 4.1, 4.2_
   - _Blocked: この実行環境では backend / frontend ともに localhost listen が EPERM で拒否されたため、server URL を持つ手動 smoke は未実行。FastAPI TestClient による同一 API flow の代替 smoke は Implementation Notes に記録済み。_
 
 ## Implementation Notes
 
+- 2026-07-10: 公式 Deep Search sample と同型の `structured reviewer -> ReviewLoopGate -> ApprovedFindingsGate -> finalizer` に変更した。有効な承認は初回でも loop を終了し、修正要求または不正参照は最大3回まで継続する。上限時の部分採用は承認 ID と監査情報がすべて有効な場合だけ許可し、それ以外は finalizer 前に fail closed とした。ADK InMemoryRunner と fake finalizer LLM を含む agent 50 tests、ruff、mypy、`git diff --check` が成功し、独立 reviewer が task 1.5 を承認した。
 - 2026-07-08: backend local default は `KNOWLEDGE_DRILLS_AGENT_TIMEOUT_SECONDS=60`、Terraform production は `backend_agent_timeout_seconds = "120"` であることを確認した。local mode TestClient smoke は 0.025 秒で完了した。実 ADK latency は credentials と server listen 制約のため未計測。
 - 2026-07-08: `uvicorn` は `127.0.0.1:8000` / `127.0.0.1:8080`、Vite は `127.0.0.1:5173` の listen が昇格後も EPERM で失敗した。代替として TestClient で講座作成、ドリル生成、回答、分析、patch 取得まで実行し、review evidence が `DrillRun.analysisTimeline` と `DocumentPatch.analysisTimeline` に保存され、受講者向け API には `analysisTimeline` が含まれないことを確認した。

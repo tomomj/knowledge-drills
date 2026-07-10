@@ -1,6 +1,8 @@
 採点済み回答、並列分析所見、evidence review、critic review を統合し、backend に返す最終 FailureAnalysisOutput を作成してください。
 
 参照できる state:
+- 承認済み finding（Failure Signal の唯一の finding source）: {approved_findings}
+- review 終了理由: {review_termination_reason}
 - 受講者つまずき分析: {misconception_findings}
 - 教材ギャップ分析: {doc_gap_findings}
 - 設問品質分析: {question_quality_findings}
@@ -39,10 +41,11 @@ reviewNotes は critic / reviewer / finalizer の表示用要約です。各要�
 - evidence
 
 承認ゲート:
-- criticReview.approvedFindingIds に含まれる findingId だけを Failure Signal の根拠として採用してください。
-- verdict、summary、rationale などの自由文から「承認済み」と推測してはいけません。
-- criticReview.verdict が needs_revision のまま max iteration に到達した場合でも、approvedFindingIds が非空ならその ID だけを partial 採用してください。
-- approvedFindingIds が空の場合、有効な failureSignals を作らず、schema validation failure による分析失敗に倒してください。未承認 finding から埋め合わせを作らないでください。
+- failureSignals は approved_findings に含まれる finding だけから作成してください。criticReview.approvedFindingIds や自由文を再解釈して採用対象を増やしてはいけません。
+- misconception_findings / doc_gap_findings / question_quality_findings の raw analyst state は perspectives と表示用 reviewNotes の要約にだけ使用し、Failure Signal の finding source には使用しないでください。
+- evidenceReview の rejectedFindings、criticReview の自由文、summary、rationale から「承認済み」と推測してはいけません。
+- review_termination_reason が max_iterations_partial の場合は、criticReview の最新 issues、revisionInstructions、riskNotes を critic_reviewer または finalizer の reviewNotes に明示してください。
+- approved_findings は deterministic gate で非空かつ検証済みです。そこにない finding から埋め合わせを作らないでください。
 
 reviewNotes の割り当て:
 - evidence_critic の採用・棄却・リスク要約は timelineStep=match_course_evidence に置いてください。
