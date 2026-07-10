@@ -249,5 +249,6 @@ export type PatchDecisionPayload = {
 }
 
 export type AnalysisStartResponse = {
-  patchId: string
+  // null は承認された所見がなくパッチ提案が見送られたことを表す
+  patchId: string | null
 }
