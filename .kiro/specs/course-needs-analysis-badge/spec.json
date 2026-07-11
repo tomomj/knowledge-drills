@@ -1,0 +1,22 @@
+{
+  "feature_name": "course-needs-analysis-badge",
+  "created_at": "2026-07-10T13:54:11Z",
+  "updated_at": "2026-07-11T01:50:43Z",
+  "language": "ja",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": true
+}
