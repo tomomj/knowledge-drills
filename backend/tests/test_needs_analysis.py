@@ -57,21 +57,21 @@ def _compute(
 
 
 def test_threshold_constants_are_centralized() -> None:
-    assert NEEDS_ANALYSIS_MIN_UNANALYZED == 3
+    assert NEEDS_ANALYSIS_MIN_UNANALYZED == 1
     assert NEEDS_ANALYSIS_SCORE_RATE_THRESHOLD == 0.7
 
 
-def test_unanalyzed_answer_count_boundary_is_three() -> None:
-    two_answers = [_answer("answer-1"), _answer("answer-2")]
-    three_answers = [*two_answers, _answer("answer-3")]
+def test_unanalyzed_answer_count_boundary_is_one() -> None:
+    no_answers: list[AnswerSubmission] = []
+    one_answer = [_answer("answer-1")]
 
-    assert _compute(two_answers) is False
-    assert _compute(three_answers) is True
+    assert _compute(no_answers) is False
+    assert _compute(one_answer) is True
 
 
 def test_average_score_rate_must_be_strictly_below_seventy_percent() -> None:
-    exactly_seventy = [_answer(f"answer-{index}", total_score=70) for index in range(3)]
-    below_seventy = [_answer(f"answer-{index}", total_score=69) for index in range(3)]
+    exactly_seventy = [_answer("answer-1", total_score=70)]
+    below_seventy = [_answer("answer-1", total_score=69)]
 
     assert _compute(exactly_seventy) is False
     assert _compute(below_seventy) is True
@@ -80,8 +80,6 @@ def test_average_score_rate_must_be_strictly_below_seventy_percent() -> None:
 def test_only_graded_answers_with_final_scores_are_included() -> None:
     answers = [
         _answer("graded-1"),
-        _answer("graded-2"),
-        _answer("graded-3"),
         _answer("grading", status=AnswerStatus.GRADING, total_score=100),
         _answer("failed", status=AnswerStatus.FAILED, total_score=100),
         _answer("missing-total", total_score=None),
@@ -94,8 +92,6 @@ def test_only_graded_answers_with_final_scores_are_included() -> None:
 
 def test_non_graded_answers_do_not_count_toward_unanalyzed_threshold() -> None:
     answers = [
-        _answer("graded-1"),
-        _answer("graded-2"),
         _answer("grading-1", status=AnswerStatus.GRADING),
         _answer("grading-2", status=AnswerStatus.GRADING),
         _answer("failed-1", status=AnswerStatus.FAILED),
@@ -107,7 +103,7 @@ def test_non_graded_answers_do_not_count_toward_unanalyzed_threshold() -> None:
 
 def test_non_graded_answers_do_not_affect_average_score_rate() -> None:
     answers = [
-        *[_answer(f"graded-{index}") for index in range(3)],
+        _answer("graded-1"),
         *[
             _answer(f"grading-{index}", status=AnswerStatus.GRADING, total_score=100)
             for index in range(4)
@@ -123,8 +119,6 @@ def test_non_graded_answers_do_not_affect_average_score_rate() -> None:
 
 def test_unscored_graded_answers_do_not_count_toward_threshold() -> None:
     answers = [
-        _answer("graded-1"),
-        _answer("graded-2"),
         _answer("missing-total", total_score=None),
         _answer("missing-max", max_score=None),
         _answer("zero-max", max_score=0),
@@ -141,7 +135,7 @@ def test_average_uses_every_valid_graded_answer_including_analyzed_answers() -> 
         analyzed_answer_count=7,
     )
     answers_by_run = {
-        ready.id: [_answer(f"low-{index}", drill_run_id=ready.id) for index in range(3)],
+        ready.id: [_answer("low-1", drill_run_id=ready.id)],
         analyzed.id: [
             _answer(f"high-{index}", drill_run_id=analyzed.id, total_score=100)
             for index in range(7)
@@ -202,10 +196,7 @@ def test_past_course_versions_do_not_affect_count_or_average() -> None:
     current = _drill_run("current", course_version=2)
     past = _drill_run("past", course_version=1)
     answers_by_run = {
-        current.id: [
-            _answer("current-1", drill_run_id=current.id),
-            _answer("current-2", drill_run_id=current.id),
-        ],
+        current.id: [_answer("current-1", drill_run_id=current.id, total_score=100)],
         past.id: [
             _answer(f"past-{index}", drill_run_id=past.id) for index in range(3)
         ],
@@ -218,9 +209,7 @@ def test_evaluate_reads_only_current_version_answers_and_delegates() -> None:
     course = Course(id="course-1", title="Course", markdown="# Course", version=2)
     current = _drill_run("current", course_version=2)
     past = _drill_run("past", course_version=1)
-    current_answers = [
-        _answer(f"answer-{index}", drill_run_id=current.id) for index in range(3)
-    ]
+    current_answers = [_answer("answer-1", drill_run_id=current.id)]
     drill_repository = create_autospec(DrillRepository, instance=True)
     answer_repository = create_autospec(AnswerRepository, instance=True)
     drill_repository.list_by_course.return_value = [past, current]
