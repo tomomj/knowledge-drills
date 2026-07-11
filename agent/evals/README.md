@@ -113,7 +113,8 @@ Judge rubric:
 
 ## 実行方法
 
-実 Gemini 呼び出し（対象エージェント + LLM judge）が発生するため、認証情報が必要。
+実モデル呼び出し（対象エージェントの Gemini + LLM judge の Gemma 4 MaaS）が発生するため、
+認証情報が必要。
 eval 依存は既定環境に入れていないので `--isolated --group eval` を付ける
 （`--isolated` を省くと .venv に numpy 等が残り、以後の `mypy .` が numpy 型スタブの
 Python 3.12+ 構文で失敗する。残ってしまった場合は `uv sync --frozen` で復旧できる）。
@@ -127,6 +128,8 @@ cp .env.example .env
 # .env の GOOGLE_CLOUD_PROJECT を、Vertex AI で gemini-3.1-flash-lite を
 # global endpoint から実行できるプロジェクトに変更する
 # （代替: AI Studio を使うなら GOOGLE_API_KEY=... でも動く）
+
+# wrapper は Gemma 4 judge 用の短期アクセストークンを ADC から取得する
 
 python scripts/run_adk_evals.py
 # 軽量ゲートだけ確認する場合
@@ -150,6 +153,20 @@ GitHub Actions では Agent ごとの matrix job として実行し、最大4 jo
 document_patch 2）を同一 job 内で直列実行する。
 
 ## 閾値の校正記録
+
+- 2026-07-11 に grading Agent も Gemma 4 へ切り替える比較実験を行った。
+  OpenAI 互換経路では score 自体は満点4 / 部分点2 / rubric外0まで一致したが、満点時の
+  `missingPoints: ["なし"]`、rubric外0点時の空 `missingPoints`、情報セキュリティ部分点時の
+  空 `correctPoints` など、配列内容の契約品質が不安定だった。Gemma 4 self-judge は前半2件合格後、
+  3件目の5 samplesが長時間応答せず中断。Gemini 3.1 Flash-Lite cross-judge は最後の部分点ケースを
+  score 0.0で不合格とした。native Gemma 4 経路では `correctPoints` / `missingPoints` を数値で返す
+  schema違反も確認した。このため Gemma 4 は LLM judge に限定し、受講者回答の採点を含む実処理は
+  `gemini-3.1-flash-lite` を維持する。
+- 2026-07-11 に被評価 Agent を Vertex AI `gemini-2.5-flash-lite`、LLM judge を Vertex AI MaaS
+  `gemma-4-26b-a4b-it-maas` として quick profile 4件を実行。grading / drill_generator /
+  failure_analysis / document_patch はすべて score 1.0 で合格し、429 / `RESOURCE_EXHAUSTED` は
+  発生しなかった。ADK 2.3.0 同梱の LiteLLM では `vertex_ai/google/...-maas` が旧 predict RPC
+  に誤配送されたため、OpenAI 互換 endpoint と `openai/google/...-maas` を使う。
 
 - 2026-07-07 に新ジャンル5ケース（情報セキュリティ4エージェント縦断 + 勤怠 drill 生成）を追加し、
   Vertex AI（gemini-2.5-flash-lite / us-central1）で全11ケースを実行。初回は 9/11 で、
@@ -175,11 +192,15 @@ document_patch 2）を同一 job 内で直列実行する。
 
 ## モデル
 
-コストカットのため、評価対象エージェント（`KNOWLEDGE_DRILL_AGENT_MODEL` のデフォルト）と
-LLM judge（各 test_config.json の `judge_model_options`）は **`gemini-2.5-flash-lite`** に統一
-（2026-07-07 決定。Terraform の Cloud Run 環境変数も同モデルで、本番と一致）。
-judge と被評価者が同一モデルである点は自己肯定バイアスの懸念があるため、
-CI ゲート本格運用時に judge のみ上位モデルへの変更を検討する。
+評価対象エージェントは `KNOWLEDGE_DRILL_AGENT_MODEL` で指定し、現行 CI は
+`gemini-3.1-flash-lite` を使う。LLM judge は各 `test_config.json` で
+**`openai/google/gemma-4-26b-a4b-it-maas`** に統一する。被評価者と judge のモデル系列を分離し、
+自己肯定バイアスを抑える。Gemma 4 MaaS は `global` endpoint の Experimental 提供なので、
+full eval の安定性、レイテンシ、judge sample 数、構造化判定の parse warning を継続監視する。
+Gemma 4 はjudge専用とし、実処理Agentへは採点契約の機械検証を含む再校正が完了するまで使わない。
+grading / drill_generator / document_patch は ADK 2.3.0 の既定値で1ケース5 samples、
+failure_analysis は `num_samples=3` とする。ログ上の複数 completion は失敗再試行ではなく、
+この sampling による。
 
 ## メンテナンス
 
