@@ -8,7 +8,7 @@
   - 完了時に、auto/manualで異なるsnapshot集合を一つの件数へ混在させないデータ契約がテストから確認できる。
   - _Requirements: 1.3, 1.4, 2.2, 2.3, 4.3, 4.4, 5.1, 5.2, 5.4_
 
-- [ ] 1.2 確定スコアpredicateと後方互換watermark resolverを追加する
+- [x] 1.2 確定スコアpredicateと後方互換watermark resolverを追加する
   - 自動分析の対象を採点済みかつ合計・最大スコアが確定し、最大スコアが正である回答に限定する。
   - 専用watermark、legacy watermark、両方未記録を区別し、比較可能な確定スコアbaselineを解決する。
   - 両field未記録ではbaseline不明を表す値を返し、status別の意味づけをこの境界へ持ち込まない。
