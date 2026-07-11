@@ -3,6 +3,8 @@
 > **書いた瞬間から腐っていくドキュメントに、DevOps を。**
 > 受講者のつまずきをテレメトリとして、資料が自分で改善プロポーザルを出す。
 
+![Knowledge Drills — 受講者のつまずきから AI が教材の改善案を自動生成](frontend/public/social/knowledge-drills-thumbnail-final.png)
+
 Markdown 教材から AI が確認ドリルを生成し、受講者の誤答データを分析エージェントが
 自律分析して教材の改善パッチを起案する、ナレッジの CI/CD アプリケーション。
 
