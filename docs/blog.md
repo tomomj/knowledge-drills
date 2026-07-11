@@ -6,8 +6,8 @@ Status: Draft v0.2（2026-07-09）
 用途: ブログ公開 / Proto Pedia 掲載文 / デモ動画（3分）の台本ベース
 提出先: [DevOps × AI Agent Hackathon 2026](https://findy.notion.site/devops-ai-agent-hackathon-2026)
 
-- GitHub: 【リポジトリ URL】
-- デプロイ URL: 【Cloud Run URL】
+- GitHub: https://github.com/tomomj/knowledge-drills
+- デプロイ URL: https://knowledge-drills-prd-frontend-96923902284.asia-northeast1.run.app
 - デモ動画: 【動画 URL】
 - **回答体験（ログイン不要・1分）: 【公開講座の共有 URL】** — あなたの回答がこのプロダクトのテレメトリになります
 
@@ -258,8 +258,8 @@ evalset の構成（LLM-as-a-judge、rubric ベース。経費精算・情シス
 
 コードが手に入れた「つくる、まわす、とどける」のループを、ナレッジにも。
 
-- GitHub: 【リポジトリ URL】
-- デプロイ URL: 【Cloud Run URL】
+- GitHub: https://github.com/tomomj/knowledge-drills
+- デプロイ URL: https://knowledge-drills-prd-frontend-96923902284.asia-northeast1.run.app
 - 回答体験（ログイン不要・1分）: 【公開講座の共有 URL】
 
 ---

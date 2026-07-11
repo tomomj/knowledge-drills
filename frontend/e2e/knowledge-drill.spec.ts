@@ -113,6 +113,7 @@ test.describe('Knowledge Drill E2E', () => {
 
     await page.getByRole('button', { name: '回答に進む' }).click()
 
+    await expect.poll(() => page.evaluate('window.scrollY')).toBe(0)
     await expect(page.getByText('教材を確認する')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '回答に進む' })).toHaveCount(0)
 
