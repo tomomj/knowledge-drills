@@ -52,7 +52,7 @@
   - 故障注入testでpatch・drill・courseの部分commitが残らず、patchあり/なしの永続結果が確認できる。
   - _Requirements: 2.3, 2.4, 2.5, 4.1, 4.2, 5.1, 5.2_
 
-- [ ] 2.4 分析進捗と通常失敗・stale version終端をtransactionalにする
+- [x] 2.4 分析進捗と通常失敗・stale version終端をtransactionalにする
   - 進捗更新ではnested transactionを開始せず、Agent呼出しやUUID生成などの副作用をtransaction外に保つ。
   - 通常例外とversion不一致ではREADY、failed timeline、patch IDなしを保存し、二重watermarkを更新しない。
   - 失敗後はmanual再実行可能な状態を維持し、自動retryを登録しない。
