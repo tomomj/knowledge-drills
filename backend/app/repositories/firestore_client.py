@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from contextvars import ContextVar
 from copy import deepcopy
+from threading import RLock
 from typing import Protocol, TypeVar, cast
 
 from google.api_core import exceptions as google_exceptions
@@ -48,6 +49,7 @@ class FirestoreClient(Protocol):
 class InMemoryFirestoreClient:
     def __init__(self) -> None:
         self._collections: dict[str, dict[str, DocumentData]] = {}
+        self._transaction_lock = RLock()
         self.transaction_count = 0
 
     def create_document(self, collection: str, document_id: str, data: DocumentData) -> None:
@@ -90,8 +92,9 @@ class InMemoryFirestoreClient:
         ]
 
     def run_transaction(self, callback: Callable[[], T]) -> T:
-        self.transaction_count += 1
-        return callback()
+        with self._transaction_lock:
+            self.transaction_count += 1
+            return callback()
 
 
 class GoogleFirestoreClient:

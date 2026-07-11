@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from typing import cast
 
 import pytest
@@ -13,6 +15,7 @@ from app.repositories.firestore_client import (
     DocumentData,
     DocumentNotFound,
     GoogleFirestoreClient,
+    InMemoryFirestoreClient,
 )
 
 
@@ -123,6 +126,52 @@ class FakeFirestoreSdk:
 
 def _client(sdk: FakeFirestoreSdk) -> GoogleFirestoreClient:
     return GoogleFirestoreClient(client=cast(Client, sdk))
+
+
+def test_in_memory_firestore_client_serializes_transaction_callbacks() -> None:
+    client = InMemoryFirestoreClient()
+    first_entered = Event()
+    second_is_calling = Event()
+    second_entered = Event()
+    release_first = Event()
+
+    def first_callback() -> str:
+        first_entered.set()
+        assert second_is_calling.wait(timeout=1)
+        try:
+            assert not second_entered.wait(timeout=0.1)
+        finally:
+            release_first.set()
+        return "first"
+
+    def second_transaction() -> str:
+        second_is_calling.set()
+
+        def callback() -> str:
+            second_entered.set()
+            return "second"
+
+        return client.run_transaction(callback)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(client.run_transaction, first_callback)
+        assert first_entered.wait(timeout=1)
+        second = executor.submit(second_transaction)
+
+        assert first.result(timeout=1) == "first"
+        assert release_first.is_set()
+        assert second.result(timeout=1) == "second"
+
+    assert client.transaction_count == 2
+
+
+def test_in_memory_firestore_client_transactions_are_reentrant() -> None:
+    client = InMemoryFirestoreClient()
+
+    result = client.run_transaction(lambda: client.run_transaction(lambda: "nested"))
+
+    assert result == "nested"
+    assert client.transaction_count == 2
 
 
 def test_google_firestore_client_maps_document_operations() -> None:
