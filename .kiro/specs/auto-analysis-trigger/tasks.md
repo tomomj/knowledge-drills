@@ -142,7 +142,7 @@
   - _Boundary: Analysis concurrency integration_
   - _Depends: 2.2, 2.3, 2.4, 3.1_
 
-- [ ] 6.2 origin別snapshot集合と件数の交差ケースを固定する
+- [x] 6.2 origin別snapshot集合と件数の交差ケースを固定する
   - manualで確定スコア4件とscore欠損1件を分析後、確定スコア5件追加でauto claimが成立することを検証する。
   - auto後のmanualとclaim後の追加回答で、origin固有の回答IDとAgent入力件数が開始時snapshotから変化しないことを検証する。
   - autoの5確定スコア＋1 score欠損とmanualの同一回答集合で、Agent入力件数と確定スコア件数が混用されないことを確認できる。
