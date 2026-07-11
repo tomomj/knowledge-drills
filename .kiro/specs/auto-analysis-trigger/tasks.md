@@ -59,7 +59,7 @@
   - testで通常失敗、version不一致、watermark不変、manual再claim可能が確認できる。
   - _Requirements: 2.4, 2.6, 2.7, 2.8, 4.4, 4.5_
 
-- [ ] 2.5 既存分析workflowをclaim済みsnapshot executorへ移行する
+- [x] 2.5 既存分析workflowをclaim済みsnapshot executorへ移行する
   - Agentにはclaimで固定した回答IDだけを渡し、分析中に追加された回答を今回の集合へ混入させない。
   - manualの同期interface、owner認可、patch optional結果を維持し、auto固有の5件条件でmanual実行を制限しない。
   - autoは確定スコア回答のみ、manualはscore欠損を含む全GRADED回答を処理し、成功・見送り・失敗を共通終端へ渡す。
