@@ -75,7 +75,7 @@
   - _Requirements: 1.1, 1.5, 2.7, 2.8, 3.1, 3.2, 3.3, 3.8, 5.1_
 
 - [ ] 3. Backendのroute・composition・管理APIへ統合する
-- [ ] 3.1 shared execution境界をapplication compositionへ接続する
+- [x] 3.1 shared execution境界をapplication compositionへ接続する
   - shared storageから共通execution境界、manual分析service、自動triggerを構築して同じ状態へ接続する。
   - 既存manual APIのdependency取得と同期結果を維持する。
   - application構築testで全serviceが同じexecution境界を利用し、manual分析回帰が成功することを確認できる。
