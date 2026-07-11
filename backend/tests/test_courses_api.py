@@ -3,9 +3,12 @@ from typing import cast
 import pytest
 from fastapi.testclient import TestClient
 
+from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.repositories.firestore_client import InMemoryFirestoreClient
 from app.repositories.repositories import CourseRepository
 from app.schemas import (
+    AnalysisStepStatus,
+    AnalysisTimelineItem,
     AnswerStatus,
     AnswerSubmission,
     Course,
@@ -18,6 +21,7 @@ from app.schemas import (
     RubricItem,
     SourceEvidence,
 )
+from app.services.answer_service import AnswerService
 from app.services.course_service import CourseService
 
 
@@ -109,6 +113,110 @@ def test_list_courses_recomputes_needs_analysis_without_persisting_it(
     assert "needsAnalysis" not in stored_after_first
     assert stored_after_second is not None
     assert "needsAnalysis" not in stored_after_second
+
+
+def test_legacy_analyzed_drill_becomes_needs_analysis_after_three_public_answers(
+    client: TestClient,
+) -> None:
+    create = client.post("/api/courses", json={"title": "Legacy分析済み", "markdown": "# Body"})
+    course_id = cast(str, create.json()["courseId"])
+    app_state = client.app.state  # type: ignore[attr-defined]
+    questions = [
+        DrillQuestion(
+            id=f"q{index}",
+            question="判断理由を書いてください。",
+            intent="判断を見る",
+            rubric=[RubricItem(criterion="根拠", points=4)],
+            ideal_answer="根拠に基づき判断する。",
+            source_evidence=[SourceEvidence(section_heading="方針", excerpt="# Body")],
+            max_score=4,
+        )
+        for index in range(1, 4)
+    ]
+    timeline = [
+        AnalysisTimelineItem(
+            id="analysis",
+            title="分析",
+            status=AnalysisStepStatus.COMPLETED,
+            completed_at="2026-07-11T00:01:00+00:00",
+        )
+    ]
+    drill_run = DrillRun(
+        id="drill-1",
+        course_id=course_id,
+        course_version=1,
+        status=DrillRunStatus.ANALYZED,
+        questions=questions,
+        analysis_timeline=timeline,
+        share_token="share-token",
+    )
+    app_state.firestore_client.create_document(
+        "drill_runs",
+        drill_run.id,
+        drill_run.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude={"analyzed_answer_count"},
+        ),
+    )
+    raw_legacy = app_state.firestore_client.get_document("drill_runs", drill_run.id)
+    assert raw_legacy is not None
+    assert "analyzedAnswerCount" not in raw_legacy
+    app_state.share_token_repository.reserve("share-token", drill_run_id=drill_run.id)
+
+    def low_score(_task_name: str, payload: dict[str, object]) -> dict[str, object]:
+        question = cast(dict[str, object], payload["question"])
+        return {
+            "questionId": question["id"],
+            "score": 0,
+            "maxScore": 4,
+            "correctPoints": [],
+            "missingPoints": ["根拠が不足"],
+            "feedback": "根拠を確認してください。",
+            "failureTags": ["missing_evidence"],
+        }
+
+    app_state.answer_service = AnswerService(
+        course_repository=app_state.course_repository,
+        drill_repository=app_state.drill_repository,
+        answer_repository=app_state.answer_repository,
+        share_token_repository=app_state.share_token_repository,
+        agent_client=AgentRuntimeClient(invoker=low_score),
+    )
+    payload = {
+        "answers": [
+            {"questionId": question.id, "answerText": "短い回答"} for question in questions
+        ]
+    }
+
+    for index in range(2):
+        response = client.post(
+            "/api/drills/share-token/answers",
+            json={**payload, "learnerName": f"受講者{index}"},
+        )
+        assert response.status_code == 201
+
+    before_threshold = client.get("/api/courses")
+    third = client.post(
+        "/api/drills/share-token/answers",
+        json={**payload, "learnerName": "受講者2"},
+    )
+    after_threshold = client.get("/api/courses")
+
+    saved_drill = app_state.drill_repository.get(drill_run.id)
+    saved_answers = app_state.answer_repository.list_by_drill_run(drill_run.id)
+    assert before_threshold.status_code == 200
+    assert before_threshold.json()["courses"][0]["needsAnalysis"] is False
+    assert third.status_code == 201
+    assert after_threshold.status_code == 200
+    assert after_threshold.json()["courses"][0]["needsAnalysis"] is True
+    assert saved_drill is not None
+    assert saved_drill.analyzed_answer_count == 0
+    assert len(saved_answers) - saved_drill.analyzed_answer_count == 3
+    assert all(answer.status is AnswerStatus.GRADED for answer in saved_answers)
+    assert all(answer.total_score == 0 and answer.max_score == 12 for answer in saved_answers)
+    assert saved_drill.status is DrillRunStatus.ANALYZED
+    assert saved_drill.analysis_timeline == timeline
 
 
 def test_list_courses_returns_summaries_sorted_by_updated_at(client: TestClient) -> None:
