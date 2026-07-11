@@ -35,6 +35,8 @@ Knowledge Drills は、Markdown の教材からドリルを作り、受講者の
 5. 人間がパッチを適用または却下
 6. 次の回答結果から、改善効果を確認
 
+![講座一覧。各講座のスコア推移と、AIによるパッチ提案の状態が一目で分かる](../screenshots/10-course-list-dashboard.png)
+
 RAG が「ドキュメントを使って回答する」仕組みなら、Knowledge Drills は**ドキュメント自体を改善する**仕組みです。
 コードの DevOps と対応させると、次のようになります。
 
@@ -67,18 +69,22 @@ Knowledge Drills では、次の3つを境界にしています。
 受講者の誤答は、教材に説明がなかった「領収書を紛失した場合」に集中しました。
 AI がその欠落を見つけて「例外と期限」への追記パッチを提案し、教材の平均スコアは **1.8 → 2.9 → 3.6（4点満点）** と変化しました。
 
-![教材バージョンごとの平均スコアを再観測し、1.8から3.6への推移を確認](../images/knowledge-drills-score-progression-v2.png)
+![講座管理画面。教材バージョンごとの平均スコアが 1.8 → 2.9 → 3.6 と推移している](../screenshots/13-course-editor-score-progression.png)
 
 ### ハッカソン参加ガイド
 
 「デモ URL に認証が必要な場合」の説明不足を、受講者の誤答から検出します。
 このハッカソンの参加ガイド自体を題材にすることで、運用ドキュメントも同じ改善ループに乗せられることを示します。
 
+![資料修正案のレビュー画面。分析タイムライン、検出されたつまずき、Markdown差分、適用・却下ボタンが並ぶ](../screenshots/12-patch-review-analysis-timeline.png)
+
 ### 公開ドリル
 
 題材は「そのだの取扱説明書 — 緑タイツ忍者が Knowledge Drills を作った話」です。
 回答は実際のテレメトリとして蓄積され、誤答が集まると、AI が自己紹介の分かりにくい箇所を分析します。
 読者の回答が、このプロダクトを説明するドキュメントそのものを育てます。
+
+![受講者の回答画面。共有URLを開くと、ログイン不要で教材を読んでドリルに回答できる](../screenshots/11-learner-drill-share.png)
 
 **[ログイン不要で公開ドリルに回答できます（全3問・約1分）](https://knowledge-drills-prd-frontend-96923902284.asia-northeast1.run.app/drills/fB_WDuwHY9XPctBlt69gftD0EDDR8IGD1b8GNoH3g6c)**
 
