@@ -93,10 +93,10 @@ describe('CourseListPage', () => {
     await waitFor(() => expect(screen.getByText('情報セキュリティ入門')).toBeTruthy())
     expect(screen.getByText('パッチ提案あり')).toBeTruthy()
     expect(screen.getByText('デモ')).toBeTruthy()
-    expect(screen.getByText('分析できます')).toBeTruthy()
+    expect(screen.queryByText('分析できます')).toBeNull()
     expect(screen.getByText('ドリル配布中')).toBeTruthy()
     expect(screen.getByText('ドリル未生成')).toBeTruthy()
-    expect(screen.queryByText('低スコア回答が蓄積 — 分析推奨')).toBeNull()
+    expect(screen.queryByText('低スコア回答を検知 — 分析推奨')).toBeNull()
     expect(screen.getByText(/回答 12 件/)).toBeTruthy()
     expect(screen.getByText('体験用デモ講座を開くと、採点済み回答の分析と改善履歴をすぐ確認できます。')).toBeTruthy()
     expect(screen.getByRole('img', { name: '平均点の推移 1.0 から 0.8' })).toBeTruthy()
@@ -108,14 +108,14 @@ describe('CourseListPage', () => {
     expect(rowLink?.getAttribute('href')).toBe('/courses/course-1')
   })
 
-  it('replaces the analysis chip with a warning while preserving other chips', async () => {
+  it('shows a warning while preserving other status chips', async () => {
     mocks.listCourses.mockResolvedValueOnce({
       courses: [{ ...courses[0], needsAnalysis: true }],
     })
 
     renderList()
 
-    const warning = await screen.findByText('低スコア回答が蓄積 — 分析推奨')
+    const warning = await screen.findByText('低スコア回答を検知 — 分析推奨')
     expect(warning.classList.contains('chip--warning')).toBe(true)
     expect(screen.queryByText('分析できます')).toBeNull()
     expect(screen.getByText('パッチ提案あり')).toBeTruthy()
@@ -162,14 +162,14 @@ describe('CourseListPage', () => {
 
     expect(mocks.listCourses).toHaveBeenCalledTimes(1)
     await flushPromises()
-    expect(screen.queryByText('低スコア回答が蓄積 — 分析推奨')).toBeNull()
+    expect(screen.queryByText('低スコア回答を検知 — 分析推奨')).toBeNull()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(15_000)
     })
 
     expect(mocks.listCourses).toHaveBeenCalledTimes(2)
-    expect(screen.getByText('低スコア回答が蓄積 — 分析推奨')).toBeTruthy()
+    expect(screen.getByText('低スコア回答を検知 — 分析推奨')).toBeTruthy()
     expect(screen.queryByText('分析できます')).toBeNull()
   })
 
@@ -198,7 +198,7 @@ describe('CourseListPage', () => {
     })
 
     expect(mocks.listCourses).toHaveBeenCalledTimes(3)
-    expect(screen.getByText('低スコア回答が蓄積 — 分析推奨')).toBeTruthy()
+    expect(screen.getByText('低スコア回答を検知 — 分析推奨')).toBeTruthy()
   })
 
   it('does not overlap polling requests and resumes after the request settles', async () => {

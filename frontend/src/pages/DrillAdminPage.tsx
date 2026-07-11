@@ -214,9 +214,9 @@ export function DrillAdminPage() {
             </p>
           </div>
           <div className="toolbar">
-            {drill.needsAnalysis ? (
+            {drill.needsAnalysis && drill.canAnalyze ? (
               <StatusBanner tone="warning">
-                低スコア回答が蓄積しています — 分析を推奨
+                低スコア回答を検知しました — 分析を推奨
               </StatusBanner>
             ) : null}
             <button
