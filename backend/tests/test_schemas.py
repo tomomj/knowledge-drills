@@ -3,6 +3,8 @@ from pydantic import ValidationError
 
 from app.schemas import (
     AdminDrillQuestionResponse,
+    AnalysisClaim,
+    AnalysisOrigin,
     AnalysisReviewNote,
     AnalysisReviewSource,
     AnalysisReviewTimelineStep,
@@ -196,6 +198,162 @@ def test_drill_run_analyzed_answer_count_supports_legacy_and_camel_case_data() -
     assert legacy_run.model_dump(by_alias=True)["analyzedAnswerCount"] is None
     assert analyzed_run.analyzed_answer_count == 3
     assert analyzed_run.model_dump(by_alias=True)["analyzedAnswerCount"] == 3
+
+
+def test_auto_analysis_data_contract_defaults_legacy_origin_and_serializes_camel_case() -> None:
+    legacy_run = DrillRun.model_validate(
+        {"id": "drill-legacy", "courseId": "course-1", "status": "analyzed"}
+    )
+    legacy_run_payload = legacy_run.model_dump(by_alias=True)
+    legacy_patch = DocumentPatch.model_validate(
+        {
+            "id": "patch-legacy",
+            "courseId": "course-1",
+            "drillRunId": "drill-legacy",
+            "status": "proposed",
+            "baseMarkdown": "# Before",
+            "patchedMarkdown": "# After",
+            "patchSummary": "説明を追加",
+            "diffText": "--- before",
+        }
+    )
+    legacy_admin = DrillAdminResponse(
+        id="drill-legacy",
+        course_id="course-1",
+        status=DrillRunStatus.ANALYZED,
+        questions=[],
+        rubric_summary=[],
+        share_url=None,
+        share_status=ShareStatus.UNAVAILABLE,
+        answer_count=0,
+        can_analyze=True,
+    )
+
+    assert legacy_run.analysis_origin is AnalysisOrigin.MANUAL
+    assert legacy_run_payload["analysisOrigin"] == "manual"
+    assert DrillRun.model_validate(legacy_run_payload) == legacy_run
+    assert legacy_patch.analysis_origin is AnalysisOrigin.MANUAL
+    assert legacy_patch.model_dump(by_alias=True)["analysisOrigin"] == "manual"
+    assert DocumentPatch.model_validate(legacy_patch.model_dump(by_alias=True)) == legacy_patch
+    legacy_admin_payload = legacy_admin.model_dump(by_alias=True)
+    assert legacy_admin_payload["analysisOrigin"] == "manual"
+    assert DrillAdminResponse.model_validate(legacy_admin_payload) == legacy_admin
+
+
+def test_auto_analysis_data_contract_round_trips_dedicated_watermark_and_patch_id() -> None:
+    current_run = DrillRun.model_validate(
+        {
+            "id": "drill-current",
+            "courseId": "course-1",
+            "status": "analyzed",
+            "analyzedAnswerCount": 6,
+            "autoAnalyzedScoredAnswerCount": 5,
+            "analysisOrigin": "automatic",
+            "latestPatchId": "patch-current",
+        }
+    )
+    current_run_payload = current_run.model_dump(by_alias=True)
+
+    assert current_run.analysis_origin is AnalysisOrigin.AUTOMATIC
+    assert current_run.auto_analyzed_scored_answer_count == 5
+    assert current_run.latest_patch_id == "patch-current"
+    assert current_run_payload["analysisOrigin"] == "automatic"
+    assert current_run_payload["autoAnalyzedScoredAnswerCount"] == 5
+    assert current_run_payload["latestPatchId"] == "patch-current"
+    assert DrillRun.model_validate(current_run_payload) == current_run
+
+
+def test_auto_analysis_data_contract_round_trips_automatic_patch_origin() -> None:
+    automatic_patch = DocumentPatch.model_validate(
+        {
+            "id": "patch-current",
+            "courseId": "course-1",
+            "drillRunId": "drill-current",
+            "status": "proposed",
+            "baseMarkdown": "# Before",
+            "patchedMarkdown": "# After",
+            "patchSummary": "説明を追加",
+            "diffText": "--- before",
+            "analysisOrigin": "automatic",
+        }
+    )
+    automatic_patch_payload = automatic_patch.model_dump(by_alias=True)
+
+    assert automatic_patch.analysis_origin is AnalysisOrigin.AUTOMATIC
+    assert automatic_patch_payload["analysisOrigin"] == "automatic"
+    assert DocumentPatch.model_validate(automatic_patch_payload) == automatic_patch
+
+
+def test_auto_analysis_data_contract_defaults_drill_specific_patch_id_to_none() -> None:
+    legacy_run = DrillRun.model_validate(
+        {"id": "drill-legacy", "courseId": "course-1", "status": "analyzed"}
+    )
+    legacy_admin = DrillAdminResponse(
+        id="drill-legacy",
+        course_id="course-1",
+        status=DrillRunStatus.ANALYZED,
+        questions=[],
+        rubric_summary=[],
+        share_url=None,
+        share_status=ShareStatus.UNAVAILABLE,
+        answer_count=0,
+        can_analyze=True,
+    )
+
+    assert legacy_run.latest_patch_id is None
+    assert legacy_run.model_dump(by_alias=True)["latestPatchId"] is None
+    assert legacy_admin.latest_patch_id is None
+    assert legacy_admin.model_dump(by_alias=True)["latestPatchId"] is None
+
+
+def test_auto_analysis_data_contract_rejects_negative_scored_watermark() -> None:
+    with pytest.raises(ValidationError, match="autoAnalyzedScoredAnswerCount"):
+        DrillRun.model_validate(
+            {
+                "id": "drill-1",
+                "courseId": "course-1",
+                "status": "analyzed",
+                "autoAnalyzedScoredAnswerCount": -1,
+            }
+        )
+
+
+def test_analysis_claim_keeps_agent_and_scored_snapshot_counts_separate() -> None:
+    manual_claim = AnalysisClaim(
+        course_id="course-1",
+        drill_run_id="drill-1",
+        owner_user_id="owner-1",
+        course_version=3,
+        answer_ids=("answer-1", "answer-2", "answer-unscored"),
+        snapshot_agent_answer_count=3,
+        snapshot_scored_answer_count=2,
+        origin=AnalysisOrigin.MANUAL,
+    )
+    automatic_claim = AnalysisClaim.model_validate(
+        {
+            "courseId": "course-1",
+            "drillRunId": "drill-1",
+            "ownerUserId": "owner-1",
+            "courseVersion": 3,
+            "answerIds": ["answer-1", "answer-2"],
+            "snapshotAgentAnswerCount": 2,
+            "snapshotScoredAnswerCount": 2,
+            "origin": "automatic",
+        }
+    )
+
+    manual_payload = manual_claim.model_dump(by_alias=True)
+    automatic_payload = automatic_claim.model_dump(by_alias=True)
+
+    assert manual_claim.snapshot_agent_answer_count == 3
+    assert manual_claim.snapshot_scored_answer_count == 2
+    assert manual_payload["snapshotAgentAnswerCount"] == 3
+    assert manual_payload["snapshotScoredAnswerCount"] == 2
+    assert automatic_claim.origin is AnalysisOrigin.AUTOMATIC
+    assert automatic_payload["snapshotAgentAnswerCount"] == 2
+    assert automatic_payload["snapshotScoredAnswerCount"] == 2
+    assert AnalysisClaim.model_validate(manual_payload) == manual_claim
+    assert AnalysisClaim.model_validate(automatic_payload) == automatic_claim
 
 
 def test_drill_focus_alias_and_length_constraints() -> None:
