@@ -105,7 +105,7 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(
       page.getByText('緊急障害は問い合わせ種別に関係なくサポート窓口へ送る。'),
     ).toBeVisible()
-    await expect(page.getByLabel('お名前')).toHaveCount(0)
+    await expect(page.getByRole('textbox', { name: 'お名前', exact: true })).toHaveCount(0)
     await expect(page.locator('textarea')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '回答を提出する' })).toHaveCount(0)
     await expect(page.getByText('4 pts')).toHaveCount(0)
@@ -116,7 +116,7 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(page.getByText('教材を確認する')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '回答に進む' })).toHaveCount(0)
 
-    await page.getByLabel('お名前').fill('E2E Learner')
+    await page.getByRole('textbox', { name: 'お名前', exact: true }).fill('E2E Learner')
     const drill = await getLearnerDrill(request, seed.shareToken)
     for (const question of drill.questions) {
       await page
