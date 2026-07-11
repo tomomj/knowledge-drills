@@ -1,3 +1,4 @@
+import logging
 from typing import cast
 
 import pytest
@@ -12,7 +13,10 @@ from app.repositories.repositories import (
     ShareTokenRepository,
 )
 from app.schemas import (
+    AnalysisStepStatus,
+    AnalysisTimelineItem,
     AnswerInput,
+    AnswerStatus,
     Course,
     DrillQuestion,
     DrillRun,
@@ -159,6 +163,54 @@ def _agent_response_for_question(
     return {**agent_response, "questionId": question["id"]}
 
 
+def _lazy_initialization_service(
+    drill_run: DrillRun,
+    *,
+    course_answer_count: int = 0,
+) -> tuple[
+    AnswerService,
+    DrillRepository,
+    AnswerRepository,
+    CourseRepository,
+]:
+    client = InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    token_repository = ShareTokenRepository(client)
+    course_repository.create(
+        Course(
+            id="course-1",
+            title="講座",
+            markdown="# Body",
+            answer_count=course_answer_count,
+        )
+    )
+    drill_repository.create(drill_run)
+    token_repository.reserve("share-token", drill_run_id=drill_run.id)
+    service = AnswerService(
+        course_repository=course_repository,
+        drill_repository=drill_repository,
+        answer_repository=answer_repository,
+        share_token_repository=token_repository,
+        agent_client=AgentRuntimeClient(
+            invoker=lambda _task_name, payload: _agent_response_for_question(
+                {
+                    "questionId": "q1",
+                    "score": 4,
+                    "maxScore": 4,
+                    "correctPoints": ["根拠がある"],
+                    "missingPoints": [],
+                    "feedback": "よい回答です。",
+                    "failureTags": [],
+                },
+                payload,
+            )
+        ),
+    )
+    return service, drill_repository, answer_repository, course_repository
+
+
 def test_submit_answer_grades_and_persists_results() -> None:
     service, answer_repository = _configured_service(
         {
@@ -180,6 +232,267 @@ def test_submit_answer_grades_and_persists_results() -> None:
     assert saved.total_score == 12
     assert saved.max_score == 12
     assert len(saved.grading_results) == 3
+
+
+def test_submit_answer_initializes_legacy_analyzed_count_once_before_new_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timeline = [
+        AnalysisTimelineItem(
+            id="analysis",
+            title="分析",
+            status=AnalysisStepStatus.COMPLETED,
+            completed_at="2026-07-11T00:01:00+00:00",
+        )
+    ]
+    drill_run = _drill_run().model_copy(
+        update={
+            "status": DrillRunStatus.ANALYZED,
+            "analysis_timeline": timeline,
+        }
+    )
+    service, drill_repository, answer_repository, _course_repository = (
+        _lazy_initialization_service(drill_run, course_answer_count=3)
+    )
+    answer_repository.create(
+        id="graded-1",
+        drill_run_id=drill_run.id,
+        learner_name="既存受講者1",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+    answer_repository.create(
+        id="graded-2",
+        drill_run_id=drill_run.id,
+        learner_name="既存受講者2",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+    answer_repository.create(
+        id="failed",
+        drill_run_id=drill_run.id,
+        learner_name="既存受講者3",
+        status=AnswerStatus.FAILED,
+        answers={"q1": "回答"},
+    )
+    initialize = drill_repository.initialize_analyzed_answer_count
+    initialization_calls: list[tuple[str, int]] = []
+
+    def record_initialization(drill_run_id: str, baseline: int) -> None:
+        initialization_calls.append((drill_run_id, baseline))
+        initialize(drill_run_id, baseline)
+
+    monkeypatch.setattr(
+        drill_repository,
+        "initialize_analyzed_answer_count",
+        record_initialization,
+    )
+
+    service.submit_answer("share-token", _request(learner_name="新規受講者1"))
+    first_saved = drill_repository.get(drill_run.id)
+    service.submit_answer("share-token", _request(learner_name="新規受講者2"))
+    second_saved = drill_repository.get(drill_run.id)
+
+    assert initialization_calls == [(drill_run.id, 2)]
+    assert first_saved is not None
+    assert first_saved.analyzed_answer_count == 2
+    assert first_saved.status is DrillRunStatus.ANALYZED
+    assert first_saved.analysis_timeline == timeline
+    assert second_saved is not None
+    assert second_saved.analyzed_answer_count == 2
+    assert second_saved.status is DrillRunStatus.ANALYZED
+    assert second_saved.analysis_timeline == timeline
+
+
+@pytest.mark.parametrize(
+    ("status", "analyzed_answer_count"),
+    [
+        (DrillRunStatus.READY, None),
+        (DrillRunStatus.ANALYZED, 3),
+    ],
+)
+def test_submit_answer_skips_lazy_initialization_fast_path(
+    monkeypatch: pytest.MonkeyPatch,
+    status: DrillRunStatus,
+    analyzed_answer_count: int | None,
+) -> None:
+    client = InMemoryFirestoreClient()
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    token_repository = ShareTokenRepository(client)
+    drill_run = _drill_run().model_copy(
+        update={
+            "status": status,
+            "analyzed_answer_count": analyzed_answer_count,
+        }
+    )
+    drill_repository.create(drill_run)
+    token_repository.reserve("share-token", drill_run_id=drill_run.id)
+
+    def unexpected_call(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("lazy initialization fast path should not perform repository work")
+
+    monkeypatch.setattr(answer_repository, "list_by_drill_run", unexpected_call)
+    monkeypatch.setattr(
+        drill_repository,
+        "initialize_analyzed_answer_count",
+        unexpected_call,
+    )
+    service = AnswerService(
+        drill_repository=drill_repository,
+        answer_repository=answer_repository,
+        share_token_repository=token_repository,
+        agent_client=AgentRuntimeClient(
+            invoker=lambda _task_name, payload: _agent_response_for_question(
+                {
+                    "questionId": "q1",
+                    "score": 4,
+                    "maxScore": 4,
+                    "correctPoints": [],
+                    "missingPoints": [],
+                    "feedback": "ok",
+                    "failureTags": [],
+                },
+                payload,
+            )
+        ),
+    )
+
+    service.submit_answer("share-token", _request())
+
+
+def test_submit_answer_does_not_initialize_before_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    drill_run = _drill_run().model_copy(update={"status": DrillRunStatus.ANALYZED})
+    service, drill_repository, answer_repository, _course_repository = (
+        _lazy_initialization_service(drill_run)
+    )
+
+    def unexpected_call(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("validation must happen before lazy initialization")
+
+    monkeypatch.setattr(answer_repository, "list_by_drill_run", unexpected_call)
+    monkeypatch.setattr(
+        drill_repository,
+        "initialize_analyzed_answer_count",
+        unexpected_call,
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        service.submit_answer("share-token", _request(learner_name=""))
+
+    assert exc_info.value.code == "learner_name_required"
+
+
+def test_submit_answer_initialization_failure_has_no_answer_side_effects(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    timeline = [
+        AnalysisTimelineItem(
+            id="analysis",
+            title="分析",
+            status=AnalysisStepStatus.COMPLETED,
+        )
+    ]
+    drill_run = _drill_run().model_copy(
+        update={
+            "status": DrillRunStatus.ANALYZED,
+            "analysis_timeline": timeline,
+        }
+    )
+    service, drill_repository, answer_repository, course_repository = (
+        _lazy_initialization_service(drill_run, course_answer_count=7)
+    )
+    answer_repository.create(
+        id="existing-graded",
+        drill_run_id=drill_run.id,
+        learner_name="既存受講者",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+
+    def fail_initialization(_drill_run_id: str, _baseline: int) -> None:
+        raise RuntimeError("initialization failed")
+
+    monkeypatch.setattr(
+        drill_repository,
+        "initialize_analyzed_answer_count",
+        fail_initialization,
+    )
+
+    with (
+        caplog.at_level(logging.WARNING, logger="app.answer"),
+        pytest.raises(RuntimeError, match="initialization failed"),
+    ):
+        service.submit_answer("share-token", _request())
+
+    saved_drill = drill_repository.get(drill_run.id)
+    saved_course = course_repository.get(drill_run.course_id)
+    saved_answers = answer_repository.list_by_drill_run(drill_run.id)
+    assert saved_drill is not None
+    assert saved_drill.status is DrillRunStatus.ANALYZED
+    assert saved_drill.analysis_timeline == timeline
+    assert saved_drill.analyzed_answer_count is None
+    assert saved_course is not None
+    assert saved_course.answer_count == 7
+    assert [answer.id for answer in saved_answers] == ["existing-graded"]
+    assert any(
+        "analyzed answer count initialization failed drill_run_id=drill-1" in message
+        for message in caplog.messages
+    )
+
+
+def test_submit_answer_baseline_read_failure_has_no_answer_side_effects(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    timeline = [
+        AnalysisTimelineItem(
+            id="analysis",
+            title="分析",
+            status=AnalysisStepStatus.COMPLETED,
+        )
+    ]
+    drill_run = _drill_run().model_copy(
+        update={
+            "status": DrillRunStatus.ANALYZED,
+            "analysis_timeline": timeline,
+        }
+    )
+    service, drill_repository, answer_repository, course_repository = (
+        _lazy_initialization_service(drill_run, course_answer_count=7)
+    )
+    list_by_drill_run = answer_repository.list_by_drill_run
+    read_error = RuntimeError("baseline read failed")
+
+    def fail_baseline_read(_drill_run_id: str) -> list[object]:
+        raise read_error
+
+    monkeypatch.setattr(answer_repository, "list_by_drill_run", fail_baseline_read)
+
+    with (
+        caplog.at_level(logging.WARNING, logger="app.answer"),
+        pytest.raises(RuntimeError) as exc_info,
+    ):
+        service.submit_answer("share-token", _request())
+
+    saved_drill = drill_repository.get(drill_run.id)
+    saved_course = course_repository.get(drill_run.course_id)
+    saved_answers = list_by_drill_run(drill_run.id)
+    assert exc_info.value is read_error
+    assert saved_drill is not None
+    assert saved_drill.status is DrillRunStatus.ANALYZED
+    assert saved_drill.analysis_timeline == timeline
+    assert saved_drill.analyzed_answer_count is None
+    assert saved_course is not None
+    assert saved_course.answer_count == 7
+    assert saved_answers == []
+    assert any(
+        "analyzed answer count initialization failed drill_run_id=drill-1" in message
+        for message in caplog.messages
+    )
 
 
 def test_submit_answer_increments_course_answer_count() -> None:
