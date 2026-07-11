@@ -33,6 +33,7 @@ export type CourseSummary = {
   latestPatchId: string | null
   scoreTrend: CourseScoreTrendPoint[] | null
   isDemo: boolean
+  needsAnalysis: boolean
 }
 
 export type CourseListResponse = {
@@ -145,6 +146,7 @@ export type DrillAdmin = {
   analysisTimeline: AnalysisTimelineItem[]
   canAnalyze: boolean
   errorMessage: string | null
+  needsAnalysis: boolean
 }
 
 export type DrillGenerationStartResponse = {

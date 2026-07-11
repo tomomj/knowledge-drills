@@ -22,6 +22,7 @@ const courses: CourseSummary[] = [
       { courseVersion: 2, averageScore: 0.8, maxScore: 4 },
     ],
     isDemo: true,
+    needsAnalysis: false,
   },
   {
     id: 'course-2',
@@ -35,6 +36,7 @@ const courses: CourseSummary[] = [
     latestPatchId: null,
     scoreTrend: [{ courseVersion: 1, averageScore: 4.0, maxScore: 4 }],
     isDemo: false,
+    needsAnalysis: false,
   },
 ]
 
@@ -77,6 +79,7 @@ describe('CourseListPage', () => {
     expect(screen.getByText('分析できます')).toBeTruthy()
     expect(screen.getByText('ドリル配布中')).toBeTruthy()
     expect(screen.getByText('ドリル未生成')).toBeTruthy()
+    expect(screen.queryByText('低スコア回答が蓄積 — 分析推奨')).toBeNull()
     expect(screen.getByText(/回答 12 件/)).toBeTruthy()
     expect(screen.getByText('体験用デモ講座を開くと、採点済み回答の分析と改善履歴をすぐ確認できます。')).toBeTruthy()
     expect(screen.getByRole('img', { name: '平均点の推移 1.0 から 0.8' })).toBeTruthy()
@@ -86,6 +89,21 @@ describe('CourseListPage', () => {
     const links = screen.getAllByRole('link')
     const rowLink = links.find((link) => link.textContent?.includes('情報セキュリティ入門'))
     expect(rowLink?.getAttribute('href')).toBe('/courses/course-1')
+  })
+
+  it('replaces the analysis chip with a warning while preserving other chips', async () => {
+    mocks.listCourses.mockResolvedValueOnce({
+      courses: [{ ...courses[0], needsAnalysis: true }],
+    })
+
+    renderList()
+
+    const warning = await screen.findByText('低スコア回答が蓄積 — 分析推奨')
+    expect(warning.classList.contains('chip--warning')).toBe(true)
+    expect(screen.queryByText('分析できます')).toBeNull()
+    expect(screen.getByText('パッチ提案あり')).toBeTruthy()
+    expect(screen.getByText('デモ')).toBeTruthy()
+    expect(screen.getByText('ドリル配布中')).toBeTruthy()
   })
 
   it('filters courses by title', async () => {
