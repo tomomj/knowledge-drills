@@ -23,17 +23,13 @@ Knowledge Drills の本番環境は、React で構築した Frontend と FastAPI
 
 ## 処理の流れ
 
-教材、ドリル、回答、パッチなどの業務データは Backend API を通して操作します。
-Google ログインと ID token の取得は、Frontend から Firebase Authentication を直接利用します。
+オーナーは Firebase Authentication の ID token、受講者は共有 URL の share token を使います。
+入口は異なりますが、業務データの操作は Backend API に集約し、AI が必要な処理だけが ADK を呼び出します。
+次の図は複数の API リクエストをまとめたライフサイクルであり、status や分析タイムラインは Agent の実行前・途中にも保存されます。人間レビューへ進むのは `PROPOSED` patch がある場合だけです。
 
-1. 教材オーナーは Firebase Authentication でログインし、Frontend が ID token を取得
-2. 受講者は Firebase ログインなしで共有 URL を開き、share token でドリルを取得・回答
-3. Frontend が、オーナー操作には ID token、受講者操作には share token を付けて Backend API を呼び出し
-4. Backend が認証と業務ルールを処理し、AI が必要な処理だけを対応する Agent Runner へ委譲
-5. Agent が Vertex AI を使って判断結果を生成
-6. Backend が全出力を Pydantic schema で検証し、問題数、スコア上限、回答件数、教材内の sourceEvidence などを処理別に追加検証
-7. Firestore に教材、ドリル、回答、パッチ、分析タイムラインの要約を保存
-8. 教材オーナーが Frontend のレビュー画面でパッチを確認し、Backend 経由で適用または却下
+![オーナーと受講者の認証からAgent処理、Firestore保存、人間によるパッチレビューまでの流れ](../images/knowledge-drills-request-flow.png)
+
+- 編集元: [`protopedia-request-flow.drawio`](../protopedia-request-flow.drawio)
 
 **Agent は Firestore を直接更新しません。** 検証・保存・パッチ適用は Backend が担当します。
 
