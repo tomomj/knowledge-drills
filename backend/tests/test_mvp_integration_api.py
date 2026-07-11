@@ -110,6 +110,7 @@ def _configure_agent_backed_services(
         course_repository=app.state.course_repository,
         patch_repository=app.state.patch_repository,
         agent_client=agent_client,
+        execution_repository=app.state.analysis_execution_repository,
     )
 
 

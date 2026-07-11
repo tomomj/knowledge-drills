@@ -16,6 +16,7 @@ from app.repositories.firestore_client import (
     InMemoryFirestoreClient,
 )
 from app.repositories.repositories import (
+    AnalysisExecutionRepository,
     AnswerRepository,
     CourseRepository,
     DrillRepository,
@@ -32,6 +33,7 @@ from app.routes.patches import router as patches_router
 from app.routes.users import router as users_router
 from app.services.analysis_service import AnalysisService
 from app.services.answer_service import AnswerService
+from app.services.auto_analysis import AutoAnalysisTrigger
 from app.services.course_service import CourseService
 from app.services.demo_seed_service import DemoSeedService
 from app.services.drill_service import DrillService
@@ -72,6 +74,7 @@ def create_app() -> FastAPI:
     answer_repository = AnswerRepository(firestore_client)
     patch_repository = PatchRepository(firestore_client)
     user_repository = UserRepository(firestore_client)
+    analysis_execution_repository = AnalysisExecutionRepository(firestore_client)
     app.state.firestore_client = firestore_client
     app.state.course_repository = course_repository
     app.state.drill_repository = drill_repository
@@ -79,6 +82,7 @@ def create_app() -> FastAPI:
     app.state.share_token_repository = share_token_repository
     app.state.patch_repository = patch_repository
     app.state.user_repository = user_repository
+    app.state.analysis_execution_repository = analysis_execution_repository
     app.state.user_service = UserService(user_repository)
     app.state.course_service = CourseService(
         course_repository,
@@ -114,12 +118,18 @@ def create_app() -> FastAPI:
         answer_repository=answer_repository,
         share_token_repository=share_token_repository,
     )
-    app.state.analysis_service = AnalysisService(
+    analysis_service = AnalysisService(
         drill_repository,
         answer_repository,
         course_repository=course_repository,
         patch_repository=patch_repository,
         agent_client=agent_client,
+        execution_repository=analysis_execution_repository,
+    )
+    app.state.analysis_service = analysis_service
+    app.state.auto_analysis_trigger = AutoAnalysisTrigger(
+        analysis_execution_repository,
+        analysis_service,
     )
     app.state.patch_service = PatchService(course_repository, patch_repository, firestore_client)
     app.add_middleware(RequestContextMiddleware)
