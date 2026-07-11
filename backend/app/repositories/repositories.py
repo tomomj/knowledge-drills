@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from app.analysis_policy import is_scored_answer
+from app.analysis_policy import (
+    AUTO_ANALYSIS_MIN_ANSWERS,
+    compute_needs_analysis,
+    count_unanalyzed_answers,
+    is_scored_answer,
+)
 from app.errors import AppError
 from app.repositories.firestore_client import DocumentNotFound, FirestoreClient
 from app.schemas import (
@@ -250,6 +255,113 @@ _ANALYSIS_STEPS: tuple[tuple[str, str], ...] = (
 class AnalysisExecutionRepository:
     def __init__(self, client: FirestoreClient) -> None:
         self._client = client
+
+    def claim_auto_analysis(self, drill_run_id: str) -> AnalysisClaim | None:
+        def claim() -> AnalysisClaim | None:
+            drill_document = self._client.get_document(
+                DrillRepository.collection,
+                drill_run_id,
+            )
+            if drill_document is None:
+                return None
+            drill_run = DrillRun.model_validate(drill_document)
+
+            course_document = self._client.get_document(
+                CourseRepository.collection,
+                drill_run.course_id,
+            )
+            if course_document is None:
+                return None
+            course = Course.model_validate(course_document)
+
+            course_drill_documents = self._client.list_documents_by_field(
+                DrillRepository.collection,
+                "courseId",
+                course.id,
+            )
+            course_drill_runs = [
+                DrillRun.model_validate(document) for document in course_drill_documents
+            ]
+            current_drill_runs = [
+                current_drill
+                for current_drill in course_drill_runs
+                if current_drill.course_version == course.version
+            ]
+            answers_by_run = {
+                current_drill.id: [
+                    AnswerSubmission.model_validate(document)
+                    for document in self._client.list_documents_by_field(
+                        AnswerRepository.collection,
+                        "drillRunId",
+                        current_drill.id,
+                    )
+                ]
+                for current_drill in current_drill_runs
+            }
+            patch_documents = self._client.list_documents_by_field(
+                PatchRepository.collection,
+                "courseId",
+                course.id,
+            )
+            course_patches = [
+                DocumentPatch.model_validate(document) for document in patch_documents
+            ]
+
+            target_answers = answers_by_run.get(drill_run.id, [])
+            scored_answers = [
+                answer for answer in target_answers if is_scored_answer(answer)
+            ]
+            if (
+                course.owner_user_id is None
+                or drill_run.course_version != course.version
+                or drill_run.status is DrillRunStatus.ANALYZING
+                or count_unanalyzed_answers(drill_run, target_answers)
+                < AUTO_ANALYSIS_MIN_ANSWERS
+                or not compute_needs_analysis(
+                    course.version,
+                    current_drill_runs,
+                    answers_by_run,
+                )
+                or any(patch.status is PatchStatus.PROPOSED for patch in course_patches)
+            ):
+                return None
+
+            timeline = _initial_analysis_timeline()
+            self._client.update_document(
+                DrillRepository.collection,
+                drill_run.id,
+                {
+                    "status": DrillRunStatus.ANALYZING.value,
+                    "errorMessage": None,
+                    "analysisTimeline": [
+                        item.model_dump(mode="json", by_alias=True) for item in timeline
+                    ],
+                    "analysisOrigin": AnalysisOrigin.AUTOMATIC.value,
+                    "latestPatchId": None,
+                },
+            )
+            self._client.update_document(
+                CourseRepository.collection,
+                course.id,
+                {
+                    "latestDrillRunId": drill_run.id,
+                    "latestDrillStatus": DrillRunStatus.ANALYZING.value,
+                    "answerCount": len(target_answers),
+                },
+            )
+            snapshot_count = len(scored_answers)
+            return AnalysisClaim(
+                course_id=course.id,
+                drill_run_id=drill_run.id,
+                owner_user_id=course.owner_user_id,
+                course_version=course.version,
+                answer_ids=tuple(answer.id for answer in scored_answers),
+                snapshot_agent_answer_count=snapshot_count,
+                snapshot_scored_answer_count=snapshot_count,
+                origin=AnalysisOrigin.AUTOMATIC,
+            )
+
+        return self._client.run_transaction(claim)
 
     def claim_manual_analysis(
         self,
