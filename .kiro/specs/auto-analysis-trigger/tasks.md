@@ -15,7 +15,7 @@
   - スコア欠損、専用値、legacy fallback、両field未記録のunit testが成功する。
   - _Requirements: 1.3, 1.4, 2.2, 2.3, 4.5_
 
-- [ ] 1.3 既存要分析判定と対象ドリル5件判定へ共通policyを適用する
+- [x] 1.3 既存要分析判定と対象ドリル5件判定へ共通policyを適用する
   - 既存の要分析判定は1件閾値、70%未満、status別規則を維持し、確定スコアwatermarkだけを共通resolverへ寄せる。
   - 対象ドリルの未分析数を同じeffective watermarkから算出し、自動起動閾値を固定5件にする。
   - resolverがbaseline不明を返した場合は、READYをbaseline 0、ANALYZEDを未分析0件として解釈する。
