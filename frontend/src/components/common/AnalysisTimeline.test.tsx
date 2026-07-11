@@ -88,6 +88,20 @@ describe('AnalysisTimeline', () => {
     expect(screen.getByText('2分')).toBeTruthy()
   })
 
+  it('renders the automatic analysis chip only when explicitly requested', () => {
+    const { rerender } = render(
+      <AnalysisTimeline title="分析タイムライン" items={items} isAutomatic />,
+    )
+
+    expect(screen.getByText('AI 自動分析')).toBeTruthy()
+
+    rerender(<AnalysisTimeline title="分析タイムライン" items={items} isAutomatic={false} />)
+    expect(screen.queryByText('AI 自動分析')).toBeNull()
+
+    rerender(<AnalysisTimeline title="分析タイムライン" items={items} />)
+    expect(screen.queryByText('AI 自動分析')).toBeNull()
+  })
+
   it('renders running and pending steps with state-specific content', () => {
     render(<AnalysisTimeline title="分析タイムライン" items={items} />)
 
