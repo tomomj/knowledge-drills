@@ -1,5 +1,7 @@
 # 書いた瞬間から腐っていくドキュメントに、DevOps を — 受講者のつまずきをテレメトリとして、資料が自分で改善プロポーザルを出す「Knowledge Drills」
 
+![Knowledge Drills — 受講者のつまずきから AI が教材の改善案を自動生成](../frontend/public/social/knowledge-drills-thumbnail-final.png)
+
 Status: Draft v0.2（2026-07-09）
 用途: ブログ公開 / Proto Pedia 掲載文 / デモ動画（3分）の台本ベース
 提出先: [DevOps × AI Agent Hackathon 2026](https://findy.notion.site/devops-ai-agent-hackathon-2026)
