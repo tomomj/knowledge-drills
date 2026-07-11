@@ -23,7 +23,7 @@
   - 4件/5件、manual後の専用watermark、両field未記録のstatus別結果、legacy documentで既存要分析結果が変わらないことをunit testで確認できる。
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.6, 2.3, 4.5_
 
-- [ ] 1.4 (P) InMemory transactionを複数documentのall-or-nothing境界へ強化する
+- [x] 1.4 (P) InMemory transactionを複数documentのall-or-nothing境界へ強化する
   - transaction開始時のcopy-on-write snapshot、例外時rollback、成功時commitを実装する。
   - 全CRUDとqueryを同じ再入可能lockで保護し、callback途中の状態を別threadへ公開しない。
   - commit、故障注入rollback、別threadのCRUD待機が専用testで観測でき、Google Firestore側の契約は変わらない。
