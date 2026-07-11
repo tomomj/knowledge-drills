@@ -18,6 +18,7 @@ from knowledge_drill_agent.schemas import FailureAnalysisOutput
 EVALS_DIR = Path(__file__).resolve().parent.parent / "evals"
 RUNNER_PATH = Path(__file__).resolve().parent.parent / "scripts" / "run_adk_evals.py"
 AGENT_EVAL_DIRS = ["drill_generator", "grading", "failure_analysis", "document_patch"]
+GEMMA_JUDGE_MODEL = "openai/google/gemma-4-26b-a4b-it-maas"
 
 
 def _load_eval_entry_module(name: str) -> object:
@@ -88,14 +89,21 @@ def test_configs_use_one_integrated_rubric_per_agent() -> None:
         assert len(rubrics) == 1, f"{name}: LLM judge rubric は統合して1つにする"
 
 
-def test_failure_analysis_eval_uses_current_bounded_judge() -> None:
+def test_configs_use_gemma_4_judge() -> None:
+    for name in AGENT_EVAL_DIRS:
+        config = json.loads((EVALS_DIR / name / "test_config.json").read_text("utf-8"))
+        criterion = config["criteria"]["rubric_based_final_response_quality_v1"]
+        assert criterion["judge_model_options"]["judge_model"] == GEMMA_JUDGE_MODEL
+
+
+def test_failure_analysis_eval_uses_bounded_judge_sampling() -> None:
     config = json.loads(
         (EVALS_DIR / "failure_analysis" / "test_config.json").read_text("utf-8")
     )
     criterion = config["criteria"]["rubric_based_final_response_quality_v1"]
     judge_options = criterion["judge_model_options"]
 
-    assert judge_options["judge_model"] == "gemini-3.1-flash-lite"
+    assert judge_options["judge_model"] == GEMMA_JUDGE_MODEL
     assert judge_options["num_samples"] == 3
 
 

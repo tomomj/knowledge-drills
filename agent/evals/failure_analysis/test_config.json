@@ -3,7 +3,7 @@
     "rubric_based_final_response_quality_v1": {
       "threshold": 0.6,
       "judge_model_options": {
-        "judge_model": "gemini-3.1-flash-lite",
+        "judge_model": "openai/google/gemma-4-26b-a4b-it-maas",
         "num_samples": 3
       },
       "rubrics": [

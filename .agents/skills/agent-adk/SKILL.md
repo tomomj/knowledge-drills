@@ -49,7 +49,15 @@ agent/
 
 - 実モデル eval は `python scripts/run_adk_evals.py` を使う。`adk eval` を直接呼ぶと、失敗時も exit code 0 になることがある。
 - `scripts/run_adk_evals.py` は `.env` を読み、`uv run --native-tls --isolated --frozen --group eval adk eval ...` を実行し、`.adk/eval_history/*.evalset_result.json` を読んで失敗判定する。
-- `agent/.env.example` の標準は Vertex AI `GOOGLE_CLOUD_LOCATION=us-central1` と `KNOWLEDGE_DRILL_AGENT_MODEL=gemini-2.5-flash-lite`。
+- `agent/.env.example` の標準は Vertex AI `GOOGLE_CLOUD_LOCATION=global` と `KNOWLEDGE_DRILL_AGENT_MODEL=gemini-3.1-flash-lite`。
+- LLM judge は `openai/google/gemma-4-26b-a4b-it-maas` を使う。ADK 2.3.0 同梱 LiteLLM の
+  `vertex_ai/google/...-maas` は旧 predict RPC に誤配送されるため使わず、Vertex AI MaaS の
+  OpenAI 互換 endpoint を使う。
+- Gemma 4 は judge 専用とする。grading を含む実処理 Agent は `gemini-3.1-flash-lite` を維持する。
+  2026-07-11 の grading 比較では score は概ね一致したが、`correctPoints` / `missingPoints` の
+  schema・内容契約が不安定だった。機械的な契約検証を含む再校正なしに切り替えない。
+- `scripts/run_adk_evals.py` はローカルでは ADC から judge 用短期トークンを取得し、CI では
+  WIF 認証 Action が発行した `OPENAI_API_KEY` を使う。長期 API key は保存しない。
 - `google-adk[eval]` は eval group のみ。通常 `.venv` を汚さないため、eval は必ず isolated 実行にする。
 - PR CI は認証なしを維持する。credential-free guard は `tests/test_evals_assets.py`。
 - grading / drill_generator / failure_analysis / document_patch の eval は各ディレクトリの `agent.py` が parentless `root_agent` を公開する。
@@ -65,7 +73,7 @@ uv run --native-tls --frozen ruff check .
 uv run --native-tls --frozen mypy .
 ```
 
-実 Gemini eval を確認する:
+実モデル eval を確認する:
 
 ```bash
 cd agent
