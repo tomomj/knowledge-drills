@@ -236,7 +236,7 @@ describe('DrillAdminPage', () => {
     expect(within(questionDetails as HTMLElement).getByText('## 方針')).toBeTruthy()
     const button = screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement
     expect(button.disabled).toBe(false)
-    expect(screen.queryByText('低スコア回答が蓄積しています — 分析を推奨')).toBeNull()
+    expect(screen.queryByText('低スコア回答を検知しました — 分析を推奨')).toBeNull()
 
     // 資料バージョンと回答一覧（先頭の回答者が選択された状態）
     expect(screen.getByText('v2')).toBeTruthy()
@@ -252,7 +252,7 @@ describe('DrillAdminPage', () => {
 
     renderDrillAdmin()
 
-    const message = await screen.findByText('低スコア回答が蓄積しています — 分析を推奨')
+    const message = await screen.findByText('低スコア回答を検知しました — 分析を推奨')
     const banner = message.closest('.status-banner')
     const button = screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement
     expect(banner).not.toBeNull()
@@ -263,13 +263,14 @@ describe('DrillAdminPage', () => {
     expect(button.disabled).toBe(false)
   })
 
-  it('shows the needs-analysis banner even when the analyze button is disabled', async () => {
+  it('hides the needs-analysis banner when there are no graded answers', async () => {
     mocks.getDrill.mockResolvedValueOnce({ ...noGradedDrill(), needsAnalysis: true })
     mocks.getDrillAnswers.mockResolvedValueOnce({ ...answersResponse, answers: [] })
 
     renderDrillAdmin()
 
-    await screen.findByText('低スコア回答が蓄積しています — 分析を推奨')
+    await screen.findByRole('button', { name: '回答を分析する' })
+    expect(screen.queryByText('低スコア回答を検知しました — 分析を推奨')).toBeNull()
     const button = screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement
     expect(button.disabled).toBe(true)
   })

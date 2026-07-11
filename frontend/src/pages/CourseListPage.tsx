@@ -157,17 +157,10 @@ type Chip = { label: string; tone: string }
 function statusChips(course: CourseSummary): Chip[] {
   const chips: Chip[] = []
   if (course.needsAnalysis) {
-    chips.push({ label: '低スコア回答が蓄積 — 分析推奨', tone: 'warning' })
+    chips.push({ label: '低スコア回答を検知 — 分析推奨', tone: 'warning' })
   }
   if (course.isDemo) {
     chips.push({ label: 'デモ', tone: 'accent' })
-  }
-  if (
-    !course.needsAnalysis &&
-    course.drillStatus === 'ready' &&
-    course.answerCount > 0
-  ) {
-    chips.push({ label: '分析できます', tone: 'success' })
   }
   if (course.patchStatus === 'proposed') {
     chips.push({ label: 'パッチ提案あり', tone: 'warning' })

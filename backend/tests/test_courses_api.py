@@ -76,26 +76,13 @@ def test_list_courses_recomputes_needs_analysis_without_persisting_it(
             status=DrillRunStatus.READY,
         )
     )
-    for index in range(2):
-        app_state.answer_repository.create_submission(
-            AnswerSubmission(
-                id=f"answer-{index}",
-                drill_run_id="drill-1",
-                learner_name=f"受講者{index}",
-                status=AnswerStatus.GRADED,
-                answers={"q1": "回答"},
-                total_score=0,
-                max_score=100,
-            )
-        )
-
     first = client.get("/api/courses")
     stored_after_first = app_state.firestore_client.get_document("courses", course_id)
     app_state.answer_repository.create_submission(
         AnswerSubmission(
-            id="answer-2",
+            id="answer-1",
             drill_run_id="drill-1",
-            learner_name="受講者2",
+            learner_name="受講者1",
             status=AnswerStatus.GRADED,
             answers={"q1": "回答"},
             total_score=0,
@@ -115,7 +102,7 @@ def test_list_courses_recomputes_needs_analysis_without_persisting_it(
     assert "needsAnalysis" not in stored_after_second
 
 
-def test_legacy_analyzed_drill_becomes_needs_analysis_after_three_public_answers(
+def test_legacy_analyzed_drill_becomes_needs_analysis_after_one_public_answer(
     client: TestClient,
 ) -> None:
     create = client.post("/api/courses", json={"title": "Legacy分析済み", "markdown": "# Body"})
@@ -189,17 +176,10 @@ def test_legacy_analyzed_drill_becomes_needs_analysis_after_three_public_answers
         ]
     }
 
-    for index in range(2):
-        response = client.post(
-            "/api/drills/share-token/answers",
-            json={**payload, "learnerName": f"受講者{index}"},
-        )
-        assert response.status_code == 201
-
     before_threshold = client.get("/api/courses")
-    third = client.post(
+    first = client.post(
         "/api/drills/share-token/answers",
-        json={**payload, "learnerName": "受講者2"},
+        json={**payload, "learnerName": "受講者1"},
     )
     after_threshold = client.get("/api/courses")
 
@@ -207,12 +187,12 @@ def test_legacy_analyzed_drill_becomes_needs_analysis_after_three_public_answers
     saved_answers = app_state.answer_repository.list_by_drill_run(drill_run.id)
     assert before_threshold.status_code == 200
     assert before_threshold.json()["courses"][0]["needsAnalysis"] is False
-    assert third.status_code == 201
+    assert first.status_code == 201
     assert after_threshold.status_code == 200
     assert after_threshold.json()["courses"][0]["needsAnalysis"] is True
     assert saved_drill is not None
     assert saved_drill.analyzed_answer_count == 0
-    assert len(saved_answers) - saved_drill.analyzed_answer_count == 3
+    assert len(saved_answers) - saved_drill.analyzed_answer_count == 1
     assert all(answer.status is AnswerStatus.GRADED for answer in saved_answers)
     assert all(answer.total_score == 0 and answer.max_score == 12 for answer in saved_answers)
     assert saved_drill.status is DrillRunStatus.ANALYZED
@@ -316,7 +296,7 @@ def test_list_courses_uses_stored_summary_without_related_collection_reads(
     assert summary["latestPatchId"] == "patch-1"
     assert summary["scoreTrend"] == []
     assert summary["isDemo"] is False
-    assert summary["needsAnalysis"] is False
+    assert summary["needsAnalysis"] is True
     assert drill_list_calls == [course_id]
     assert answer_list_calls == ["drill-1"]
 

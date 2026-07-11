@@ -10,7 +10,7 @@ from app.schemas import (
     DrillRunStatus,
 )
 
-NEEDS_ANALYSIS_MIN_UNANALYZED: int = 3
+NEEDS_ANALYSIS_MIN_UNANALYZED: int = 1
 NEEDS_ANALYSIS_SCORE_RATE_THRESHOLD: float = 0.7
 
 

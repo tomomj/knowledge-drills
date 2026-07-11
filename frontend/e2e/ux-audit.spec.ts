@@ -16,6 +16,10 @@ type CourseSummary = {
   patchStatus: string | null
 }
 
+type DrillGenerationStartResponse = {
+  drillRunId: string
+}
+
 async function shot(page: Page, name: string) {
   if (shotDir) {
     await page.screenshot({ path: `${shotDir}/${name}.png`, fullPage: true })
@@ -32,7 +36,7 @@ test.describe('デモ導線: 審査員の改善ループ一周', () => {
     // 1. 講座一覧(初回アクセスでデモ講座がシードされる)
     await page.goto('/')
     await expect(page.getByText('体験用デモ講座を開くと', { exact: false })).toBeVisible()
-    const needsAnalysisWarning = '低スコア回答が蓄積 — 分析推奨'
+    const needsAnalysisWarning = '低スコア回答を検知 — 分析推奨'
     const hackathonRow = page.locator('.course-row').filter({
       hasText: 'DevOps x AI Agent Hackathon 2026 参加ガイド(デモ)',
     })
@@ -84,8 +88,19 @@ test.describe('デモ導線: 審査員の改善ループ一周', () => {
     await shot(learnerPage, '05-learner-graded')
     await learnerPage.close()
 
+    // 講座全体が要分析でも、回答 0 件の別ドリルには警告を出さない。
+    // 元ドリルの共有 URL を先に使い、最新ドリルの更新で回答導線を壊さないようにする。
+    const emptyRunResponse = await request.post(
+      `${apiBaseUrl}/api/courses/${playable!.id}/drill-runs`,
+    )
+    expect(emptyRunResponse.ok()).toBeTruthy()
+    const emptyRun = (await emptyRunResponse.json()) as DrillGenerationStartResponse
+    await page.goto(`/courses/${playable!.id}/drill-runs/${emptyRun.drillRunId}`)
+    await expect(page.getByRole('button', { name: '回答を分析する' })).toBeDisabled()
+    await expect(page.getByText('低スコア回答を検知しました — 分析を推奨')).toHaveCount(0)
+
     // 4. 分析実行 → 資料修正案レビューへ自動遷移
-    await page.reload()
+    await page.goto(`/courses/${playable!.id}/drill-runs/${playable!.latestDrillRunId}`)
     const analyzeButton = page.getByRole('button', { name: '回答を分析する' })
     await expect(analyzeButton).toBeEnabled()
     await analyzeButton.click()
