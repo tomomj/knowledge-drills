@@ -1,10 +1,16 @@
 # システム構成
 
+Knowledge Drills は、Cloud Run 上の React Frontend と FastAPI Backend を中心に、Firestore、Google ADK、Vertex AI を組み合わせています。
+設計の中心にあるのは、**AI に判断させること**と、**AI にデータを直接変更させないこと**の両立です。
+
 ![Knowledge Drills のシステム構成図](../images/knowledge-drills-system-architecture.png)
 
 - 編集元: [`protopedia-system-architecture.drawio`](../protopedia-system-architecture.drawio)
 
 ## 使用技術
+
+アプリケーション、Agent、インフラを同じリポジトリで管理し、GitHub Actions からテストとデプロイを行います。
+主な構成要素は次のとおりです。
 
 - Frontend: React + Vite / Cloud Run
 - Backend: FastAPI / Cloud Run
@@ -14,6 +20,9 @@
 - インフラ: Terraform
 
 ## 処理の流れ
+
+ユーザー操作は必ず Backend を通り、Backend が用途に合う Agent を選びます。
+Agent の出力は、保存や適用の前にもう一度検証されます。
 
 1. Frontend が教材・ドリル・回答を Backend へ送信
 2. Backend が処理に対応する Agent を選択
@@ -26,6 +35,9 @@
 
 ## Agent の役割
 
+1つの Agent にすべてを任せず、生成・採点・分析・パッチ作成を分離しています。
+それぞれが判断する範囲と、守るべき制約を明確にするためです。
+
 | Agent | 役割 | 主な制約 |
 |---|---|---|
 | drill generator | 教材からドリルを生成 | 3問固定、教材に実在する根拠が必要 |
@@ -36,6 +48,9 @@
 Backend が実行経路を固定し、Agent には分析や根拠の採否だけを任せます。
 
 ## 誤答分析 Agent
+
+もっとも複雑な判断が必要になるのが、誤答の原因分析です。
+単発の回答をそのまま採用せず、3つの視点と2段階のレビューを組み合わせています。
 
 ![3視点の誤答分析をcriticとreviewerが最大3回検証し、承認済み所見だけを採用](../images/knowledge-drills-review-agent-loop.png)
 
@@ -48,12 +63,18 @@ Backend が実行経路を固定し、Agent には分析や根拠の採否だけ
 
 ## 設計で重視したこと
 
+AI の自由度を広げることよりも、どこで判断させ、どこから先をシステムと人間が担うかを明確にしました。
+そのための設計原則は次の4つです。
+
 - **AI に任せる範囲を限定:** 実行する Agent は Backend が決めます。
 - **Schema で検証:** 問題数、スコア上限、教材根拠などを Backend でも確認します。
 - **人間が最終判断:** AI はパッチを提案するだけで、教材を勝手に変更しません。
 - **Agent にも CI/CD を適用:** lint・typecheck・test・E2E・`adk eval` を通過した main だけをデプロイします。
 
 ## 実装と検証の証拠
+
+Agent の品質も通常のコードと同じように、変更のたびに検証します。
+プロンプトの劣化を意図的に起こした例を含め、実際の eval と CI の結果を公開しています。
 
 - [4 Agent の evalset](https://github.com/tomomj/knowledge-drills/tree/main/agent/evals)
 - [採点プロンプトの劣化を Agent Eval が検出した PR #66](https://github.com/tomomj/knowledge-drills/pull/66)
