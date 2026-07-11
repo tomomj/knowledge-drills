@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sources: frontend/src/lib/firebaseAuth.ts ; backend/app/services/drill_service.py ; backend/app/services/answer_service.py ; backend/app/services/analysis_service.py ; backend/app/services/patch_service.py -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520">
+  <defs>
+    <style>
+      text { font-family: Arial, 'Noto Sans JP', sans-serif; fill: #202124; }
+      .title { font-size: 24px; font-weight: 700; }
+      .subtitle { font-size: 13px; fill: #5F6368; }
+      .band { font-size: 11px; font-weight: 700; fill: #5F6368; letter-spacing: .5px; }
+      .label { font-size: 12px; font-weight: 700; }
+      .small { font-size: 11px; }
+      .tiny { font-size: 9px; fill: #5F6368; }
+      .arrow { fill: none; stroke: #5F6368; stroke-width: 2; marker-end: url(#arrow); }
+      .blue-arrow { fill: none; stroke: #4285F4; stroke-width: 2; marker-end: url(#blue-arrow); }
+      .green-arrow { fill: none; stroke: #34A853; stroke-width: 2; marker-end: url(#green-arrow); }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#5F6368"/></marker>
+    <marker id="blue-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#4285F4"/></marker>
+    <marker id="green-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#34A853"/></marker>
+  </defs>
+
+  <rect width="1200" height="520" fill="#FFFFFF"/>
+  <text x="30" y="39" class="title">処理の流れ — リクエストごとの分岐</text>
+  <text x="31" y="65" class="subtitle">認証後はBackendへ集約し、必要な処理だけADK、patch提案時だけ人間レビューへ</text>
+
+  <rect x="20" y="98" width="345" height="252" rx="18" fill="#FAFAFA" stroke="#DADCE0"/>
+  <text x="40" y="122" class="band">2つの入口</text>
+  <rect x="380" y="98" width="800" height="252" rx="18" fill="#F8FBFF" stroke="#D2E3FC"/>
+  <text x="400" y="122" class="band">複数リクエストのライフサイクル</text>
+  <rect x="380" y="378" width="800" height="112" rx="18" fill="#F7FBF7" stroke="#CEEAD6"/>
+  <text x="400" y="400" class="band">PROPOSED patch がある場合のみ</text>
+
+  <!-- Entry paths -->
+  <rect x="40" y="145" width="130" height="70" rx="13" fill="#E6F4EA" stroke="#34A853" stroke-width="1.5"/>
+  <text x="105" y="174" class="label" text-anchor="middle" fill="#137333">教材オーナー</text>
+  <text x="105" y="196" class="small" text-anchor="middle">Google ログイン</text>
+  <rect x="205" y="145" width="140" height="70" rx="13" fill="#FEF7E0" stroke="#F9AB00" stroke-width="1.5"/>
+  <text x="275" y="174" class="label" text-anchor="middle" fill="#B06000">Firebase Auth</text>
+  <text x="275" y="196" class="small" text-anchor="middle">ID token</text>
+
+  <rect x="40" y="250" width="130" height="70" rx="13" fill="#E8F0FE" stroke="#4285F4" stroke-width="1.5"/>
+  <text x="105" y="279" class="label" text-anchor="middle" fill="#1967D2">受講者</text>
+  <text x="105" y="301" class="small" text-anchor="middle">ログイン不要</text>
+  <rect x="205" y="250" width="140" height="70" rx="13" fill="#E8F0FE" stroke="#4285F4" stroke-width="1.5"/>
+  <text x="275" y="279" class="label" text-anchor="middle" fill="#1967D2">共有URL</text>
+  <text x="275" y="301" class="small" text-anchor="middle">share token</text>
+
+  <!-- Shared API and branching -->
+  <rect x="400" y="180" width="130" height="110" rx="14" fill="#FFFFFF" stroke="#4285F4" stroke-width="1.7"/>
+  <text x="465" y="218" class="label" text-anchor="middle" fill="#1967D2">Frontend</text>
+  <text x="465" y="241" class="small" text-anchor="middle">React + Vite</text>
+  <text x="465" y="264" class="tiny" text-anchor="middle">tokenをAPIへ付与</text>
+
+  <rect x="555" y="180" width="130" height="110" rx="14" fill="#F1F3F4" stroke="#9AA0A6" stroke-width="1.7"/>
+  <text x="620" y="215" class="label" text-anchor="middle">Backend API</text>
+  <text x="620" y="238" class="small" text-anchor="middle">認証・業務ルール</text>
+  <text x="620" y="261" class="tiny" text-anchor="middle">route → service</text>
+
+  <rect x="710" y="180" width="130" height="110" rx="14" fill="#E8F0FE" stroke="#4285F4" stroke-width="1.7"/>
+  <text x="775" y="215" class="label" text-anchor="middle" fill="#1967D2">Backend service</text>
+  <text x="775" y="238" class="small" text-anchor="middle">処理別に分岐</text>
+  <text x="775" y="261" class="tiny" text-anchor="middle">AIは必要時のみ</text>
+
+  <rect x="1030" y="145" width="130" height="90" rx="14" fill="#F1F3F4" stroke="#9AA0A6" stroke-width="1.7"/>
+  <text x="1095" y="176" class="label" text-anchor="middle">Firestore</text>
+  <text x="1095" y="199" class="small" text-anchor="middle">data / status</text>
+  <text x="1095" y="219" class="tiny" text-anchor="middle">timeline / patch</text>
+
+  <rect x="865" y="260" width="130" height="75" rx="14" fill="#F3E8FD" stroke="#A142F4" stroke-width="1.7"/>
+  <text x="930" y="287" class="label" text-anchor="middle">Google ADK</text>
+  <text x="930" y="308" class="small" text-anchor="middle">Vertex AI / Gemini</text>
+  <text x="930" y="325" class="tiny" text-anchor="middle">taskを固定</text>
+
+  <rect x="1030" y="260" width="130" height="75" rx="14" fill="#E6F4EA" stroke="#34A853" stroke-width="1.7"/>
+  <text x="1095" y="287" class="label" text-anchor="middle" fill="#137333">Backend検証</text>
+  <text x="1095" y="308" class="small" text-anchor="middle">schema + 文脈</text>
+  <text x="1095" y="325" class="tiny" text-anchor="middle">結果を保存・更新</text>
+
+  <!-- Main flow arrows -->
+  <path class="green-arrow" d="M170 180H205"/>
+  <path class="blue-arrow" d="M170 285H205"/>
+  <path class="green-arrow" d="M345 180H370V215H400"/>
+  <text x="365" y="172" class="tiny" text-anchor="middle">ID token</text>
+  <path class="blue-arrow" d="M345 285H370V255H400"/>
+  <text x="365" y="304" class="tiny" text-anchor="middle">share token</text>
+  <path class="arrow" d="M530 235H555"/>
+  <path class="blue-arrow" d="M685 235H710"/>
+
+  <path class="arrow" d="M840 205H1030"/>
+  <text x="935" y="194" class="tiny" text-anchor="middle">通常データ / status / timeline を保存・更新</text>
+  <path class="blue-arrow" d="M775 290V298H865"/>
+  <text x="820" y="317" class="tiny" text-anchor="middle">AIが必要</text>
+  <path class="green-arrow" d="M995 298H1030"/>
+  <path class="arrow" d="M1095 260V235"/>
+  <!-- Optional human review -->
+  <path class="arrow" d="M1160 190H1170V356H390V442H400"/>
+  <text x="770" y="350" class="tiny" text-anchor="middle">PROPOSED patchをBackend API経由で取得</text>
+
+  <rect x="400" y="415" width="150" height="54" rx="12" fill="#FFFFFF" stroke="#4285F4" stroke-width="1.5"/>
+  <text x="475" y="438" class="label" text-anchor="middle" fill="#1967D2">FrontendレビューUI</text>
+  <text x="475" y="457" class="tiny" text-anchor="middle">diff / risk notes</text>
+  <rect x="585" y="415" width="150" height="54" rx="12" fill="#E6F4EA" stroke="#34A853" stroke-width="1.5"/>
+  <text x="660" y="438" class="label" text-anchor="middle" fill="#137333">人間が判断</text>
+  <text x="660" y="457" class="tiny" text-anchor="middle">適用 / 却下</text>
+  <rect x="770" y="415" width="160" height="54" rx="12" fill="#F1F3F4" stroke="#9AA0A6" stroke-width="1.5"/>
+  <text x="850" y="438" class="label" text-anchor="middle">Backend API</text>
+  <text x="850" y="457" class="tiny" text-anchor="middle">Course / patchを更新</text>
+  <rect x="965" y="415" width="180" height="54" rx="12" fill="#F1F3F4" stroke="#9AA0A6" stroke-width="1.5"/>
+  <text x="1055" y="438" class="label" text-anchor="middle">Firestoreを更新</text>
+  <text x="1055" y="457" class="tiny" text-anchor="middle">APPLIED / REJECTED</text>
+  <path class="green-arrow" d="M550 442H585"/>
+  <path class="arrow" d="M735 442H770"/>
+  <path class="arrow" d="M930 442H965"/>
+</svg>
