@@ -32,6 +32,17 @@ test.describe('デモ導線: 審査員の改善ループ一周', () => {
     // 1. 講座一覧(初回アクセスでデモ講座がシードされる)
     await page.goto('/')
     await expect(page.getByText('体験用デモ講座を開くと', { exact: false })).toBeVisible()
+    const needsAnalysisWarning = '低スコア回答が蓄積 — 分析推奨'
+    const hackathonRow = page.locator('.course-row').filter({
+      hasText: 'DevOps x AI Agent Hackathon 2026 参加ガイド(デモ)',
+    })
+    const expenseRow = page.locator('.course-row').filter({
+      hasText: '経費精算の判断基準(デモ・改善 3 周済み)',
+    })
+    await expect(hackathonRow).toHaveCount(1)
+    await expect(hackathonRow.getByText(needsAnalysisWarning, { exact: true })).toBeVisible()
+    await expect(expenseRow).toHaveCount(1)
+    await expect(expenseRow.getByText(needsAnalysisWarning, { exact: true })).toHaveCount(0)
     await shot(page, '01-course-list')
 
     const listResponse = await request.get(`${apiBaseUrl}/api/courses`)
