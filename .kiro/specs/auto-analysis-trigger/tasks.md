@@ -154,7 +154,7 @@
   - originを切り替えた再分析でも各watermarkが単調非減少となり、異なる母集団の件数を相互に差し引かないことを確認できる。
   - _Requirements: 2.3, 2.4, 2.5, 2.6, 4.1, 4.4, 4.5, 5.1, 5.2_
 
-- [ ] 6.4 legacy fallbackとlazy初期化の回帰を固定する
+- [x] 6.4 legacy fallbackとlazy初期化の回帰を固定する
   - 専用field欠損でlegacy countがある場合に、現在の確定スコア件数との小さい方をbaselineにすることを検証する。
   - 両field欠損のREADYはbaseline 0、ANALYZEDの読み取りは未分析0件となることを検証する。
   - legacy ANALYZEDへの新回答は保存前lazy初期化後に追加回答だけが差分となり、既存要分析判定の結果が変わらないことを確認できる。
