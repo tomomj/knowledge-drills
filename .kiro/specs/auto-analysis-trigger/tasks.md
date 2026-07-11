@@ -148,7 +148,7 @@
   - autoの5確定スコア＋1 score欠損とmanualの同一回答集合で、Agent入力件数と確定スコア件数が混用されないことを確認できる。
   - _Requirements: 1.2, 1.3, 1.4, 2.2, 2.3, 2.4, 4.4, 4.5_
 
-- [ ] 6.3 成功・見送り・失敗時の二重watermarkをorigin横断で検証する
+- [x] 6.3 成功・見送り・失敗時の二重watermarkをorigin横断で検証する
   - auto/manualそれぞれの成功で既存Agent入力watermarkと専用確定スコアwatermarkが対応するsnapshotまで進むことを検証する。
   - Failure Signalなしでも両watermarkが進み、通常失敗とversion不一致では両方が不変になることを検証する。
   - originを切り替えた再分析でも各watermarkが単調非減少となり、異なる母集団の件数を相互に差し引かないことを確認できる。
