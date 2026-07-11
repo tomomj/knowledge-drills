@@ -465,6 +465,107 @@ class AnalysisExecutionRepository:
 
         return self._client.run_transaction(claim)
 
+    def complete_analysis(
+        self,
+        claim: AnalysisClaim,
+        timeline: list[AnalysisTimelineItem],
+        patch: DocumentPatch | None,
+    ) -> DocumentPatch | None:
+        def complete() -> DocumentPatch | None:
+            course_document = self._client.get_document(
+                CourseRepository.collection,
+                claim.course_id,
+            )
+            drill_document = self._client.get_document(
+                DrillRepository.collection,
+                claim.drill_run_id,
+            )
+            if course_document is None or drill_document is None:
+                raise AppError(
+                    "analysis_claim_conflict",
+                    "Analysis claim no longer matches the persisted state.",
+                    status_code=409,
+                )
+
+            course = Course.model_validate(course_document)
+            drill_run = DrillRun.model_validate(drill_document)
+            if course.version != claim.course_version:
+                raise AppError(
+                    "analysis_course_version_changed",
+                    "Course version changed during analysis.",
+                    status_code=409,
+                )
+            if (
+                drill_run.course_id != claim.course_id
+                or drill_run.status is not DrillRunStatus.ANALYZING
+                or drill_run.analysis_origin is not claim.origin
+                or course.owner_user_id != claim.owner_user_id
+            ):
+                raise AppError(
+                    "analysis_claim_conflict",
+                    "Analysis claim no longer matches the persisted state.",
+                    status_code=409,
+                )
+
+            persisted_patch = (
+                patch.model_copy(
+                    update={
+                        "course_id": claim.course_id,
+                        "drill_run_id": claim.drill_run_id,
+                        "analysis_origin": claim.origin,
+                    }
+                )
+                if patch is not None
+                else None
+            )
+            if persisted_patch is not None:
+                self._client.create_document(
+                    PatchRepository.collection,
+                    persisted_patch.id,
+                    persisted_patch.model_dump(mode="json", by_alias=True),
+                )
+
+            self._client.update_document(
+                DrillRepository.collection,
+                claim.drill_run_id,
+                {
+                    "status": DrillRunStatus.ANALYZED.value,
+                    "errorMessage": None,
+                    "analysisTimeline": [
+                        item.model_dump(mode="json", by_alias=True) for item in timeline
+                    ],
+                    "analysisOrigin": claim.origin.value,
+                    "analyzedAnswerCount": max(
+                        drill_run.analyzed_answer_count or 0,
+                        claim.snapshot_agent_answer_count,
+                    ),
+                    "autoAnalyzedScoredAnswerCount": max(
+                        drill_run.auto_analyzed_scored_answer_count or 0,
+                        claim.snapshot_scored_answer_count,
+                    ),
+                    "latestPatchId": (persisted_patch.id if persisted_patch is not None else None),
+                },
+            )
+            course_summary: dict[str, object] = {
+                "latestDrillRunId": claim.drill_run_id,
+                "latestDrillStatus": DrillRunStatus.ANALYZED.value,
+            }
+            if persisted_patch is not None:
+                course_summary.update(
+                    {
+                        "latestPatchId": persisted_patch.id,
+                        "latestPatchStatus": persisted_patch.status.value,
+                    }
+                )
+            self._client.update_document(
+                CourseRepository.collection,
+                claim.course_id,
+                course_summary,
+            )
+            return persisted_patch
+
+        return self._client.run_transaction(complete)
+
 
 def _initial_analysis_timeline() -> list[AnalysisTimelineItem]:
     return [

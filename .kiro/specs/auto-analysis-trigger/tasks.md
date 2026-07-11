@@ -45,7 +45,7 @@
   - repository-level testで各guard、二回目auto claimのno-op、成功時のautomatic起動元とsnapshotが確認できる。
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 2.2, 3.4, 3.5, 3.6, 3.7, 3.8, 5.1_
 
-- [ ] 2.3 patch作成あり・なしの成功終端をtransactionalにする
+- [x] 2.3 patch作成あり・なしの成功終端をtransactionalにする
   - optional patch、ANALYZED、二重watermark、ドリル固有patch ID、course summaryを一括確定する。
   - Failure Signalなしはpatchなし成功として両watermarkを進め、後着回答をsnapshot件数へ含めない。
   - course versionがclaim時と一致する場合だけ成功終端を許可する。
