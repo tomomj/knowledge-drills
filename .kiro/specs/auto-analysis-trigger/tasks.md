@@ -38,7 +38,7 @@
   - repository-level testで状態guard、二回目claimの競合、snapshot件数の分離が確認できる。
   - _Requirements: 2.2, 2.4, 3.4, 3.6, 4.4, 4.5, 5.2_
 
-- [ ] 2.2 自動起動条件と原子的auto claimを実装する
+- [x] 2.2 自動起動条件と原子的auto claimを実装する
   - current version、未分析の確定スコア回答5件、既存要分析判定、非ANALYZING、同じ講座にレビュー待ちpatchなしを全read後に判定する。
   - autoは確定スコア回答だけをsnapshotとし、同一drillとcourse documentを競合点にする。
   - 条件不成立と既存状態競合はwriteなしの正常no-opとする。

@@ -49,6 +49,34 @@ class CountingFirestoreClient(InMemoryFirestoreClient):
         super().update_document(collection, document_id, data)
 
 
+class ReadOrderFirestoreClient(InMemoryFirestoreClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.operations: list[tuple[str, str]] = []
+
+    def get_document(self, collection: str, document_id: str) -> dict[str, object] | None:
+        self.operations.append(("get", collection))
+        return super().get_document(collection, document_id)
+
+    def list_documents_by_field(
+        self,
+        collection: str,
+        field_name: str,
+        field_value: object,
+    ) -> list[dict[str, object]]:
+        self.operations.append(("list", collection))
+        return super().list_documents_by_field(collection, field_name, field_value)
+
+    def update_document(
+        self,
+        collection: str,
+        document_id: str,
+        data: dict[str, object],
+    ) -> None:
+        self.operations.append(("update", collection))
+        super().update_document(collection, document_id, data)
+
+
 def create_drill_run_without_analyzed_answer_count(
     client: InMemoryFirestoreClient,
     drill_run: DrillRun,
@@ -106,6 +134,313 @@ def create_manual_claim_fixture(
         drill_repository,
         answer_repository,
     )
+
+
+def create_auto_claim_fixture(
+    *,
+    target_status: DrillRunStatus = DrillRunStatus.READY,
+    target_course_version: int = 2,
+    owner_user_id: str | None = "owner-1",
+    scored_answer_count: int = 5,
+    total_score: int = 0,
+    client: InMemoryFirestoreClient | None = None,
+) -> tuple[
+    InMemoryFirestoreClient,
+    AnalysisExecutionRepository,
+    CourseRepository,
+    DrillRepository,
+    AnswerRepository,
+    PatchRepository,
+]:
+    client = client or InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    patch_repository = PatchRepository(client)
+    course_repository.create(
+        Course(
+            id="course-1",
+            owner_user_id=owner_user_id,
+            title="講座",
+            markdown="# Body",
+            version=2,
+            latest_drill_run_id="older-drill",
+            latest_drill_status=DrillRunStatus.ANALYZED,
+            answer_count=99,
+        )
+    )
+    drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            course_version=target_course_version,
+            status=target_status,
+            latest_patch_id="old-patch",
+        )
+    )
+    for index in range(scored_answer_count):
+        answer_repository.create_submission(
+            AnswerSubmission(
+                id=f"answer-{index}",
+                drill_run_id="drill-1",
+                learner_name="受講者",
+                status=AnswerStatus.GRADED,
+                answers={"q1": "回答"},
+                total_score=total_score,
+                max_score=4,
+            )
+        )
+    return (
+        client,
+        AnalysisExecutionRepository(client),
+        course_repository,
+        drill_repository,
+        answer_repository,
+        patch_repository,
+    )
+
+
+def test_auto_analysis_claim_snapshots_only_scored_answers_and_marks_automatic() -> None:
+    (
+        client,
+        repository,
+        course_repository,
+        drill_repository,
+        answer_repository,
+        _patch_repository,
+    ) = create_auto_claim_fixture()
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="missing-score",
+            drill_run_id="drill-1",
+            learner_name="受講者",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        )
+    )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="grading",
+            drill_run_id="drill-1",
+            learner_name="受講者",
+            status=AnswerStatus.GRADING,
+            answers={"q1": "回答"},
+            total_score=0,
+            max_score=4,
+        )
+    )
+
+    claim = repository.claim_auto_analysis("drill-1")
+
+    assert claim is not None
+    assert claim.course_id == "course-1"
+    assert claim.drill_run_id == "drill-1"
+    assert claim.owner_user_id == "owner-1"
+    assert claim.course_version == 2
+    assert claim.answer_ids == tuple(f"answer-{index}" for index in range(5))
+    assert claim.snapshot_agent_answer_count == 5
+    assert claim.snapshot_scored_answer_count == 5
+    assert claim.origin is AnalysisOrigin.AUTOMATIC
+
+    saved_drill = drill_repository.get("drill-1")
+    saved_course = course_repository.get("course-1")
+    assert saved_drill is not None
+    assert saved_drill.status is DrillRunStatus.ANALYZING
+    assert saved_drill.error_message is None
+    assert saved_drill.analysis_origin is AnalysisOrigin.AUTOMATIC
+    assert saved_drill.latest_patch_id is None
+    assert saved_drill.analysis_timeline[0].status is AnalysisStepStatus.RUNNING
+    assert all(
+        item.status is AnalysisStepStatus.PENDING
+        for item in saved_drill.analysis_timeline[1:]
+    )
+    assert saved_course is not None
+    assert saved_course.latest_drill_run_id == "drill-1"
+    assert saved_course.latest_drill_status is DrillRunStatus.ANALYZING
+    assert saved_course.answer_count == 7
+    assert client.transaction_count == 1
+
+
+@pytest.mark.parametrize(
+    ("fixture_overrides", "expected_status"),
+    [
+        ({"target_course_version": 1}, DrillRunStatus.READY),
+        ({"scored_answer_count": 4}, DrillRunStatus.READY),
+        ({"total_score": 4}, DrillRunStatus.READY),
+        ({"target_status": DrillRunStatus.ANALYZING}, DrillRunStatus.ANALYZING),
+        ({"target_status": DrillRunStatus.GENERATING}, DrillRunStatus.GENERATING),
+        ({"owner_user_id": None}, DrillRunStatus.READY),
+    ],
+)
+def test_auto_analysis_claim_guard_is_a_write_free_no_op(
+    fixture_overrides: dict[str, object],
+    expected_status: DrillRunStatus,
+) -> None:
+    client, repository, course_repository, drill_repository, *_rest = (
+        create_auto_claim_fixture(**fixture_overrides)  # type: ignore[arg-type]
+    )
+    drill_before = client.get_document(DrillRepository.collection, "drill-1")
+    course_before = client.get_document(CourseRepository.collection, "course-1")
+
+    claim = repository.claim_auto_analysis("drill-1")
+
+    assert claim is None
+    assert client.get_document(DrillRepository.collection, "drill-1") == drill_before
+    assert client.get_document(CourseRepository.collection, "course-1") == course_before
+    saved_drill = drill_repository.get("drill-1")
+    saved_course = course_repository.get("course-1")
+    assert saved_drill is not None and saved_drill.status is expected_status
+    assert saved_course is not None
+    assert saved_course.latest_drill_run_id == "older-drill"
+
+
+def test_auto_analysis_claim_is_blocked_by_same_course_proposed_patch_only() -> None:
+    client, repository, _course_repository, drill_repository, _answers, patches = (
+        create_auto_claim_fixture()
+    )
+    patches.create(
+        DocumentPatch(
+            id="patch-1",
+            course_id="course-1",
+            drill_run_id="other-drill",
+            status=PatchStatus.PROPOSED,
+            base_markdown="# old",
+            patched_markdown="# new",
+            patch_summary="改善",
+            diff_text="diff",
+        )
+    )
+    before = client.get_document(DrillRepository.collection, "drill-1")
+
+    assert repository.claim_auto_analysis("drill-1") is None
+    assert client.get_document(DrillRepository.collection, "drill-1") == before
+    saved = drill_repository.get("drill-1")
+    assert saved is not None and saved.latest_patch_id == "old-patch"
+
+
+def test_auto_analysis_claim_ignores_proposed_patch_from_another_course() -> None:
+    client, repository, *_rest = create_auto_claim_fixture()
+    client.create_document(
+        PatchRepository.collection,
+        "other-course-patch",
+        DocumentPatch(
+            id="other-course-patch",
+            course_id="course-2",
+            drill_run_id="drill-2",
+            status=PatchStatus.PROPOSED,
+            base_markdown="# old",
+            patched_markdown="# new",
+            patch_summary="改善",
+            diff_text="diff",
+        ).model_dump(mode="json", by_alias=True),
+    )
+
+    claim = repository.claim_auto_analysis("drill-1")
+
+    assert claim is not None
+    assert claim.origin is AnalysisOrigin.AUTOMATIC
+
+
+def test_auto_analysis_claim_uses_scored_watermark_for_five_answer_threshold() -> None:
+    client, repository, _courses, drills, *_rest = create_auto_claim_fixture(
+        scored_answer_count=6
+    )
+    drill = drills.get("drill-1")
+    assert drill is not None
+    drills.update(
+        drill.model_copy(
+            update={
+                "auto_analyzed_scored_answer_count": 2,
+            }
+        )
+    )
+    before = client.get_document(DrillRepository.collection, "drill-1")
+
+    claim = repository.claim_auto_analysis("drill-1")
+
+    assert claim is None
+    assert client.get_document(DrillRepository.collection, "drill-1") == before
+
+
+def test_auto_analysis_claim_reads_full_decision_set_before_writing() -> None:
+    recording_client = ReadOrderFirestoreClient()
+    client, repository, _courses, drills, answers, *_rest = create_auto_claim_fixture(
+        client=recording_client
+    )
+    drills.create(
+        DrillRun(
+            id="drill-2",
+            course_id="course-1",
+            course_version=2,
+            status=DrillRunStatus.READY,
+        )
+    )
+    answers.create_submission(
+        AnswerSubmission(
+            id="other-answer",
+            drill_run_id="drill-2",
+            learner_name="受講者",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=0,
+            max_score=4,
+        )
+    )
+    recording_client.operations.clear()
+
+    claim = repository.claim_auto_analysis("drill-1")
+
+    assert claim is not None
+    first_write = recording_client.operations.index(("update", DrillRepository.collection))
+    assert recording_client.operations[:first_write] == [
+        ("get", DrillRepository.collection),
+        ("get", CourseRepository.collection),
+        ("list", DrillRepository.collection),
+        ("list", AnswerRepository.collection),
+        ("list", AnswerRepository.collection),
+        ("list", PatchRepository.collection),
+    ]
+    assert recording_client.operations[first_write:] == [
+        ("update", DrillRepository.collection),
+        ("update", CourseRepository.collection),
+    ]
+    assert client is recording_client
+
+
+def test_auto_analysis_second_claim_is_no_op_without_changing_first_claim_state() -> None:
+    client, repository, course_repository, drill_repository, *_rest = (
+        create_auto_claim_fixture()
+    )
+    first = repository.claim_auto_analysis("drill-1")
+    drill_after_first = client.get_document(DrillRepository.collection, "drill-1")
+    course_after_first = client.get_document(CourseRepository.collection, "course-1")
+
+    second = repository.claim_auto_analysis("drill-1")
+
+    assert first is not None
+    assert second is None
+    assert client.get_document(DrillRepository.collection, "drill-1") == drill_after_first
+    assert client.get_document(CourseRepository.collection, "course-1") == course_after_first
+    saved_drill = drill_repository.get("drill-1")
+    saved_course = course_repository.get("course-1")
+    assert saved_drill is not None and saved_drill.analysis_origin is AnalysisOrigin.AUTOMATIC
+    assert saved_course is not None
+
+
+def test_manual_claim_prevents_auto_claim_without_changing_manual_state() -> None:
+    client, repository, _course_repository, drill_repository, *_rest = (
+        create_auto_claim_fixture()
+    )
+    manual = repository.claim_manual_analysis("drill-1", "owner-1")
+    after_manual = client.get_document(DrillRepository.collection, "drill-1")
+
+    automatic = repository.claim_auto_analysis("drill-1")
+
+    assert manual.origin is AnalysisOrigin.MANUAL
+    assert automatic is None
+    assert client.get_document(DrillRepository.collection, "drill-1") == after_manual
+    saved = drill_repository.get("drill-1")
+    assert saved is not None and saved.analysis_origin is AnalysisOrigin.MANUAL
 
 
 def test_manual_analysis_claim_snapshots_all_graded_answers_and_scored_count_separately() -> None:
