@@ -52,6 +52,7 @@ def test_list_courses_returns_summaries_sorted_by_updated_at(client: TestClient)
     assert summary["drillStatus"] is None
     assert summary["answerCount"] == 0
     assert summary["patchStatus"] is None
+    assert summary["needsAnalysis"] is False
     assert "markdown" not in summary
 
 

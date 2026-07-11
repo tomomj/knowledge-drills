@@ -77,6 +77,7 @@ def test_get_drill_admin_returns_questions_share_url_and_answer_count(client: Te
     assert payload["shareUrl"] == "/drills/share-token"
     assert payload["answerCount"] == 1
     assert payload["canAnalyze"] is True
+    assert payload["needsAnalysis"] is False
     assert payload["questions"][0]["rubric"][0]["criterion"] == "根拠"
     assert payload["rubricSummary"] == ["q1: 根拠"]
 
