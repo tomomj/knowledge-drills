@@ -6,7 +6,7 @@ from _pytest.logging import LogCaptureFixture
 from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.repositories.firestore_client import InMemoryFirestoreClient
 from app.repositories.repositories import CourseRepository, DrillRepository, ShareTokenRepository
-from app.schemas import Course
+from app.schemas import AnalysisOrigin, Course, DrillRun, DrillRunStatus
 from app.services.drill_service import DrillService
 from app.services.share_token_service import ShareTokenService
 
@@ -65,6 +65,34 @@ def _service(
         share_token_repository=token_repository,
     )
     return service, course_repository, drill_repository
+
+
+def test_get_admin_drill_maps_origin_and_target_drill_patch_id() -> None:
+    service, course_repository, drill_repository = _service({})
+    drill_repository.create(
+        DrillRun(
+            id="drill-target",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+            analysis_origin=AnalysisOrigin.AUTOMATIC,
+            latest_patch_id="patch-target",
+        )
+    )
+    drill_repository.create(
+        DrillRun(
+            id="drill-other",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+            analysis_origin=AnalysisOrigin.AUTOMATIC,
+            latest_patch_id="patch-other",
+        )
+    )
+    course_repository.update_summary("course-1", latest_patch_id="patch-other")
+
+    response = service.get_admin_drill("drill-target", owner_user_id="owner-1")
+
+    assert response.analysis_origin == AnalysisOrigin.AUTOMATIC
+    assert response.latest_patch_id == "patch-target"
 
 
 def test_generate_drill_marks_run_ready_with_three_valid_questions() -> None:

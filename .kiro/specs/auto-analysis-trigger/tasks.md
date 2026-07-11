@@ -88,7 +88,7 @@
   - current/legacy両routeのtestから登録回数、非登録経路、採点response不変が観測できる。
   - _Requirements: 1.1, 2.1, 2.7, 2.8, 3.1, 3.2, 3.3_
 
-- [ ] 3.3 (P) Drill Admin APIへ起動元とドリル固有patch状態を公開する
+- [x] 3.3 (P) Drill Admin APIへ起動元とドリル固有patch状態を公開する
   - drill管理responseへ分析起動元と当該drillの直近patch IDをmappingする。
   - 旧documentではmanual/patchなし、自動成功ではautomatic/patch ID、見送り・失敗ではpatchなしを返す。
   - service/API testでcamelCase値が確認でき、別drillのcourse最新patchを返さない。

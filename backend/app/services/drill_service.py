@@ -210,6 +210,8 @@ class DrillService:
             can_analyze=score_summary.graded_answer_count > 0,
             error_message=drill_run.error_message,
             needs_analysis=needs_analysis,
+            analysis_origin=drill_run.analysis_origin,
+            latest_patch_id=drill_run.latest_patch_id,
         )
 
     def list_answers(
