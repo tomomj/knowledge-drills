@@ -125,7 +125,7 @@
   - _Boundary: PatchReviewPage_
   - _Depends: 4.1_
 
-- [ ] 5. (P) Cloud Runでresponse後のbest-effort分析へCPUを割り当てる
+- [x] 5. (P) Cloud Runでresponse後のbest-effort分析へCPUを割り当てる
   - backend containerをinstance-based CPU allocationへ変更し、scale-to-zero設定は維持する。
   - process-local task、instance終了時の未回収ANALYZING、durable retryなしという運用境界をインフラ資料へ記録する。
   - format・validate・planで本機能の差分がbackend CPU設定だけで、resource replacement、IAM、queue、scheduler追加がないことを確認できる。
