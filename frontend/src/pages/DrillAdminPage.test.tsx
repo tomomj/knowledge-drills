@@ -42,6 +42,8 @@ const drill: DrillAdmin = {
       },
     ],
   },
+  analysisOrigin: 'manual',
+  latestPatchId: null,
   analysisTimeline: [],
   canAnalyze: true,
   errorMessage: null,

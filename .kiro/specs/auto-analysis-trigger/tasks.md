@@ -97,7 +97,7 @@
   - _Depends: 1.1, 2.3_
 
 - [ ] 4. 自動起動元と完了状態をowner UIへ統合する
-- [ ] 4.1 Frontend API契約と分析タイムラインの起動元表示を追加する
+- [x] 4.1 Frontend API契約と分析タイムラインの起動元表示を追加する
   - drillとpatchのtyped responseへ起動元とドリル固有patch IDを追加し、既存fixtureを後方互換値へ更新する。
   - automaticの場合だけ分析タイムラインへ「AI 自動分析」を表示し、manualまたは未指定では既存DOMを変えない。
   - component testとtypecheckでautomatic表示、manual非表示、既存manual操作の型契約が確認できる。

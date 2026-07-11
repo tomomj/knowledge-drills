@@ -18,6 +18,7 @@ const patch: DocumentPatch = {
   riskNotes: ['既存運用との整合を確認'],
   diffText: '--- base.md\n+++ patched.md\n-# Before\n+# After',
   ownerFeedback: null,
+  analysisOrigin: 'manual',
   analysisTimeline: [],
   failureSignals: [
     {

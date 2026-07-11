@@ -89,6 +89,8 @@ export type SourceEvidence = {
 
 export type AnalysisStepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped'
 
+export type AnalysisOrigin = 'manual' | 'automatic'
+
 export type AnalysisTimelineItem = {
   id: string
   title: string
@@ -146,6 +148,8 @@ export type DrillAdmin = {
   shareStatus: ShareStatus
   answerCount: number
   scoreSummary: DrillScoreSummary | null
+  analysisOrigin: AnalysisOrigin
+  latestPatchId: string | null
   analysisTimeline: AnalysisTimelineItem[]
   canAnalyze: boolean
   errorMessage: string | null
@@ -245,6 +249,7 @@ export type DocumentPatch = {
   riskNotes: string[]
   diffText: string
   failureSignals: FailureSignal[]
+  analysisOrigin: AnalysisOrigin
   analysisTimeline: AnalysisTimelineItem[]
   ownerFeedback: string | null
 }
