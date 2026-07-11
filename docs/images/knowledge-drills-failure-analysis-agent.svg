@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sources: agent/knowledge_drill_agent/agent.py ; agent/knowledge_drill_agent/failure_analysis_workflow.py ; backend/app/services/analysis_service.py ; backend/app/services/patch_service.py -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620">
+  <defs>
+    <style>
+      text { font-family: Arial, 'Noto Sans JP', sans-serif; fill: #202124; }
+      .title { font-size: 24px; font-weight: 700; }
+      .subtitle { font-size: 13px; fill: #5F6368; }
+      .phase { font-size: 15px; font-weight: 700; }
+      .label { font-size: 12px; font-weight: 700; }
+      .small { font-size: 11px; }
+      .tiny { font-size: 9px; fill: #5F6368; }
+      .arrow { fill: none; stroke: #5F6368; stroke-width: 2; marker-end: url(#arrow); }
+      .blue-arrow { fill: none; stroke: #4285F4; stroke-width: 2; marker-end: url(#blue-arrow); }
+      .green-arrow { fill: none; stroke: #34A853; stroke-width: 2; marker-end: url(#green-arrow); }
+      .line { fill: none; stroke: #5F6368; stroke-width: 1.6; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#5F6368"/>
+    </marker>
+    <marker id="blue-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#4285F4"/>
+    </marker>
+    <marker id="green-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#34A853"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="620" fill="#FFFFFF"/>
+  <text x="30" y="39" class="title">誤答分析 Agent — 4段階のワークフロー</text>
+  <text x="31" y="65" class="subtitle">内部のAgentを工程ごとにまとめ、コードで強制する境界と人間の判断を分離</text>
+
+  <g aria-label="legend">
+    <rect x="760" y="27" width="13" height="13" rx="3" fill="#F3E8FD" stroke="#A142F4"/>
+    <text x="780" y="38" class="tiny">LLM</text>
+    <rect x="830" y="27" width="13" height="13" rx="3" fill="#E8F0FE" stroke="#4285F4"/>
+    <text x="850" y="38" class="tiny">ADK</text>
+    <rect x="900" y="27" width="13" height="13" rx="3" fill="#E6F4EA" stroke="#34A853"/>
+    <text x="920" y="38" class="tiny">コード</text>
+    <rect x="985" y="27" width="13" height="13" rx="3" fill="#F1F3F4" stroke="#9AA0A6"/>
+    <text x="1005" y="38" class="tiny">Backend / 保存</text>
+  </g>
+
+  <!-- Four equal workflow stages -->
+  <rect x="30" y="120" width="270" height="450" rx="18" fill="#F8FBFF" stroke="#BDC1C6" stroke-width="1.5"/>
+  <rect x="320" y="120" width="270" height="450" rx="18" fill="#F8FBFF" stroke="#BDC1C6" stroke-width="1.5"/>
+  <rect x="610" y="120" width="270" height="450" rx="18" fill="#F8FBFF" stroke="#BDC1C6" stroke-width="1.5"/>
+  <rect x="900" y="120" width="270" height="450" rx="18" fill="#F8FBFF" stroke="#BDC1C6" stroke-width="1.5"/>
+
+  <!-- Stage 1 -->
+  <circle cx="58" cy="151" r="16" fill="#4285F4"/>
+  <text x="58" y="156" class="label" text-anchor="middle" fill="#FFFFFF">1</text>
+  <text x="82" y="156" class="phase">3視点で並列分析</text>
+  <text x="82" y="176" class="tiny">ParallelAgent</text>
+
+  <rect x="50" y="198" width="230" height="52" rx="10" fill="#F1F3F4" stroke="#9AA0A6"/>
+  <text x="165" y="219" class="label" text-anchor="middle">Backendから入力</text>
+  <text x="165" y="238" class="tiny" text-anchor="middle">教材・rubric・採点済み回答</text>
+
+  <rect x="50" y="278" width="230" height="58" rx="11" fill="#F3E8FD" stroke="#A142F4" stroke-width="1.4"/>
+  <text x="165" y="302" class="label" text-anchor="middle">受講者のつまずき</text>
+  <text x="165" y="322" class="tiny" text-anchor="middle">misconception_analyst</text>
+
+  <rect x="50" y="354" width="230" height="58" rx="11" fill="#F3E8FD" stroke="#A142F4" stroke-width="1.4"/>
+  <text x="165" y="378" class="label" text-anchor="middle">教材の説明不足</text>
+  <text x="165" y="398" class="tiny" text-anchor="middle">document_gap_analyst</text>
+
+  <rect x="50" y="430" width="230" height="58" rx="11" fill="#F3E8FD" stroke="#A142F4" stroke-width="1.4"/>
+  <text x="165" y="454" class="label" text-anchor="middle">設問・rubricの品質</text>
+  <text x="165" y="474" class="tiny" text-anchor="middle">question_quality_analyst</text>
+
+  <text x="165" y="530" class="small" text-anchor="middle">3つの所見を次工程へ</text>
+
+  <!-- Stage 2 -->
+  <circle cx="348" cy="151" r="16" fill="#4285F4"/>
+  <text x="348" y="156" class="label" text-anchor="middle" fill="#FFFFFF">2</text>
+  <text x="372" y="156" class="phase">根拠をレビュー</text>
+  <text x="372" y="176" class="tiny">LoopAgent・最大3回</text>
+
+  <rect x="345" y="225" width="220" height="92" rx="13" fill="#F3E8FD" stroke="#A142F4" stroke-width="1.5"/>
+  <text x="455" y="254" class="label" text-anchor="middle">evidence critic</text>
+  <text x="455" y="277" class="small" text-anchor="middle">根拠を採用 / 棄却</text>
+  <text x="455" y="298" class="tiny" text-anchor="middle">accepted / rejected findings</text>
+
+  <path class="blue-arrow" d="M455 317V350"/>
+
+  <rect x="345" y="350" width="220" height="92" rx="13" fill="#F3E8FD" stroke="#A142F4" stroke-width="1.5"/>
+  <text x="455" y="379" class="label" text-anchor="middle">critic reviewer</text>
+  <text x="455" y="402" class="small" text-anchor="middle">判定を再確認</text>
+  <text x="455" y="423" class="tiny" text-anchor="middle">approvedFindingIds を明示</text>
+
+  <path class="blue-arrow" d="M565 396C594 396 594 271 565 271"/>
+  <text x="455" y="492" class="small" text-anchor="middle">needs_revision なら再確認</text>
+
+  <!-- Stage 3 -->
+  <circle cx="638" cy="151" r="16" fill="#34A853"/>
+  <text x="638" y="156" class="label" text-anchor="middle" fill="#FFFFFF">3</text>
+  <text x="662" y="156" class="phase">検証して統合</text>
+  <text x="662" y="176" class="tiny">code gate → LLM finalizer</text>
+
+  <rect x="635" y="225" width="220" height="92" rx="13" fill="#E6F4EA" stroke="#34A853" stroke-width="1.8"/>
+  <text x="745" y="252" class="label" text-anchor="middle" fill="#137333">ApprovedFindingsGate</text>
+  <text x="745" y="276" class="small" text-anchor="middle">承認IDを再検証</text>
+  <text x="745" y="298" class="tiny" text-anchor="middle">subset・重複・根拠をコード検証</text>
+
+  <path class="arrow" d="M745 317V350"/>
+
+  <rect x="635" y="350" width="220" height="112" rx="13" fill="#F3E8FD" stroke="#A142F4" stroke-width="1.5"/>
+  <text x="745" y="378" class="label" text-anchor="middle">finalizer</text>
+  <text x="745" y="402" class="small" text-anchor="middle">approved findings を入力に</text>
+  <text x="745" y="424" class="small" text-anchor="middle">FailureAnalysisOutput</text>
+  <text x="745" y="446" class="tiny" text-anchor="middle">意味対応はPromptで制約</text>
+
+  <text x="745" y="510" class="small" text-anchor="middle">Failure Signals / review notes</text>
+
+  <!-- Stage 4 -->
+  <circle cx="928" cy="151" r="16" fill="#34A853"/>
+  <text x="928" y="156" class="label" text-anchor="middle" fill="#FFFFFF">4</text>
+  <text x="952" y="156" class="phase">パッチ方針を決定</text>
+  <text x="952" y="176" class="tiny">Backend保存 → 人間レビュー</text>
+
+  <rect x="925" y="198" width="220" height="50" rx="13" fill="#E6F4EA" stroke="#34A853" stroke-width="1.7"/>
+  <text x="1035" y="228" class="label" text-anchor="middle" fill="#137333">Failure Signal がある?</text>
+
+  <path class="line" d="M1035 248V260M975 260H1095"/>
+  <path class="arrow" d="M975 260V275"/>
+  <path class="green-arrow" d="M1095 260V275"/>
+
+  <rect x="925" y="275" width="100" height="62" rx="11" fill="#F1F3F4" stroke="#9AA0A6" stroke-width="1.4"/>
+  <text x="975" y="298" class="label" text-anchor="middle">なし</text>
+  <text x="975" y="317" class="tiny" text-anchor="middle">見送りを保存</text>
+  <text x="975" y="329" class="tiny" text-anchor="middle">patchなし</text>
+
+  <rect x="1045" y="275" width="100" height="62" rx="11" fill="#FEF7E0" stroke="#F9AB00" stroke-width="1.5"/>
+  <text x="1095" y="298" class="label" text-anchor="middle" fill="#B06000">あり</text>
+  <text x="1095" y="317" class="tiny" text-anchor="middle">patch候補を生成</text>
+  <text x="1095" y="329" class="tiny" text-anchor="middle">document_patch_agent</text>
+
+  <path class="arrow" d="M1095 337V350H1035V359"/>
+
+  <rect x="925" y="359" width="220" height="52" rx="11" fill="#F1F3F4" stroke="#9AA0A6" stroke-width="1.4"/>
+  <text x="1035" y="381" class="label" text-anchor="middle">Firestore に PROPOSED 保存</text>
+  <text x="1035" y="400" class="tiny" text-anchor="middle">Failure Signals / analysis timeline</text>
+
+  <path class="green-arrow" d="M1035 411V426"/>
+
+  <rect x="925" y="426" width="220" height="52" rx="11" fill="#E6F4EA" stroke="#34A853" stroke-width="1.5"/>
+  <text x="1035" y="448" class="label" text-anchor="middle" fill="#137333">人間が適用 / 却下</text>
+  <text x="1035" y="467" class="tiny" text-anchor="middle">レビューUI</text>
+
+  <path class="arrow" d="M1035 478V493"/>
+
+  <rect x="925" y="493" width="220" height="52" rx="11" fill="#F1F3F4" stroke="#9AA0A6" stroke-width="1.4"/>
+  <text x="1035" y="515" class="label" text-anchor="middle">Backend APIが更新</text>
+  <text x="1035" y="534" class="tiny" text-anchor="middle">Course / patch status</text>
+
+  <!-- Equal stage-to-stage flow -->
+  <path class="blue-arrow" d="M300 345H320"/>
+  <path class="green-arrow" d="M590 345H610"/>
+  <path class="green-arrow" d="M880 345H900"/>
+</svg>
