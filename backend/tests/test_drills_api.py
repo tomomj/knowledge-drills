@@ -60,6 +60,11 @@ def test_get_drill_admin_returns_questions_share_url_and_answer_count(client: Te
             share_token="share-token",
         )
     )
+    app.state.share_token_repository.reserve(
+        "share-token",
+        drill_run_id="drill-1",
+        course_id="course-1",
+    )
     answer_repository.create(
         id="answer-1",
         drill_run_id="drill-1",
@@ -265,6 +270,163 @@ def test_generate_drill_api_creates_ready_run_from_course(client: TestClient) ->
     # 生成したドリルが講座の latestDrillRunId として保存される
     course_after = client.get(f"/api/courses/{course_id}")
     assert course_after.json()["latestDrillRunId"] == payload["drillRunId"]
+
+
+def test_generate_new_drill_reuses_public_url_and_keeps_old_run(client: TestClient) -> None:
+    app = cast(FastAPI, client.app)
+    tokens = iter(["stable-token", "unused-token"])
+    app.state.drill_service = DrillService(
+        course_repository=app.state.course_repository,
+        drill_repository=app.state.drill_repository,
+        share_token_service=ShareTokenService(
+            drill_repository=app.state.drill_repository,
+            share_token_repository=app.state.share_token_repository,
+            token_generator=tokens.__next__,
+        ),
+        agent_client=AgentRuntimeClient(invoker=lambda _task_name, _payload: _agent_response()),
+        answer_repository=app.state.answer_repository,
+        share_token_repository=app.state.share_token_repository,
+    )
+    course_id = client.post(
+        "/api/courses",
+        json={"title": "講座", "markdown": "# Body\n\n## 方針\n根拠を確認します。"},
+    ).json()["courseId"]
+
+    first = client.post(f"/api/courses/{course_id}/drill-runs").json()
+    first_run_id = first["drillRunId"]
+    first_answer = client.post(
+        "/api/drills/stable-token/answers",
+        json={
+            "learnerName": "受講者",
+            "answers": [
+                {"questionId": "q1", "answerText": "回答1"},
+                {"questionId": "q2", "answerText": "回答2"},
+                {"questionId": "q3", "answerText": "回答3"},
+            ],
+        },
+    )
+    assert first_answer.status_code == 201
+
+    second = client.post(f"/api/courses/{course_id}/drill-runs").json()
+
+    assert second["drillRunId"] != first_run_id
+    assert second["shareUrl"] == "/drills/stable-token"
+    learner = client.get("/api/drills/stable-token")
+    assert learner.status_code == 200
+    assert learner.json()["drillRunId"] == second["drillRunId"]
+    old_admin = client.get(f"/api/courses/{course_id}/drill-runs/{first_run_id}").json()
+    assert old_admin["shareStatus"] == "superseded"
+    assert old_admin["shareUrl"] is None
+    old_answers = client.get(
+        f"/api/courses/{course_id}/drill-runs/{first_run_id}/answers"
+    ).json()
+    assert [answer["learnerName"] for answer in old_answers["answers"]] == ["受講者"]
+
+
+def test_close_and_reopen_current_share_url(client: TestClient) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.drill_service = DrillService(
+        course_repository=app.state.course_repository,
+        drill_repository=app.state.drill_repository,
+        share_token_service=ShareTokenService(
+            drill_repository=app.state.drill_repository,
+            share_token_repository=app.state.share_token_repository,
+            token_generator=lambda: "share-token",
+            now=lambda: "2026-07-11T00:00:00+00:00",
+        ),
+        agent_client=AgentRuntimeClient(invoker=lambda _task_name, _payload: _agent_response()),
+        answer_repository=app.state.answer_repository,
+        share_token_repository=app.state.share_token_repository,
+    )
+    course_id = client.post(
+        "/api/courses",
+        json={"title": "講座", "markdown": "# Body\n\n## 方針\n根拠を確認します。"},
+    ).json()["courseId"]
+    drill = client.post(f"/api/courses/{course_id}/drill-runs").json()
+    drill_run_id = drill["drillRunId"]
+
+    closed = client.post(
+        f"/api/courses/{course_id}/drill-runs/{drill_run_id}/share/close"
+    )
+    assert closed.status_code == 200
+    assert closed.json()["shareStatus"] == "closed"
+    assert closed.json()["shareUrl"] == "/drills/share-token"
+    closed_learner = client.get("/api/drills/share-token")
+    assert closed_learner.status_code == 410
+    assert closed_learner.headers["cache-control"] == "no-store"
+    rejected = client.post(
+        "/api/drills/share-token/answers",
+        json={"learnerName": "受講者", "answers": []},
+    )
+    assert rejected.status_code == 410
+    assert rejected.json()["code"] == "share_closed"
+
+    reopened = client.post(
+        f"/api/courses/{course_id}/drill-runs/{drill_run_id}/share/reopen"
+    )
+    assert reopened.status_code == 200
+    assert reopened.json()["shareStatus"] == "open"
+    reopened_learner = client.get("/api/drills/share-token")
+    assert reopened_learner.status_code == 200
+    assert reopened_learner.headers["cache-control"] == "no-store"
+
+
+def test_failed_regeneration_keeps_previous_drill_published(client: TestClient) -> None:
+    app = cast(FastAPI, client.app)
+    course_id = client.post(
+        "/api/courses",
+        json={"title": "講座", "markdown": "# Body\n\n## 方針\n根拠を確認します。"},
+    ).json()["courseId"]
+    app.state.drill_service = DrillService(
+        course_repository=app.state.course_repository,
+        drill_repository=app.state.drill_repository,
+        share_token_service=ShareTokenService(
+            drill_repository=app.state.drill_repository,
+            share_token_repository=app.state.share_token_repository,
+            token_generator=lambda: "stable-token",
+        ),
+        agent_client=AgentRuntimeClient(invoker=lambda _task_name, _payload: _agent_response()),
+        answer_repository=app.state.answer_repository,
+        share_token_repository=app.state.share_token_repository,
+    )
+    first = client.post(f"/api/courses/{course_id}/drill-runs").json()
+
+    invalid_question = _question().model_copy(
+        update={
+            "source_evidence": [
+                SourceEvidence(section_heading="不存在", excerpt="本文にない根拠")
+            ]
+        }
+    )
+    app.state.drill_service = DrillService(
+        course_repository=app.state.course_repository,
+        drill_repository=app.state.drill_repository,
+        share_token_service=ShareTokenService(
+            drill_repository=app.state.drill_repository,
+            share_token_repository=app.state.share_token_repository,
+            token_generator=lambda: "unused-token",
+        ),
+        agent_client=AgentRuntimeClient(
+            invoker=lambda _task_name, _payload: {
+                "questions": [
+                    invalid_question.model_copy(update={"id": question_id}).model_dump(
+                        mode="json", by_alias=True
+                    )
+                    for question_id in ("q1", "q2", "q3")
+                ]
+            }
+        ),
+        answer_repository=app.state.answer_repository,
+        share_token_repository=app.state.share_token_repository,
+    )
+
+    failed = client.post(f"/api/courses/{course_id}/drill-runs")
+
+    assert failed.status_code == 201
+    assert failed.json()["shareUrl"] is None
+    learner = client.get("/api/drills/stable-token")
+    assert learner.status_code == 200
+    assert learner.json()["drillRunId"] == first["drillRunId"]
 
 
 def test_generate_drill_api_returns_failed_run_for_invalid_source_evidence(

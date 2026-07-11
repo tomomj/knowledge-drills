@@ -1,6 +1,6 @@
 from typing import cast
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Request, Response, status
 
 from app.schemas import LearnerDrillResponse, SubmitAnswerRequest, SubmitAnswerResponse
 from app.services.answer_service import AnswerService
@@ -18,7 +18,12 @@ def get_answer_service(request: Request) -> AnswerService:
 
 
 @router.get("/api/drills/{share_token}", response_model=LearnerDrillResponse)
-def get_learner_drill(request: Request, share_token: str) -> LearnerDrillResponse:
+def get_learner_drill(
+    request: Request,
+    response: Response,
+    share_token: str,
+) -> LearnerDrillResponse:
+    response.headers["Cache-Control"] = "no-store"
     return get_drill_service(request).get_learner_drill(share_token)
 
 
@@ -29,9 +34,10 @@ def get_learner_drill(request: Request, share_token: str) -> LearnerDrillRespons
 )
 def get_learner_drill_legacy(
     request: Request,
+    response: Response,
     share_token: str,
 ) -> LearnerDrillResponse:
-    return get_learner_drill(request, share_token)
+    return get_learner_drill(request, response, share_token)
 
 
 @router.post(

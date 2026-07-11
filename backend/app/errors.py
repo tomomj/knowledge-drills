@@ -44,6 +44,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=exc.status_code,
             content=error_content(exc.code, exc.message, _request, exc.current_status),
+            headers={"Cache-Control": "no-store"},
         )
 
     @app.exception_handler(RequestValidationError)

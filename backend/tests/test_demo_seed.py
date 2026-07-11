@@ -91,7 +91,11 @@ def test_demo_seed_drill_runs_snapshot_version_matched_course(client: TestClient
             )
 
             learner = client.get(f"/api/drills/{drill_run.share_token}")
-            assert learner.status_code == 200
+            is_latest = drill is definition.drills[-1]
+            assert learner.status_code == (200 if is_latest else 410)
+            if not is_latest:
+                assert learner.json()["code"] == "share_closed"
+                continue
             payload = learner.json()
             assert payload["courseTitle"] == definition.title
             assert payload["courseMarkdown"] == (

@@ -143,6 +143,18 @@ describe('LearnerDrillPage', () => {
     expect(screen.queryByText('判断理由を書いてください。')).toBeNull()
   })
 
+  it('shows an answer-collection-ended state for a closed share URL', async () => {
+    mocks.getLearnerDrill.mockRejectedValueOnce(
+      new ApiClientError(410, { code: 'share_closed', message: 'closed' }),
+    )
+
+    renderLearner()
+
+    await screen.findByText('このドリルの回答受付は終了しました。')
+    expect(screen.getByText('ご協力ありがとうございました。')).toBeTruthy()
+    expect(screen.queryByText('判断理由を書いてください。')).toBeNull()
+  })
+
   it('shows validation error for empty fields', async () => {
     const user = userEvent.setup()
     mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
@@ -221,5 +233,25 @@ describe('LearnerDrillPage', () => {
       feedback: ['受付しました。'],
     })
     await waitFor(() => expect(screen.getByText('提出が完了しました。')).toBeTruthy())
+  })
+
+  it('switches to the closed state when collection ends before submit', async () => {
+    const user = userEvent.setup()
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+    mocks.submitAnswer.mockRejectedValueOnce(
+      new ApiClientError(410, { code: 'share_closed', message: 'closed' }),
+    )
+
+    renderLearner()
+
+    await proceedToAnswering(user)
+    await user.type(screen.getByLabelText('お名前'), '受講者A')
+    await user.type(screen.getByLabelText(/判断理由を書いてください。/), '根拠です')
+    await user.type(screen.getByLabelText(/例外条件を書いてください。/), '例外です')
+    await user.type(screen.getByLabelText(/次の対応を書いてください。/), '対応です')
+    await user.click(screen.getByRole('button', { name: '回答を提出する' }))
+
+    await screen.findByText('このドリルの回答受付は終了しました。')
+    expect(screen.getByText('ご協力ありがとうございました。')).toBeTruthy()
   })
 })

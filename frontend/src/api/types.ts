@@ -115,6 +115,8 @@ export type LearnerQuestion = {
 
 export type DrillStatus = 'generating' | 'ready' | 'failed' | 'analyzing' | 'analyzed'
 
+export type ShareStatus = 'open' | 'closed' | 'superseded' | 'unavailable'
+
 export type QuestionScoreSummary = {
   questionId: string
   averageScore: number | null
@@ -140,6 +142,7 @@ export type DrillAdmin = {
   questions: AdminQuestion[]
   rubricSummary: string[]
   shareUrl: string | null
+  shareStatus: ShareStatus
   answerCount: number
   scoreSummary: DrillScoreSummary | null
   analysisTimeline: AnalysisTimelineItem[]
@@ -149,7 +152,7 @@ export type DrillAdmin = {
 
 export type DrillGenerationStartResponse = {
   drillRunId: string
-  shareUrl: string
+  shareUrl: string | null
 }
 
 export type LearnerDrill = {

@@ -97,6 +97,11 @@ class DemoSeedService:
                 course_title=definition.title,
                 course_markdown=definition.markdown_versions[drill.course_version - 1],
             )
+        for historical_drill in definition.drills[:-1]:
+            self._share_token_repository.close(
+                _seed_id(owner_user_id, definition.slug, historical_drill.share_token_suffix),
+                _utc_now(),
+            )
 
         if definition.patch is not None:
             patch_id = _seed_id(owner_user_id, definition.slug, definition.patch.id_suffix)
@@ -153,7 +158,12 @@ class DemoSeedService:
     ) -> None:
         drill_run_id = _seed_id(owner_user_id, course_slug, definition.id_suffix)
         share_token = _seed_id(owner_user_id, course_slug, definition.share_token_suffix)
-        self._share_token_repository.reserve(share_token, drill_run_id)
+        self._share_token_repository.reserve(
+            share_token,
+            drill_run_id,
+            course_id=course_id,
+            created_at=_utc_now(),
+        )
         self._drill_repository.create(
             DrillRun(
                 id=drill_run_id,
