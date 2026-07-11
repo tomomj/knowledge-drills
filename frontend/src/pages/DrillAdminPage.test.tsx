@@ -44,6 +44,7 @@ const drill: DrillAdmin = {
   analysisTimeline: [],
   canAnalyze: true,
   errorMessage: null,
+  needsAnalysis: false,
 }
 
 const answersResponse: DrillAnswersResponse = {

@@ -70,7 +70,7 @@
   - _Depends: 2.3, 3.1_
 
 - [ ] 4. Core frontend: バッジ表示とポーリング
-- [ ] 4.1 API 型の拡張と講座カードのアラートチップ
+- [x] 4.1 API 型の拡張と講座カードのアラートチップ
   - CourseSummary / DrillAdmin 型に needsAnalysis を追加する
   - statusChips: 判定が真なら warning チップ「低スコア回答が蓄積 — 分析推奨」を出し「分析できます」チップを生成しない。偽なら既存表示不変
   - 完了条件: チップ表示・置換・非点灯不変のテスト（CourseListPage.test.tsx）が通る
