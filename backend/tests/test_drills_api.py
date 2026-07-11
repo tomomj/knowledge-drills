@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.schemas import (
+    AnalysisOrigin,
     AnalysisStepStatus,
     AnalysisTimelineItem,
     AnswerStatus,
@@ -85,6 +86,114 @@ def test_get_drill_admin_returns_questions_share_url_and_answer_count(client: Te
     assert payload["needsAnalysis"] is False
     assert payload["questions"][0]["rubric"][0]["criterion"] == "根拠"
     assert payload["rubricSummary"] == ["q1: 根拠"]
+
+
+def test_get_drill_admin_defaults_legacy_origin_and_patch_fields(client: TestClient) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(id="course-1", owner_user_id="local-owner", title="講座", markdown="# Body")
+    )
+    legacy_drill = DrillRun(
+        id="drill-legacy",
+        course_id="course-1",
+        status=DrillRunStatus.READY,
+        questions=[_question()],
+    )
+    app.state.firestore_client.create_document(
+        "drill_runs",
+        legacy_drill.id,
+        legacy_drill.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude={"analysis_origin", "latest_patch_id"},
+        ),
+    )
+
+    response = client.get("/api/courses/course-1/drill-runs/drill-legacy")
+
+    assert response.status_code == 200
+    assert response.json()["analysisOrigin"] == "manual"
+    assert response.json()["latestPatchId"] is None
+
+
+def test_get_drill_admin_returns_target_drill_automatic_patch(client: TestClient) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(id="course-1", owner_user_id="local-owner", title="講座", markdown="# Body")
+    )
+    app.state.drill_repository.create(
+        DrillRun(
+            id="drill-target",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+            questions=[_question()],
+            analysis_origin=AnalysisOrigin.AUTOMATIC,
+            latest_patch_id="patch-target",
+        )
+    )
+    app.state.drill_repository.create(
+        DrillRun(
+            id="drill-other",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+            questions=[_question()],
+            analysis_origin=AnalysisOrigin.AUTOMATIC,
+            latest_patch_id="patch-other",
+        )
+    )
+    app.state.course_repository.update_summary("course-1", latest_patch_id="patch-other")
+
+    response = client.get("/api/courses/course-1/drill-runs/drill-target")
+
+    assert response.status_code == 200
+    assert response.json()["analysisOrigin"] == "automatic"
+    assert response.json()["latestPatchId"] == "patch-target"
+
+
+@pytest.mark.parametrize(
+    ("status", "timeline"),
+    [
+        (DrillRunStatus.ANALYZED, []),
+        (
+            DrillRunStatus.READY,
+            [
+                AnalysisTimelineItem(
+                    id="analysis_failed",
+                    title="分析に失敗",
+                    status=AnalysisStepStatus.FAILED,
+                    summary="分析を完了できませんでした。",
+                )
+            ],
+        ),
+    ],
+    ids=["completed-without-patch", "failed"],
+)
+def test_get_drill_admin_returns_automatic_origin_without_patch(
+    client: TestClient,
+    status: DrillRunStatus,
+    timeline: list[AnalysisTimelineItem],
+) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(id="course-1", owner_user_id="local-owner", title="講座", markdown="# Body")
+    )
+    app.state.drill_repository.create(
+        DrillRun(
+            id="drill-automatic",
+            course_id="course-1",
+            status=status,
+            questions=[_question()],
+            analysis_origin=AnalysisOrigin.AUTOMATIC,
+            latest_patch_id=None,
+            analysis_timeline=timeline,
+        )
+    )
+
+    response = client.get("/api/courses/course-1/drill-runs/drill-automatic")
+
+    assert response.status_code == 200
+    assert response.json()["analysisOrigin"] == "automatic"
+    assert response.json()["latestPatchId"] is None
 
 
 def test_get_current_drill_admin_matches_course_list_needs_analysis(
