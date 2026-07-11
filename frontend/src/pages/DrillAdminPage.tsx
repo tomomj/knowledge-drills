@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { api, ApiClientError } from '../api/client'
@@ -27,6 +27,10 @@ type AutomaticAnalysisState =
   | { status: 'idle' }
   | { status: 'polling'; attempts: number }
   | { status: 'noPatch' }
+  | { status: 'failed' }
+  | { status: 'timedOut'; isReloading: boolean; reloadError: string | null }
+
+const AUTOMATIC_ANALYSIS_POLL_LIMIT = 180
 
 const ANSWER_STATUS_CHIPS: Record<DrillAnswer['status'], { label: string; tone: string }> = {
   grading: { label: '採点中', tone: 'muted' },
@@ -57,6 +61,9 @@ export function DrillAdminPage() {
   const [shareActionError, setShareActionError] = useState<string | null>(null)
   const [questionsOpen, setQuestionsOpen] = useState(true)
   const [answersOpen, setAnswersOpen] = useState(true)
+  const lifecycleGenerationRef = useRef(0)
+  const reloadRequestGenerationRef = useRef(0)
+  const reloadInFlightRef = useRef(false)
 
   const acceptDrill = useCallback(
     (drill: DrillAdmin) => {
@@ -80,10 +87,29 @@ export function DrillAdminPage() {
         setAutomaticAnalysisState({ status: 'noPatch' })
         return
       }
+      if (drill.status === 'ready' && latestAnalysisStepFailed(drill)) {
+        setAutomaticAnalysisState({ status: 'failed' })
+        return
+      }
       setAutomaticAnalysisState({ status: 'idle' })
     },
     [navigate],
   )
+
+  useEffect(() => {
+    const generation = lifecycleGenerationRef.current + 1
+    lifecycleGenerationRef.current = generation
+    reloadRequestGenerationRef.current += 1
+    reloadInFlightRef.current = false
+
+    return () => {
+      if (lifecycleGenerationRef.current === generation) {
+        lifecycleGenerationRef.current += 1
+      }
+      reloadRequestGenerationRef.current += 1
+      reloadInFlightRef.current = false
+    }
+  }, [courseId, drillRunId])
 
   useEffect(() => {
     let active = true
@@ -140,9 +166,7 @@ export function DrillAdminPage() {
         .finally(() => {
           if (active) {
             setAutomaticAnalysisState((current) =>
-              current.status === 'polling'
-                ? { status: 'polling', attempts: current.attempts + 1 }
-                : current,
+              nextAutomaticPollingState(current),
             )
           }
         })
@@ -203,7 +227,10 @@ export function DrillAdminPage() {
   const statusChip = DRILL_STATUS_CHIPS[drill.status]
 
   async function analyzeAnswers() {
-    if (automaticAnalysisState.status === 'polling') {
+    if (
+      automaticAnalysisState.status === 'polling' ||
+      automaticAnalysisState.status === 'timedOut'
+    ) {
       return
     }
     setAnalysisState({ status: 'loading' })
@@ -231,6 +258,49 @@ export function DrillAdminPage() {
       setQuestionsOpen(true)
       setAnswersOpen(true)
       setAnalysisState({ status: 'failed', message: analysisErrorMessage(error) })
+    }
+  }
+
+  async function reloadAutomaticAnalysis() {
+    if (
+      !courseId ||
+      !drillRunId ||
+      automaticAnalysisState.status !== 'timedOut' ||
+      reloadInFlightRef.current
+    ) {
+      return
+    }
+    reloadInFlightRef.current = true
+    const lifecycleGeneration = lifecycleGenerationRef.current
+    const requestGeneration = reloadRequestGenerationRef.current + 1
+    reloadRequestGenerationRef.current = requestGeneration
+    setAutomaticAnalysisState({
+      status: 'timedOut',
+      isReloading: true,
+      reloadError: null,
+    })
+
+    const isCurrentRequest = () =>
+      lifecycleGenerationRef.current === lifecycleGeneration &&
+      reloadRequestGenerationRef.current === requestGeneration
+
+    try {
+      const refreshed = await api.getDrill(courseId, drillRunId)
+      if (!isCurrentRequest()) {
+        return
+      }
+      reloadInFlightRef.current = false
+      acceptDrill(refreshed)
+    } catch {
+      if (!isCurrentRequest()) {
+        return
+      }
+      reloadInFlightRef.current = false
+      setAutomaticAnalysisState({
+        status: 'timedOut',
+        isReloading: false,
+        reloadError: '状態の再読み込みに失敗しました。もう一度お試しください。',
+      })
     }
   }
 
@@ -297,7 +367,8 @@ export function DrillAdminPage() {
               disabled={
                 !drill.canAnalyze ||
                 analysisState?.status === 'loading' ||
-                automaticAnalysisState.status === 'polling'
+                automaticAnalysisState.status === 'polling' ||
+                automaticAnalysisState.status === 'timedOut'
               }
             >
               回答を分析する
@@ -321,6 +392,27 @@ export function DrillAdminPage() {
         {automaticAnalysisState.status === 'noPatch' ? (
           <StatusBanner tone="info">
             自動分析は完了しました。承認された所見がなかったため、パッチ提案は見送られました。
+          </StatusBanner>
+        ) : null}
+        {automaticAnalysisState.status === 'failed' ? (
+          <StatusBanner tone="error">
+            自動分析に失敗しました。手動で再実行できます。
+          </StatusBanner>
+        ) : null}
+        {automaticAnalysisState.status === 'timedOut' ? (
+          <StatusBanner tone="warning">
+            <span>状態確認がタイムアウトしました。</span>{' '}
+            <button
+              type="button"
+              className="tag-btn"
+              onClick={() => void reloadAutomaticAnalysis()}
+              disabled={automaticAnalysisState.isReloading}
+            >
+              状態を再読み込み
+            </button>
+            {automaticAnalysisState.reloadError ? (
+              <span>{automaticAnalysisState.reloadError}</span>
+            ) : null}
           </StatusBanner>
         ) : null}
         {analysisState?.status === 'failed' && analysisState.message ? (
@@ -437,6 +529,22 @@ export function DrillAdminPage() {
       </main>
     </AppShell>
   )
+}
+
+function latestAnalysisStepFailed(drill: DrillAdmin) {
+  const latestStep = drill.analysisTimeline[drill.analysisTimeline.length - 1]
+  return latestStep?.status === 'failed'
+}
+
+function nextAutomaticPollingState(current: AutomaticAnalysisState): AutomaticAnalysisState {
+  if (current.status !== 'polling') {
+    return current
+  }
+  const attempts = current.attempts + 1
+  if (attempts >= AUTOMATIC_ANALYSIS_POLL_LIMIT) {
+    return { status: 'timedOut', isReloading: false, reloadError: null }
+  }
+  return { status: 'polling', attempts }
 }
 
 type ShareUrlCardProps = {

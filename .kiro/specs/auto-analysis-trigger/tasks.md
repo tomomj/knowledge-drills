@@ -110,7 +110,7 @@
   - fake timer testで開始条件、正しいpatch遷移、見送り停止が確認できる。
   - _Requirements: 2.6, 4.3, 5.3, 5.4, 5.5_
 
-- [ ] 4.3 Drill Adminの失敗・timeout・cleanup状態を実装する
+- [x] 4.3 Drill Adminの失敗・timeout・cleanup状態を実装する
   - pollingを最大180回に制限し、unmount時にtimerを解除する。
   - failed timelineではpollingを止めてmanual再実行導線を有効にし、一時通信失敗では最後の表示を維持する。
   - 上限到達時はtimeoutと再読込操作を表示し、それ以降の自動取得を止める。
