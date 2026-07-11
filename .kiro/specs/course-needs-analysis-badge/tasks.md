@@ -111,3 +111,7 @@
   - 完了条件: E2E がシード投入後の 2 講座で点灯/消灯を検証して通る
   - _Requirements: 6.1, 6.2_
   - _Depends: 4.1_
+
+## Implementation Notes
+
+- `DrillRepository.update` は transaction 内で既存 `analyzedAnswerCount` を下限として保持し、stale な status / timeline 更新でも watermark を後退させない。
