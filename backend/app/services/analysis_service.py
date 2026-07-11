@@ -165,7 +165,7 @@ class AnalysisService:
 
         drill_run = self.start_analysis(drill_run_id, owner_user_id)
         try:
-            patch, drill_run = self._generate_patch_proposal_with_timeline(
+            patch, drill_run, analyzed_answer_count = self._generate_patch_proposal_with_timeline(
                 drill_run,
                 owner_user_id,
             )
@@ -197,7 +197,12 @@ class AnalysisService:
 
         if patch is not None:
             self._patch_repository.create(patch)
-        analyzed = drill_run.model_copy(update={"status": DrillRunStatus.ANALYZED})
+        analyzed = drill_run.model_copy(
+            update={
+                "status": DrillRunStatus.ANALYZED,
+                "analyzed_answer_count": analyzed_answer_count,
+            }
+        )
         self._drill_repository.update(analyzed)
         course = self._course_repository.get(drill_run.course_id)
         if course is None:
@@ -215,7 +220,7 @@ class AnalysisService:
         self,
         drill_run: DrillRun,
         owner_user_id: str,
-    ) -> tuple[DocumentPatch | None, DrillRun]:
+    ) -> tuple[DocumentPatch | None, DrillRun, int]:
         if self._course_repository is None or self._agent_client is None:
             raise RuntimeError("AnalysisService dependencies are not configured")
 
@@ -227,15 +232,16 @@ class AnalysisService:
         graded_answers = [answer for answer in answers if answer.status == AnswerStatus.GRADED]
         if not graded_answers:
             raise AppError("no_graded_answers", "At least one graded answer is required.")
+        analyzed_answer_count = len(graded_answers)
 
         drill_run = self._update_timeline(
             drill_run,
             "collect_answers",
             AnalysisStepStatus.COMPLETED,
-            summary=f"採点済み回答 {len(graded_answers)} 件を収集しました",
+            summary=f"採点済み回答 {analyzed_answer_count} 件を収集しました",
             evidence=[
                 f"回答総数 {len(answers)} 件",
-                f"採点済み {len(graded_answers)} 件",
+                f"採点済み {analyzed_answer_count} 件",
             ],
         )
         drill_run = self._update_timeline(
@@ -316,7 +322,7 @@ class AnalysisService:
                 course.id,
                 drill_run.id,
             )
-            return None, drill_run
+            return None, drill_run, analyzed_answer_count
 
         drill_run = self._update_timeline(
             drill_run,
@@ -351,7 +357,7 @@ class AnalysisService:
             failure_signals=failure_analysis.failure_signals,
             analysis_timeline=drill_run.analysis_timeline,
         )
-        return patch, drill_run
+        return patch, drill_run, analyzed_answer_count
 
     def _update_timeline(
         self,
