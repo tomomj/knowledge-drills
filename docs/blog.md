@@ -104,6 +104,8 @@ v1 では「領収書を紛失したときの扱い」が書かれておらず�
 
 ## アーキテクチャ
 
+### システム全体
+
 ```mermaid
 flowchart LR
     subgraph GC["Google Cloud"]
@@ -123,49 +125,103 @@ flowchart LR
     GH -. "Terraform で構築" .-> GC
 ```
 
-バックエンドは FastAPI です。Firestore 更新、schema 検証、diff 生成、patch apply は backend 側の責務に寄せました。
-エージェントが直接データを書き換えないようにして、信頼境界を明確にしています。
+React frontend と FastAPI backend を Cloud Run 上で動かし、Firestore と Vertex AI に接続します。
+Backend 内の Google ADK Runner から、実処理 Agent が Gemini 3.1 Flash Lite を呼び出します。
+Firestore 更新、diff 生成、patch の適用は Backend の責務です。
+Agent はデータを直接書き換えず、判断結果だけを schema に沿って返します。
 
-エージェント構成は、完全自由な swarm ではなく **deterministic orchestration + autonomous judgment** にしました。
-つまり、実行順は監査しやすい固定の workflow にします。一方で、各ステップの中では入力に応じて判断を分岐させます。
+### Agent 実行アーキテクチャ
+
+`root_agent` は ADK discovery 用に残していますが、本番では自由な Agent 転送を行いません。FastAPI が task 名を見て、対応する
+parentless Agent 専用の ADK Runner を選びます。実行経路を固定しながら、各 Agent の中では入力に応じた判断ができます。
 
 ```mermaid
 flowchart LR
-    DG["drill_generator_agent<br/>教材から根拠付きドリル生成"]
-    GR["grading_agent<br/>rubric に基づく採点"]
+    BE["FastAPI<br/>deterministic task router"]
 
-    subgraph FA["failure_analysis_agent"]
-        direction LR
-        subgraph P["ParallelAgent: 3 視点で並列分析"]
-            A1["つまずきパターン"]
-            A2["教材ギャップ"]
-            A3["設問品質"]
-        end
-        subgraph L["LoopAgent: 最大 3 回"]
-            C1["evidence critic<br/>根拠の採否を評価"] --> C2["critic reviewer<br/>評価の妥当性をレビュー"]
-        end
-        F["finalizer<br/>承認済み所見だけ採用"]
-        P --> L --> F
+    subgraph ADK["Google ADK: taskごとの独立Runner"]
+        DG["drill_generator_agent<br/>根拠付き3問を生成"]
+        GR["grading_agent<br/>rubricだけで採点"]
+        FA["failure_analysis_agent<br/>複合Agentで誤答分析"]
+        DP["document_patch_agent<br/>最小限のpatchを起案"]
     end
 
-    DP["document_patch_agent<br/>最小限の Markdown patch 起案"]
-    DG --> GR --> FA --> DP
+    BE -->|generate_drill| DG
+    BE -->|grade_answer| GR
+    BE -->|analyze_failures| FA
+    BE -->|承認済み所見がある場合のみ| DP
+
+    DG --> VX["Vertex AI<br/>Gemini 3.1 Flash Lite"]
+    GR --> VX
+    FA --> VX
+    DP --> VX
+
+    DG --> SCHEMA["Pydantic schema<br/>+ Backendの文脈検証"]
+    GR --> SCHEMA
+    FA --> SCHEMA
+    DP --> SCHEMA
+    SCHEMA --> BE
 ```
 
-分析は、誤答の原因を受講者・教材・設問の 3 視点で切り分けます。critic が根拠の弱い所見を棄却し、
-finalizer は承認済みの所見だけを採用します。「教材か、設問か」「提案するか、見送るか」という判断を
-監査可能にしたことが、agentic workflow を使う理由です。
+| Agent | 判断すること | 守る契約 |
+|---|---|---|
+| drill generator | 教材のどこを実務シナリオにするか | 3問固定、教材に実在する `sourceEvidence` |
+| grading | 回答が rubric をどこまで満たすか | 回答にない内容を補わない、`score <= maxScore` |
+| failure analysis | 原因が受講者・教材・設問のどこにあるか | 回答件数、教材根拠、採否理由を残す |
+| document patch | どの最小変更で所見を解消するか | 承認済み所見だけを使い、diff とリスクを返す |
+
+### 誤答分析 Agent の内部
+
+Agentic な判断が最も必要なのは誤答分析です。単発のプロンプトではなく、3視点の並列分析、
+根拠を疑うレビューループ、承認済み所見だけを採用する finalizer を `SequentialAgent` で構成しています。
+
+```mermaid
+flowchart TB
+    IN["採点済み回答<br/>教材・設問・rubric"]
+
+    subgraph FA["failure_analysis_agent / SequentialAgent"]
+        direction LR
+        subgraph P["ParallelAgent: 3 視点で並列分析"]
+            A1["受講者の<br/>つまずきパターン"]
+            A2["教材の<br/>説明不足・曖昧さ"]
+            A3["設問・rubricの<br/>品質"]
+        end
+        subgraph L["LoopAgent: 最大 3 回"]
+            C1["evidence critic<br/>根拠から採用・棄却"]
+            C2["critic reviewer<br/>criticの判断を再審査"]
+            G{"ReviewLoopGate<br/>構造と承認を検証"}
+            C1 --> C2 --> G
+            G -. "needs_revision / 残りあり" .-> C1
+        end
+        AG["ApprovedFindingsGate<br/>承認対象を再検証"]
+        F["finalizer<br/>承認済み所見だけで出力"]
+        P --> C1
+        G -->|approved / 最大3回到達| AG --> F
+    end
+
+    IN --> P
+    F --> OUT{"承認済み<br/>Failure Signal"}
+    OUT -->|1件以上| PATCH["document_patch_agentを実行"]
+    OUT -->|0件| SKIP["patchを作らず正常終了<br/>見送り理由を記録"]
+```
+
+3 つの分析結果は session state へ保存され、critic と reviewer が根拠・採否・リスクを検証します。
+最大 3 回で承認に至らなくても、明示的に承認された所見だけを部分採用できます。承認済み所見が
+ゼロならパッチ生成を見送り、「直さない」という判断もタイムラインへ残します。
 
 ## 設計判断
 
-### 固定する場所と、判断させる場所を分ける
+### 自由にさせる場所を限定する
 
-ドリル生成と採点は Pydantic schema で固定し、3 問固定、rubric 合計、score 上限、教材根拠の実在を
-backend で検証します。一方、誤答分析では入力に応じて原因・根拠・修正要否を判断させます。
-workflow は固定、判断は入力依存、最後は人間の gate です。この境界なら社内ルールを含む教材にも運用しやすくなります。
+完全自由な swarm ではなく、**deterministic orchestration + autonomous judgment** を選びました。
+どの Agent を実行するかは Backend が固定し、原因の切り分けや根拠の採否だけを Agent に判断させます。
+予期しない Agent 転送を防ぎながら、単純なワークフローでは扱えない判断を残すためです。
 
-承認できる所見がゼロなら、パッチを作らず正常終了します。「直さない」判断もタイムラインに残ります。
-次の周回では、却下理由を次回分析へ返すことと、要分析バッジから分析を自動起動することに取り組みます。
+### Schema と人間を信頼境界にする
+
+Agent の入出力は Pydantic schema で固定し、3 問固定、rubric 合計、score 上限、教材根拠の実在を
+Backend でも検証します。Agent はパッチを起案するところまでで、適用・却下は必ず講座オーナーが決めます。
+社内ルールを含む教材でも、AI に最終決定やデータ更新を渡さないための境界です。
 
 ### エージェントにも CI/CD を
 
