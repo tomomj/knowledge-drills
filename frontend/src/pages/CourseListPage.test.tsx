@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -52,11 +52,27 @@ vi.mock('../api/client', () => ({
 }))
 
 function renderList() {
-  render(
+  return render(
     <MemoryRouter initialEntries={['/courses']}>
       <CourseListPage />
     </MemoryRouter>,
   )
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+async function flushPromises() {
+  await act(async () => {
+    await Promise.resolve()
+  })
 }
 
 describe('CourseListPage', () => {
@@ -66,6 +82,7 @@ describe('CourseListPage', () => {
 
   afterEach(() => {
     cleanup()
+    vi.useRealTimers()
   })
 
   it('renders course rows with status chips and links', async () => {
@@ -131,5 +148,109 @@ describe('CourseListPage', () => {
       ).toBeTruthy(),
     )
     expect(screen.getByRole('button', { name: '＋ 新しい講座を作成' })).toBeTruthy()
+  })
+
+  it('loads immediately and refreshes the analysis badge after fifteen seconds', async () => {
+    vi.useFakeTimers()
+    mocks.listCourses
+      .mockResolvedValueOnce({ courses })
+      .mockResolvedValueOnce({
+        courses: [{ ...courses[0], needsAnalysis: true }, courses[1]],
+      })
+
+    renderList()
+
+    expect(mocks.listCourses).toHaveBeenCalledTimes(1)
+    await flushPromises()
+    expect(screen.queryByText('低スコア回答が蓄積 — 分析推奨')).toBeNull()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+
+    expect(mocks.listCourses).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('低スコア回答が蓄積 — 分析推奨')).toBeTruthy()
+    expect(screen.queryByText('分析できます')).toBeNull()
+  })
+
+  it('keeps the current list after a background failure and retries next interval', async () => {
+    vi.useFakeTimers()
+    mocks.listCourses
+      .mockResolvedValueOnce({ courses })
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce({
+        courses: [{ ...courses[0], needsAnalysis: true }, courses[1]],
+      })
+
+    renderList()
+    await flushPromises()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+
+    expect(mocks.listCourses).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('情報セキュリティ入門')).toBeTruthy()
+    expect(screen.queryByText('講座一覧の取得に失敗しました。')).toBeNull()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+
+    expect(mocks.listCourses).toHaveBeenCalledTimes(3)
+    expect(screen.getByText('低スコア回答が蓄積 — 分析推奨')).toBeTruthy()
+  })
+
+  it('does not overlap polling requests and resumes after the request settles', async () => {
+    vi.useFakeTimers()
+    const inFlight = deferred<{ courses: CourseSummary[] }>()
+    mocks.listCourses
+      .mockResolvedValueOnce({ courses })
+      .mockReturnValueOnce(inFlight.promise)
+      .mockResolvedValueOnce({ courses })
+
+    renderList()
+    await flushPromises()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+    expect(mocks.listCourses).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(45_000)
+    })
+    expect(mocks.listCourses).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      inFlight.resolve({ courses })
+      await inFlight.promise
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+
+    expect(mocks.listCourses).toHaveBeenCalledTimes(3)
+  })
+
+  it('stops polling and ignores an in-flight response after unmount', async () => {
+    vi.useFakeTimers()
+    const inFlight = deferred<{ courses: CourseSummary[] }>()
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    mocks.listCourses.mockReturnValueOnce(inFlight.promise)
+
+    const view = renderList()
+    expect(mocks.listCourses).toHaveBeenCalledTimes(1)
+
+    view.unmount()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+      inFlight.resolve({ courses })
+      await inFlight.promise
+    })
+
+    expect(mocks.listCourses).toHaveBeenCalledTimes(1)
+    expect(consoleError).not.toHaveBeenCalled()
+    consoleError.mockRestore()
   })
 })

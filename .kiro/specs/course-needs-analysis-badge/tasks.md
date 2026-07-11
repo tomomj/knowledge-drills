@@ -76,7 +76,7 @@
   - 完了条件: チップ表示・置換・非点灯不変のテスト（CourseListPage.test.tsx）が通る
   - _Requirements: 4.1, 4.2, 4.3_
 
-- [ ] 4.2 講座一覧の 15 秒ポーリング
+- [x] 4.2 講座一覧の 15 秒ポーリング
   - 既存 useEffect 内に setInterval（15 秒）+ fetching ガード + active フラグを実装する。初回は即時取得
   - 更新失敗時の state 判定は functional update に固定する（ready なら据え置き、初回失敗のみ failed）
   - アンマウント時に clearInterval し、完了済みリクエストから state を更新しない
