@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from app.repositories.firestore_client import FirestoreClient
+from app.repositories.firestore_client import DocumentNotFound, FirestoreClient
 from app.schemas import (
     AnswerStatus,
     AnswerSubmission,
@@ -178,6 +178,29 @@ class DrillRepository:
             drill_run.id,
             drill_run.model_dump(mode="json", by_alias=True),
         )
+
+    def initialize_analyzed_answer_count(self, drill_run_id: str, baseline: int) -> None:
+        if baseline < 0:
+            raise ValueError("baseline must be greater than or equal to zero")
+
+        def initialize() -> None:
+            document = self._client.get_document(self.collection, drill_run_id)
+            if document is None:
+                raise DocumentNotFound(f"{self.collection}/{drill_run_id} was not found")
+            analyzed_answer_count = document.get("analyzedAnswerCount")
+            has_recorded_count = isinstance(analyzed_answer_count, int) and not isinstance(
+                analyzed_answer_count,
+                bool,
+            )
+            if has_recorded_count or document.get("status") != DrillRunStatus.ANALYZED.value:
+                return
+            self._client.update_document(
+                self.collection,
+                drill_run_id,
+                {"analyzedAnswerCount": baseline},
+            )
+
+        self._client.run_transaction(initialize)
 
     def list_by_course(self, course_id: str) -> list[DrillRun]:
         return [
