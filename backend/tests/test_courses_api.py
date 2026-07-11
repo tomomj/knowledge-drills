@@ -1,6 +1,10 @@
+from typing import cast
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.repositories.firestore_client import InMemoryFirestoreClient
+from app.repositories.repositories import CourseRepository
 from app.schemas import (
     AnswerStatus,
     AnswerSubmission,
@@ -14,6 +18,7 @@ from app.schemas import (
     RubricItem,
     SourceEvidence,
 )
+from app.services.course_service import CourseService
 
 
 def test_list_courses_seeds_demo_courses_for_new_owner(client: TestClient) -> None:
@@ -27,6 +32,83 @@ def test_list_courses_seeds_demo_courses_for_new_owner(client: TestClient) -> No
         "経費精算の判断基準(デモ・改善 3 周済み)",
     }
     assert all(course["isDemo"] is True for course in courses)
+    needs_analysis_by_title = {
+        course["title"]: course["needsAnalysis"] for course in courses
+    }
+    assert needs_analysis_by_title == {
+        "DevOps x AI Agent Hackathon 2026 参加ガイド(デモ)": True,
+        "経費精算の判断基準(デモ・改善 3 周済み)": False,
+    }
+
+
+def test_list_courses_defaults_needs_analysis_to_false_without_evaluation_repositories() -> None:
+    course_repository = CourseRepository(InMemoryFirestoreClient())
+    course_repository.create(
+        Course(
+            id="course-1",
+            owner_user_id="owner-1",
+            title="講座",
+            markdown="# Body",
+        )
+    )
+    service = CourseService(course_repository)
+
+    response = service.list_courses("owner-1")
+
+    assert response.courses[0].needs_analysis is False
+
+
+def test_list_courses_recomputes_needs_analysis_without_persisting_it(
+    client: TestClient,
+) -> None:
+    create = client.post("/api/courses", json={"title": "監視対象", "markdown": "# Body"})
+    course_id = create.json()["courseId"]
+    app_state = client.app.state  # type: ignore[attr-defined]
+    app_state.drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id=course_id,
+            course_version=1,
+            status=DrillRunStatus.READY,
+        )
+    )
+    for index in range(2):
+        app_state.answer_repository.create_submission(
+            AnswerSubmission(
+                id=f"answer-{index}",
+                drill_run_id="drill-1",
+                learner_name=f"受講者{index}",
+                status=AnswerStatus.GRADED,
+                answers={"q1": "回答"},
+                total_score=0,
+                max_score=100,
+            )
+        )
+
+    first = client.get("/api/courses")
+    stored_after_first = app_state.firestore_client.get_document("courses", course_id)
+    app_state.answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-2",
+            drill_run_id="drill-1",
+            learner_name="受講者2",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=0,
+            max_score=100,
+        )
+    )
+    second = client.get("/api/courses")
+    stored_after_second = app_state.firestore_client.get_document("courses", course_id)
+
+    assert first.status_code == 200
+    assert first.json()["courses"][0]["needsAnalysis"] is False
+    assert second.status_code == 200
+    assert second.json()["courses"][0]["needsAnalysis"] is True
+    assert stored_after_first is not None
+    assert "needsAnalysis" not in stored_after_first
+    assert stored_after_second is not None
+    assert "needsAnalysis" not in stored_after_second
 
 
 def test_list_courses_returns_summaries_sorted_by_updated_at(client: TestClient) -> None:
@@ -73,14 +155,47 @@ def test_list_courses_uses_stored_summary_without_related_collection_reads(
         latest_patch_status=PatchStatus.PROPOSED,
         score_trend=[],
     )
+    app_state.drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id=course_id,
+            course_version=1,
+            status=DrillRunStatus.READY,
+        )
+    )
+    app_state.answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-1",
+            drill_run_id="drill-1",
+            learner_name="受講者",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=0,
+            max_score=100,
+        )
+    )
+
+    list_by_course = app_state.drill_repository.list_by_course
+    list_by_drill_run = app_state.answer_repository.list_by_drill_run
+    drill_list_calls: list[str] = []
+    answer_list_calls: list[str] = []
+
+    def observe_drill_list(course_id: str) -> list[DrillRun]:
+        drill_list_calls.append(course_id)
+        return cast(list[DrillRun], list_by_course(course_id))
+
+    def observe_answer_list(drill_run_id: str) -> list[AnswerSubmission]:
+        answer_list_calls.append(drill_run_id)
+        return cast(list[AnswerSubmission], list_by_drill_run(drill_run_id))
 
     def fail_related_read(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("course list should use stored course summary")
 
     monkeypatch.setattr(app_state.drill_repository, "get", fail_related_read)
-    monkeypatch.setattr(app_state.drill_repository, "list_by_course", fail_related_read)
-    monkeypatch.setattr(app_state.answer_repository, "list_by_drill_run", fail_related_read)
+    monkeypatch.setattr(app_state.drill_repository, "list_by_course", observe_drill_list)
+    monkeypatch.setattr(app_state.answer_repository, "list_by_drill_run", observe_answer_list)
     monkeypatch.setattr(app_state.patch_repository, "get", fail_related_read)
+    monkeypatch.setattr(app_state.course_repository, "update_summary", fail_related_read)
 
     response = client.get("/api/courses")
 
@@ -93,6 +208,9 @@ def test_list_courses_uses_stored_summary_without_related_collection_reads(
     assert summary["latestPatchId"] == "patch-1"
     assert summary["scoreTrend"] == []
     assert summary["isDemo"] is False
+    assert summary["needsAnalysis"] is False
+    assert drill_list_calls == [course_id]
+    assert answer_list_calls == ["drill-1"]
 
 
 def test_list_courses_backfills_legacy_summary_fields(client: TestClient) -> None:
