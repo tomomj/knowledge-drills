@@ -26,6 +26,7 @@ from app.schemas import (
     CourseUpdateRequest,
     DrillRun,
 )
+from app.services.needs_analysis import evaluate_course_needs_analysis
 from app.utils.diff import build_unified_diff
 
 MAX_COURSE_MARKDOWN_CHARS = 20_000
@@ -194,6 +195,13 @@ class CourseService:
         answer_count = course.answer_count
         patch_status = course.latest_patch_status
         score_trend = course.score_trend
+        needs_analysis = False
+        if self._drill_repository is not None and self._answer_repository is not None:
+            needs_analysis = evaluate_course_needs_analysis(
+                course,
+                self._drill_repository,
+                self._answer_repository,
+            )
 
         if (
             course.latest_drill_run_id
@@ -249,6 +257,7 @@ class CourseService:
             latest_patch_id=course.latest_patch_id,
             score_trend=score_trend,
             is_demo=course.is_demo,
+            needs_analysis=needs_analysis,
         )
 
     def _build_metrics_run(self, drill_run: DrillRun) -> CourseMetricsRun:
