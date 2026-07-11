@@ -77,6 +77,22 @@ class ReadOrderFirestoreClient(InMemoryFirestoreClient):
         super().update_document(collection, document_id, data)
 
 
+class FailCourseCompletionFirestoreClient(InMemoryFirestoreClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_course_update = False
+
+    def update_document(
+        self,
+        collection: str,
+        document_id: str,
+        data: dict[str, object],
+    ) -> None:
+        if self.fail_course_update and collection == CourseRepository.collection:
+            raise RuntimeError("injected course completion failure")
+        super().update_document(collection, document_id, data)
+
+
 def create_drill_run_without_analyzed_answer_count(
     client: InMemoryFirestoreClient,
     drill_run: DrillRun,
@@ -198,6 +214,216 @@ def create_auto_claim_fixture(
         answer_repository,
         patch_repository,
     )
+
+
+def make_completion_patch(
+    *, analysis_origin: AnalysisOrigin = AnalysisOrigin.MANUAL
+) -> DocumentPatch:
+    return DocumentPatch(
+        id="patch-completed",
+        course_id="caller-course",
+        drill_run_id="caller-drill",
+        status=PatchStatus.PROPOSED,
+        base_markdown="# Before",
+        patched_markdown="# After",
+        patch_summary="教材を改善",
+        diff_text="--- before\n+++ after",
+        analysis_origin=analysis_origin,
+    )
+
+
+def completed_timeline() -> list[AnalysisTimelineItem]:
+    return [
+        AnalysisTimelineItem(
+            id="create_patch",
+            title="修正案を作成",
+            status=AnalysisStepStatus.COMPLETED,
+            summary="完了",
+        )
+    ]
+
+
+def test_complete_analysis_atomically_persists_patch_drill_and_course_summary() -> None:
+    client, repository, courses, drills, answers, patches = create_auto_claim_fixture()
+    claim = repository.claim_auto_analysis("drill-1")
+    assert claim is not None
+    answers.create_submission(
+        AnswerSubmission(
+            id="later-answer",
+            drill_run_id="drill-1",
+            learner_name="後着回答",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=0,
+            max_score=4,
+        )
+    )
+    transaction_count = client.transaction_count
+
+    completed = repository.complete_analysis(claim, completed_timeline(), make_completion_patch())
+
+    assert completed is not None
+    assert completed.course_id == claim.course_id
+    assert completed.drill_run_id == claim.drill_run_id
+    assert completed.analysis_origin is AnalysisOrigin.AUTOMATIC
+    assert patches.get(completed.id) == completed
+    saved_drill = drills.get(claim.drill_run_id)
+    assert saved_drill is not None
+    assert saved_drill.status is DrillRunStatus.ANALYZED
+    assert saved_drill.error_message is None
+    assert saved_drill.analysis_timeline == completed_timeline()
+    assert saved_drill.analysis_origin is AnalysisOrigin.AUTOMATIC
+    assert saved_drill.analyzed_answer_count == 5
+    assert saved_drill.auto_analyzed_scored_answer_count == 5
+    assert saved_drill.latest_patch_id == completed.id
+    saved_course = courses.get(claim.course_id)
+    assert saved_course is not None
+    assert saved_course.latest_drill_run_id == claim.drill_run_id
+    assert saved_course.latest_drill_status is DrillRunStatus.ANALYZED
+    assert saved_course.latest_patch_id == completed.id
+    assert saved_course.latest_patch_status is PatchStatus.PROPOSED
+    assert saved_course.answer_count == 5
+    assert client.transaction_count == transaction_count + 1
+
+
+def test_complete_analysis_without_patch_advances_snapshot_and_preserves_course_patch() -> None:
+    client, repository, courses, drills, _answers, patches = create_auto_claim_fixture()
+    claim = repository.claim_auto_analysis("drill-1")
+    assert claim is not None
+    client.update_document(
+        CourseRepository.collection,
+        claim.course_id,
+        {"latestPatchId": "older-patch", "latestPatchStatus": PatchStatus.PROPOSED.value},
+    )
+
+    completed = repository.complete_analysis(claim, completed_timeline(), None)
+
+    assert completed is None
+    assert patches.list_by_course(claim.course_id) == []
+    saved_drill = drills.get(claim.drill_run_id)
+    assert saved_drill is not None
+    assert saved_drill.status is DrillRunStatus.ANALYZED
+    assert saved_drill.analyzed_answer_count == claim.snapshot_agent_answer_count
+    assert saved_drill.auto_analyzed_scored_answer_count == claim.snapshot_scored_answer_count
+    assert saved_drill.latest_patch_id is None
+    saved_course = courses.get(claim.course_id)
+    assert saved_course is not None
+    assert saved_course.latest_drill_status is DrillRunStatus.ANALYZED
+    assert saved_course.latest_patch_id == "older-patch"
+    assert saved_course.latest_patch_status is PatchStatus.PROPOSED
+
+
+def test_complete_analysis_never_regresses_either_watermark() -> None:
+    client, repository, _courses, drills, _answers, _patches = create_auto_claim_fixture()
+    claim = repository.claim_auto_analysis("drill-1")
+    assert claim is not None
+    client.update_document(
+        DrillRepository.collection,
+        claim.drill_run_id,
+        {"analyzedAnswerCount": 8, "autoAnalyzedScoredAnswerCount": 7},
+    )
+
+    repository.complete_analysis(claim, completed_timeline(), None)
+
+    saved_drill = drills.get(claim.drill_run_id)
+    assert saved_drill is not None
+    assert saved_drill.analyzed_answer_count == 8
+    assert saved_drill.auto_analyzed_scored_answer_count == 7
+
+
+def test_complete_manual_analysis_keeps_agent_and_scored_watermarks_separate() -> None:
+    _client, repository, _courses, drills, answers = create_manual_claim_fixture()
+    for answer in (
+        AnswerSubmission(
+            id="scored",
+            drill_run_id="drill-1",
+            learner_name="採点済み",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=1,
+            max_score=4,
+        ),
+        AnswerSubmission(
+            id="missing-score",
+            drill_run_id="drill-1",
+            learner_name="スコア欠損",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        ),
+    ):
+        answers.create_submission(answer)
+    claim = repository.claim_manual_analysis("drill-1", "owner-1")
+
+    completed = repository.complete_analysis(
+        claim,
+        completed_timeline(),
+        make_completion_patch(analysis_origin=AnalysisOrigin.AUTOMATIC),
+    )
+
+    assert completed is not None
+    assert completed.analysis_origin is AnalysisOrigin.MANUAL
+    saved_drill = drills.get(claim.drill_run_id)
+    assert saved_drill is not None
+    assert saved_drill.analysis_origin is AnalysisOrigin.MANUAL
+    assert saved_drill.analyzed_answer_count == 2
+    assert saved_drill.auto_analyzed_scored_answer_count == 1
+
+
+def test_complete_analysis_rejects_changed_course_version_without_consuming_claim() -> None:
+    client, repository, _courses, _drills, _answers, _patches = create_auto_claim_fixture()
+    claim = repository.claim_auto_analysis("drill-1")
+    assert claim is not None
+    client.update_document(CourseRepository.collection, claim.course_id, {"version": 3})
+    drill_before = client.get_document(DrillRepository.collection, claim.drill_run_id)
+    course_before = client.get_document(CourseRepository.collection, claim.course_id)
+
+    with pytest.raises(AppError) as exc_info:
+        repository.complete_analysis(claim, completed_timeline(), make_completion_patch())
+
+    assert exc_info.value.code == "analysis_course_version_changed"
+    assert client.get_document(PatchRepository.collection, "patch-completed") is None
+    assert client.get_document(DrillRepository.collection, claim.drill_run_id) == drill_before
+    assert client.get_document(CourseRepository.collection, claim.course_id) == course_before
+
+
+def test_complete_analysis_rejects_claim_state_mismatch_without_writes() -> None:
+    client, repository, _courses, _drills, _answers, _patches = create_auto_claim_fixture()
+    claim = repository.claim_auto_analysis("drill-1")
+    assert claim is not None
+    client.update_document(
+        DrillRepository.collection,
+        claim.drill_run_id,
+        {"status": DrillRunStatus.READY.value},
+    )
+    drill_before = client.get_document(DrillRepository.collection, claim.drill_run_id)
+    course_before = client.get_document(CourseRepository.collection, claim.course_id)
+
+    with pytest.raises(AppError) as exc_info:
+        repository.complete_analysis(claim, completed_timeline(), make_completion_patch())
+
+    assert exc_info.value.code == "analysis_claim_conflict"
+    assert client.get_document(PatchRepository.collection, "patch-completed") is None
+    assert client.get_document(DrillRepository.collection, claim.drill_run_id) == drill_before
+    assert client.get_document(CourseRepository.collection, claim.course_id) == course_before
+
+
+def test_complete_analysis_rolls_back_patch_drill_and_course_on_failure() -> None:
+    fault_client = FailCourseCompletionFirestoreClient()
+    client, repository, _courses, _drills, _answers, _patches = create_auto_claim_fixture(
+        client=fault_client
+    )
+    claim = repository.claim_auto_analysis("drill-1")
+    assert claim is not None
+    drill_before = client.get_document(DrillRepository.collection, claim.drill_run_id)
+    course_before = client.get_document(CourseRepository.collection, claim.course_id)
+    fault_client.fail_course_update = True
+
+    with pytest.raises(RuntimeError, match="injected course completion failure"):
+        repository.complete_analysis(claim, completed_timeline(), make_completion_patch())
+
+    assert client.get_document(PatchRepository.collection, "patch-completed") is None
+    assert client.get_document(DrillRepository.collection, claim.drill_run_id) == drill_before
+    assert client.get_document(CourseRepository.collection, claim.course_id) == course_before
 
 
 def test_auto_analysis_claim_snapshots_only_scored_answers_and_marks_automatic() -> None:
