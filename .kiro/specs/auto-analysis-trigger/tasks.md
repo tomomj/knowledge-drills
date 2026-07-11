@@ -133,7 +133,7 @@
   - _Boundary: Cloud Run runtime_
 
 - [ ] 6. 交差ケースとend-to-end回帰を検証する
-- [ ] 6.1 (P) 実競合とpatch completionのlinearizationを検証する
+- [x] 6.1 (P) 実競合とpatch completionのlinearizationを検証する
   - 実threadでauto/autoとmanual/autoを同時開始し、分析開始が高々1件になることを確認する。
   - patch completion先行ではclaim再評価後no-op、auto claim先行では開始済み分析を継続する順序を確認する。
   - repository-level guard testとは重複せず、実競合時のtransaction順序と最終永続状態だけを検証する。
