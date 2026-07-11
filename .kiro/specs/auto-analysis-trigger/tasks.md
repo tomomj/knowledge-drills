@@ -81,7 +81,7 @@
   - application構築testで全serviceが同じexecution境界を利用し、manual分析回帰が成功することを確認できる。
   - _Requirements: 3.5, 3.6, 4.4, 5.1, 5.2_
 
-- [ ] 3.2 current/legacy採点成功後にresponse後taskを登録する
+- [x] 3.2 current/legacy採点成功後にresponse後taskを登録する
   - current/legacy回答routeで採点済み回答の保存後にrequestごと1件だけbackground taskを登録する。
   - 採点失敗・validation失敗ではtaskを登録せず、taskの完了や失敗で返却済み採点結果を変更しない。
   - ASGI send順序を観測するfakeを使い、response body送信後にtaskが開始されることを確認する。

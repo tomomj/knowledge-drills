@@ -1,12 +1,47 @@
+import json
 from typing import cast
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from starlette.types import Message, Scope
 
 from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.schemas import DrillQuestion, DrillRun, DrillRunStatus, RubricItem, SourceEvidence
 from app.services.answer_service import AnswerService
+from app.services.auto_analysis import AutoAnalysisTrigger
+
+
+class RecordingAutoAnalysisTrigger:
+    def __init__(self, events: list[str] | None = None) -> None:
+        self.drill_run_ids: list[str] = []
+        self._events = events
+
+    def maybe_run(self, drill_run_id: str) -> None:
+        self.drill_run_ids.append(drill_run_id)
+        if self._events is not None:
+            self._events.append("task")
+
+
+def _install_recording_trigger(
+    client: TestClient,
+    events: list[str] | None = None,
+) -> RecordingAutoAnalysisTrigger:
+    trigger = RecordingAutoAnalysisTrigger(events)
+    app = cast(FastAPI, client.app)
+    app.state.auto_analysis_trigger = cast(AutoAnalysisTrigger, trigger)
+    return trigger
+
+
+def _answer_payload() -> dict[str, object]:
+    return {
+        "learnerName": "受講者",
+        "answers": [
+            {"questionId": "q1", "answerText": "短い回答"},
+            {"questionId": "q2", "answerText": "短い回答"},
+            {"questionId": "q3", "answerText": "短い回答"},
+        ],
+    }
 
 
 def _question(question_id: str) -> DrillQuestion:
@@ -83,18 +118,9 @@ def test_submit_answer_returns_minimal_feedback_without_private_fields(
             "failureTags": ["missing_evidence"],
         },
     )
+    trigger = _install_recording_trigger(client)
 
-    response = client.post(
-        path,
-        json={
-            "learnerName": "受講者",
-            "answers": [
-                {"questionId": "q1", "answerText": "短い回答"},
-                {"questionId": "q2", "answerText": "短い回答"},
-                {"questionId": "q3", "answerText": "短い回答"},
-            ],
-        },
-    )
+    response = client.post(path, json=_answer_payload())
 
     assert response.status_code == 201
     payload = response.json()
@@ -106,6 +132,73 @@ def test_submit_answer_returns_minimal_feedback_without_private_fields(
     ]
     assert "rubric" not in str(payload)
     assert "idealAnswer" not in str(payload)
+    assert trigger.drill_run_ids == ["drill-1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    ["/api/drills/share-token/answers", "/api/learn/share-token/answers"],
+)
+async def test_submit_answer_starts_background_task_after_response_body_is_sent(
+    client: TestClient,
+    path: str,
+) -> None:
+    _configure_ready_drill_and_answer_service(
+        client,
+        {
+            "questionId": "q1",
+            "score": 3,
+            "maxScore": 4,
+            "correctPoints": ["判断できている"],
+            "missingPoints": ["根拠が不足"],
+            "feedback": "根拠を添えるとさらに良くなります。",
+            "failureTags": ["missing_evidence"],
+        },
+    )
+    events: list[str] = []
+    trigger = _install_recording_trigger(client, events)
+    sent_messages: list[Message] = []
+    body = json.dumps(_answer_payload()).encode()
+    request_messages = [
+        {"type": "http.request", "body": body, "more_body": False},
+    ]
+
+    async def receive() -> Message:
+        if request_messages:
+            return request_messages.pop(0)
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        sent_messages.append(message)
+        if message["type"] == "http.response.body" and not message.get("more_body", False):
+            events.append("body")
+
+    app = cast(FastAPI, client.app)
+    scope: Scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (b"host", b"testserver"),
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(body)).encode()),
+        ],
+        "client": ("testclient", 50000),
+        "server": ("testserver", 80),
+    }
+    await app(scope, receive, send)
+
+    start = next(message for message in sent_messages if message["type"] == "http.response.start")
+    assert start["status"] == 201
+    assert events == ["body", "task"]
+    assert trigger.drill_run_ids == ["drill-1"]
 
 
 @pytest.mark.parametrize("status", [DrillRunStatus.ANALYZING, DrillRunStatus.ANALYZED])
@@ -178,16 +271,85 @@ def test_submit_answer_rejects_non_distributable_status(
     assert response.json()["code"] == "invalid_share_token"
 
 
-def test_submit_answer_invalid_token_returns_404(client: TestClient) -> None:
-    response = client.post(
-        "/api/drills/missing-token/answers",
-        json={"learnerName": "受講者", "answers": []},
-    )
+@pytest.mark.parametrize(
+    "path",
+    ["/api/drills/missing-token/answers", "/api/learn/missing-token/answers"],
+)
+def test_submit_answer_invalid_token_returns_404(client: TestClient, path: str) -> None:
+    trigger = _install_recording_trigger(client)
+
+    response = client.post(path, json={"learnerName": "受講者", "answers": []})
 
     assert response.status_code == 404
     assert response.json()["code"] == "invalid_share_token"
+    assert trigger.drill_run_ids == []
 
 
+@pytest.mark.parametrize(
+    "path",
+    ["/api/drills/share-token/answers", "/api/learn/share-token/answers"],
+)
+def test_submit_answer_grading_failure_does_not_schedule_background_task(
+    client: TestClient,
+    path: str,
+) -> None:
+    _configure_ready_drill_and_answer_service(client, {})
+    trigger = _install_recording_trigger(client)
+
+    response = client.post(path, json=_answer_payload())
+
+    assert response.status_code == 502
+    assert response.json()["code"] == "agent_invocation_failed"
+    assert trigger.drill_run_ids == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/drills/share-token/answers", "/api/learn/share-token/answers"],
+)
+def test_submit_answer_response_is_unchanged_when_background_trigger_fails(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+) -> None:
+    _configure_ready_drill_and_answer_service(
+        client,
+        {
+            "questionId": "q1",
+            "score": 3,
+            "maxScore": 4,
+            "correctPoints": ["判断できている"],
+            "missingPoints": ["根拠が不足"],
+            "feedback": "採点結果は維持されます。",
+            "failureTags": ["missing_evidence"],
+        },
+    )
+    app = cast(FastAPI, client.app)
+
+    def fail_claim(_drill_run_id: str) -> None:
+        raise RuntimeError("claim unavailable")
+
+    monkeypatch.setattr(
+        app.state.analysis_execution_repository,
+        "claim_auto_analysis",
+        fail_claim,
+    )
+
+    response = client.post(path, json=_answer_payload())
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "graded"
+    assert response.json()["feedback"] == [
+        "採点結果は維持されます。",
+        "採点結果は維持されます。",
+        "採点結果は維持されます。",
+    ]
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/drills/share-token/answers", "/api/learn/share-token/answers"],
+)
 @pytest.mark.parametrize(
     "learner_name,answer_text",
     [
@@ -199,6 +361,7 @@ def test_submit_answer_rejects_oversized_text(
     client: TestClient,
     learner_name: str,
     answer_text: str,
+    path: str,
 ) -> None:
     _configure_ready_drill_and_answer_service(
         client,
@@ -212,9 +375,10 @@ def test_submit_answer_rejects_oversized_text(
             "failureTags": [],
         },
     )
+    trigger = _install_recording_trigger(client)
 
     response = client.post(
-        "/api/drills/share-token/answers",
+        path,
         json={
             "learnerName": learner_name,
             "answers": [
@@ -227,3 +391,4 @@ def test_submit_answer_rejects_oversized_text(
 
     assert response.status_code == 422
     assert response.json()["code"] == "validation_error"
+    assert trigger.drill_run_ids == []
