@@ -26,6 +26,7 @@ from app.schemas import (
     LearnerDrillQuestionResponse,
     LearnerDrillResponse,
     QuestionScoreSummary,
+    ShareStatus,
     SourceEvidence,
 )
 from app.services.drill_status_policy import is_distributable_drill_status
@@ -74,6 +75,7 @@ class DrillService:
         course = self._course_repository.get(course_id)
         if course is None or course.owner_user_id != owner_user_id:
             raise AppError("course_not_found", "Course was not found.", status_code=404)
+        existing_share_token = self._find_published_share_token(course_id)
 
         drill_run = DrillRun(
             id=uuid4().hex,
@@ -84,7 +86,10 @@ class DrillService:
             drill_focus=course.drill_focus,
             status=DrillRunStatus.GENERATING,
         )
-        self._share_token_service.create_drill_run_with_reserved_token(drill_run)
+        self._share_token_service.create_drill_run_with_reserved_token(
+            drill_run,
+            existing_token=existing_share_token,
+        )
         saved_drill_run = self._drill_repository.get(drill_run.id)
         if saved_drill_run is None:
             raise RuntimeError("drill run was not created")
@@ -121,9 +126,17 @@ class DrillService:
                 exc.excerpt_preview,
                 exc.excerpt_length,
             )
-            return self._mark_generation_failed(saved_drill_run, course.id)
+            return self._mark_generation_failed(
+                saved_drill_run,
+                course.id,
+                keep_share_token=existing_share_token is None,
+            )
         except Exception:
-            self._mark_generation_failed(saved_drill_run, course.id)
+            self._mark_generation_failed(
+                saved_drill_run,
+                course.id,
+                keep_share_token=existing_share_token is None,
+            )
             raise
 
         ready = saved_drill_run.model_copy(
@@ -133,7 +146,8 @@ class DrillService:
                 "error_message": None,
             }
         )
-        self._drill_repository.update(ready)
+        self._share_token_service.publish(ready)
+        self._close_superseded_share_tokens(ready)
         self._course_repository.update_summary(
             course.id,
             latest_drill_run_id=ready.id,
@@ -165,6 +179,7 @@ class DrillService:
             answer_count = len(submissions)
         score_summary = self._build_score_summary(drill_run, submissions)
 
+        share_url, share_status = self._share_state(drill_run)
         return DrillAdminResponse(
             id=drill_run.id,
             course_id=drill_run.course_id,
@@ -175,7 +190,8 @@ class DrillService:
                 AdminDrillQuestionResponse.from_domain(question) for question in drill_run.questions
             ],
             rubric_summary=self._build_rubric_summary(drill_run.questions),
-            share_url=f"/drills/{drill_run.share_token}" if drill_run.share_token else None,
+            share_url=share_url,
+            share_status=share_status,
             answer_count=answer_count,
             score_summary=score_summary,
             analysis_timeline=drill_run.analysis_timeline,
@@ -248,11 +264,13 @@ class DrillService:
     def get_learner_drill(self, share_token: str) -> LearnerDrillResponse:
         if self._share_token_repository is None:
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
-        drill_run_id = self._share_token_repository.get_drill_run_id(share_token)
-        if drill_run_id is None:
+        share = self._share_token_repository.get(share_token)
+        if share is None:
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
+        if share.closed_at is not None:
+            raise AppError("share_closed", "Answer collection has ended.", status_code=410)
 
-        drill_run = self._drill_repository.get(drill_run_id)
+        drill_run = self._drill_repository.get(share.drill_run_id)
         if drill_run is None or not is_distributable_drill_status(drill_run.status):
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
 
@@ -267,6 +285,46 @@ class DrillService:
                 LearnerDrillQuestionResponse.from_domain(question)
                 for question in drill_run.questions
             ],
+        )
+
+    def close_sharing(
+        self,
+        drill_run_id: str,
+        *,
+        owner_user_id: str,
+        course_id: str,
+    ) -> DrillAdminResponse:
+        drill_run = self._get_owned_drill_or_404(
+            drill_run_id,
+            owner_user_id=owner_user_id,
+            course_id=course_id,
+        )
+        token = self._require_current_share_token(drill_run)
+        self._share_token_service.close(token)
+        return self.get_admin_drill(
+            drill_run.id,
+            owner_user_id=owner_user_id,
+            course_id=course_id,
+        )
+
+    def reopen_sharing(
+        self,
+        drill_run_id: str,
+        *,
+        owner_user_id: str,
+        course_id: str,
+    ) -> DrillAdminResponse:
+        drill_run = self._get_owned_drill_or_404(
+            drill_run_id,
+            owner_user_id=owner_user_id,
+            course_id=course_id,
+        )
+        token = self._require_current_share_token(drill_run)
+        self._share_token_service.reopen(token)
+        return self.get_admin_drill(
+            drill_run.id,
+            owner_user_id=owner_user_id,
+            course_id=course_id,
         )
 
     def _resolve_learner_course_snapshot(self, drill_run: DrillRun) -> tuple[str, str]:
@@ -350,10 +408,17 @@ class DrillService:
             excerpt=evidence.excerpt,
         )
 
-    def _mark_generation_failed(self, drill_run: DrillRun, course_id: str) -> DrillRun:
+    def _mark_generation_failed(
+        self,
+        drill_run: DrillRun,
+        course_id: str,
+        *,
+        keep_share_token: bool,
+    ) -> DrillRun:
         failed = drill_run.model_copy(
             update={
                 "status": DrillRunStatus.FAILED,
+                "share_token": drill_run.share_token if keep_share_token else None,
                 "error_message": "drill generation failed",
             }
         )
@@ -365,6 +430,64 @@ class DrillService:
             answer_count=0,
         )
         return failed
+
+    def _find_published_share_token(self, course_id: str) -> str | None:
+        if self._share_token_repository is None:
+            return None
+        course = self._course_repository.get(course_id)
+        drill_runs = self._drill_repository.list_by_course(course_id)
+        drill_runs.sort(
+            key=lambda run: (
+                run.id != (course.latest_drill_run_id if course is not None else None),
+                -run.course_version,
+                run.id,
+            )
+        )
+        for drill_run in drill_runs:
+            if drill_run.share_token is None or not is_distributable_drill_status(
+                drill_run.status
+            ):
+                continue
+            share = self._share_token_repository.get(drill_run.share_token)
+            if share is not None and share.drill_run_id == drill_run.id:
+                return share.token
+        return None
+
+    def _close_superseded_share_tokens(self, published_drill: DrillRun) -> None:
+        if self._share_token_repository is None or published_drill.share_token is None:
+            return
+        for drill_run in self._drill_repository.list_by_course(published_drill.course_id):
+            token = drill_run.share_token
+            if token is None or token == published_drill.share_token:
+                continue
+            share = self._share_token_repository.get(token)
+            if share is not None and share.drill_run_id == drill_run.id:
+                self._share_token_service.close(token)
+
+    def _share_state(self, drill_run: DrillRun) -> tuple[str | None, ShareStatus]:
+        if self._share_token_repository is None or drill_run.share_token is None:
+            return None, ShareStatus.UNAVAILABLE
+        share = self._share_token_repository.get(drill_run.share_token)
+        if share is None:
+            return None, ShareStatus.UNAVAILABLE
+        if share.drill_run_id != drill_run.id:
+            return None, ShareStatus.SUPERSEDED
+        if not is_distributable_drill_status(drill_run.status):
+            return None, ShareStatus.UNAVAILABLE
+        share_url = f"/drills/{share.token}"
+        if share.closed_at is not None:
+            return share_url, ShareStatus.CLOSED
+        return share_url, ShareStatus.OPEN
+
+    def _require_current_share_token(self, drill_run: DrillRun) -> str:
+        if self._share_token_repository is None or drill_run.share_token is None:
+            raise AppError("share_unavailable", "Share URL is unavailable.", status_code=409)
+        share = self._share_token_repository.get(drill_run.share_token)
+        if share is None or share.drill_run_id != drill_run.id:
+            raise AppError("share_superseded", "Share URL has been superseded.", status_code=409)
+        if not is_distributable_drill_status(drill_run.status):
+            raise AppError("share_unavailable", "Share URL is unavailable.", status_code=409)
+        return share.token
 
     def _build_rubric_summary(self, questions: list[DrillQuestion]) -> list[str]:
         return [

@@ -13,6 +13,7 @@ from app.schemas import (
     DrillRun,
     DrillRunStatus,
     PatchStatus,
+    ShareToken,
 )
 
 
@@ -199,21 +200,48 @@ class ShareTokenRepository:
     def __init__(self, client: FirestoreClient) -> None:
         self._client = client
 
-    def reserve(self, token: str, drill_run_id: str) -> None:
+    def reserve(
+        self,
+        token: str,
+        drill_run_id: str,
+        *,
+        course_id: str | None = None,
+        created_at: str | None = None,
+    ) -> None:
+        share_token = ShareToken(
+            token=token,
+            drill_run_id=drill_run_id,
+            course_id=course_id,
+            created_at=created_at,
+        )
         self._client.create_document(
             self.collection,
             token,
-            {"token": token, "drillRunId": drill_run_id},
+            share_token.model_dump(mode="json", by_alias=True),
         )
 
-    def get_drill_run_id(self, token: str) -> str | None:
+    def get(self, token: str) -> ShareToken | None:
         document = self._client.get_document(self.collection, token)
         if document is None:
             return None
-        value = document.get("drillRunId")
-        if not isinstance(value, str):
-            return None
-        return value
+        return ShareToken.model_validate(document)
+
+    def get_drill_run_id(self, token: str) -> str | None:
+        share_token = self.get(token)
+        return share_token.drill_run_id if share_token is not None else None
+
+    def point_to_drill(self, token: str, drill_run_id: str, course_id: str) -> None:
+        self._client.update_document(
+            self.collection,
+            token,
+            {"drillRunId": drill_run_id, "courseId": course_id},
+        )
+
+    def close(self, token: str, closed_at: str) -> None:
+        self._client.update_document(self.collection, token, {"closedAt": closed_at})
+
+    def reopen(self, token: str) -> None:
+        self._client.update_document(self.collection, token, {"closedAt": None})
 
     def run_transaction(self, callback: Callable[[], object]) -> object:
         return self._client.run_transaction(callback)

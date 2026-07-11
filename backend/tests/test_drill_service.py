@@ -62,6 +62,7 @@ def _service(
             token_generator=lambda: "share-token",
         ),
         agent_client=AgentRuntimeClient(invoker=invoke),
+        share_token_repository=token_repository,
     )
     return service, course_repository, drill_repository
 

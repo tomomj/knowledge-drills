@@ -25,6 +25,7 @@ const drill: DrillAdmin = {
   ],
   rubricSummary: ['q1: 根拠'],
   shareUrl: '/drills/share-token',
+  shareStatus: 'open',
   answerCount: 2,
   scoreSummary: {
     gradedAnswerCount: 1,
@@ -96,6 +97,8 @@ const mocks = vi.hoisted(() => {
     getDrill: vi.fn(),
     getDrillAnswers: vi.fn(),
     analyzeDrill: vi.fn(),
+    closeDrillSharing: vi.fn(),
+    reopenDrillSharing: vi.fn(),
     ApiClientError,
   }
 })
@@ -105,6 +108,8 @@ vi.mock('../api/client', () => ({
     getDrill: mocks.getDrill,
     getDrillAnswers: mocks.getDrillAnswers,
     analyzeDrill: mocks.analyzeDrill,
+    closeDrillSharing: mocks.closeDrillSharing,
+    reopenDrillSharing: mocks.reopenDrillSharing,
   },
   ApiClientError: mocks.ApiClientError,
 }))
@@ -186,9 +191,13 @@ describe('DrillAdminPage', () => {
     mocks.getDrill.mockReset()
     mocks.getDrillAnswers.mockReset()
     mocks.analyzeDrill.mockReset()
+    mocks.closeDrillSharing.mockReset()
+    mocks.reopenDrillSharing.mockReset()
     mocks.getDrill.mockResolvedValue(drill)
     mocks.getDrillAnswers.mockResolvedValue(answersResponse)
     mocks.analyzeDrill.mockResolvedValue({ patchId: 'patch-1' })
+    mocks.closeDrillSharing.mockResolvedValue({ ...drill, shareStatus: 'closed' })
+    mocks.reopenDrillSharing.mockResolvedValue(drill)
   })
 
   afterEach(() => {
@@ -248,6 +257,46 @@ describe('DrillAdminPage', () => {
     expect(screen.queryByText('まだ回答がありません。共有 URL を受講者に配布しましょう。')).toBeNull()
     const button = screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement
     expect(button.disabled).toBe(true)
+  })
+
+  it('closes and reopens answer collection while keeping the stable URL', async () => {
+    const user = userEvent.setup()
+    renderDrillAdmin()
+
+    await user.click(await screen.findByRole('button', { name: '回答受付を終了' }))
+
+    await waitFor(() =>
+      expect(mocks.closeDrillSharing).toHaveBeenCalledWith('course-1', 'drill-1'),
+    )
+    expect(screen.getByText('受付停止中')).toBeTruthy()
+    expect(screen.getByText('/drills/share-token')).toBeTruthy()
+    expect(
+      screen.getByText('過去の回答は保持したまま、新しい回答を停止しています。'),
+    ).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: '回答受付を再開' }))
+
+    await waitFor(() =>
+      expect(mocks.reopenDrillSharing).toHaveBeenCalledWith('course-1', 'drill-1'),
+    )
+    expect(screen.getByText('回答受付中')).toBeTruthy()
+  })
+
+  it('marks a superseded drill as history without a public URL action', async () => {
+    mocks.getDrill.mockResolvedValueOnce({
+      ...drill,
+      shareUrl: null,
+      shareStatus: 'superseded',
+    })
+
+    renderDrillAdmin()
+
+    await screen.findByText('旧バージョン')
+    expect(
+      screen.getByText('このドリルは旧バージョンです。最新版のみ回答できます。'),
+    ).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '回答受付を終了' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '回答受付を再開' })).toBeNull()
   })
 
   it('shows a friendly message for generation failure without exposing internal text', async () => {

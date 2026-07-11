@@ -93,6 +93,30 @@ def test_share_token_repository_uses_create_only_reservation() -> None:
         repository.reserve("token-1", drill_run_id="drill-2")
 
 
+def test_share_token_repository_updates_target_and_open_state() -> None:
+    client = InMemoryFirestoreClient()
+    repository = ShareTokenRepository(client)
+    repository.reserve(
+        "token-1",
+        drill_run_id="drill-1",
+        course_id="course-1",
+        created_at="2026-07-11T00:00:00+00:00",
+    )
+
+    repository.close("token-1", "2026-07-11T01:00:00+00:00")
+    closed = repository.get("token-1")
+    assert closed is not None
+    assert closed.closed_at == "2026-07-11T01:00:00+00:00"
+
+    repository.point_to_drill("token-1", "drill-2", "course-1")
+    repository.reopen("token-1")
+    reopened = repository.get("token-1")
+    assert reopened is not None
+    assert reopened.drill_run_id == "drill-2"
+    assert reopened.course_id == "course-1"
+    assert reopened.closed_at is None
+
+
 def test_repositories_delete_documents_and_noop_for_missing() -> None:
     client = InMemoryFirestoreClient()
     course_repository = CourseRepository(client)

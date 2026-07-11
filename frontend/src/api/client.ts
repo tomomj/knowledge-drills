@@ -113,6 +113,16 @@ export const api = {
     requestJson<DrillAdmin>(`/api/courses/${courseId}/drill-runs/${drillRunId}`),
   getDrillAnswers: (courseId: string, drillRunId: string) =>
     requestJson<DrillAnswersResponse>(`/api/courses/${courseId}/drill-runs/${drillRunId}/answers`),
+  closeDrillSharing: (courseId: string, drillRunId: string) =>
+    requestJson<DrillAdmin>(
+      `/api/courses/${courseId}/drill-runs/${drillRunId}/share/close`,
+      { method: 'POST' },
+    ),
+  reopenDrillSharing: (courseId: string, drillRunId: string) =>
+    requestJson<DrillAdmin>(
+      `/api/courses/${courseId}/drill-runs/${drillRunId}/share/reopen`,
+      { method: 'POST' },
+    ),
   analyzeDrill: (courseId: string, drillRunId: string) =>
     requestJson<AnalysisStartResponse>(
       `/api/courses/${courseId}/drill-runs/${drillRunId}/analyze`,
