@@ -1,9 +1,10 @@
 from typing import cast
 
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Request, Response, status
 
 from app.schemas import LearnerDrillResponse, SubmitAnswerRequest, SubmitAnswerResponse
 from app.services.answer_service import AnswerService
+from app.services.auto_analysis import AutoAnalysisTrigger
 from app.services.drill_service import DrillService
 
 router = APIRouter(tags=["drills"])
@@ -15,6 +16,10 @@ def get_drill_service(request: Request) -> DrillService:
 
 def get_answer_service(request: Request) -> AnswerService:
     return cast(AnswerService, request.app.state.answer_service)
+
+
+def get_auto_analysis_trigger(request: Request) -> AutoAnalysisTrigger:
+    return cast(AutoAnalysisTrigger, request.app.state.auto_analysis_trigger)
 
 
 @router.get("/api/drills/{share_token}", response_model=LearnerDrillResponse)
@@ -47,10 +52,15 @@ def get_learner_drill_legacy(
 )
 def submit_answer(
     request: Request,
+    background_tasks: BackgroundTasks,
     share_token: str,
     payload: SubmitAnswerRequest,
 ) -> SubmitAnswerResponse:
     answer = get_answer_service(request).submit_answer(share_token, payload)
+    background_tasks.add_task(
+        get_auto_analysis_trigger(request).maybe_run,
+        answer.drill_run_id,
+    )
     return SubmitAnswerResponse(
         answer_id=answer.id,
         status=answer.status,
@@ -66,7 +76,8 @@ def submit_answer(
 )
 def submit_answer_legacy(
     request: Request,
+    background_tasks: BackgroundTasks,
     share_token: str,
     payload: SubmitAnswerRequest,
 ) -> SubmitAnswerResponse:
-    return submit_answer(request, share_token, payload)
+    return submit_answer(request, background_tasks, share_token, payload)
