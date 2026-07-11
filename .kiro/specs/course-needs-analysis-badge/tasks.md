@@ -98,7 +98,7 @@
   - 完了条件: docs/blog.md に両変更が含まれる
   - _Requirements: 7.1, 7.2_
 
-- [ ] 5.2 全体検証
+- [x] 5.2 全体検証
   - backend: pytest、ruff、mypy を実行する
   - frontend: test、typecheck、lint、build を実行する
   - requirements 1〜7 の完了条件と、シードデータが未変更であることを確認する
