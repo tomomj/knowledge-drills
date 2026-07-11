@@ -145,7 +145,7 @@ def generate_drill(
     drill_run = get_drill_service(request).generate_drill(course_id, current_user.uid)
     return DrillGenerationStartResponse(
         drill_run_id=drill_run.id,
-        share_url=f"/drills/{drill_run.share_token}",
+        share_url=f"/drills/{drill_run.share_token}" if drill_run.share_token else None,
     )
 
 
@@ -171,6 +171,40 @@ def list_course_drill_answers(
     current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
 ) -> DrillAnswersResponse:
     return get_drill_service(request).list_answers(
+        drill_run_id,
+        owner_user_id=current_user.uid,
+        course_id=course_id,
+    )
+
+
+@router.post(
+    "/{course_id}/drill-runs/{drill_run_id}/share/close",
+    response_model=DrillAdminResponse,
+)
+def close_course_drill_sharing(
+    request: Request,
+    course_id: str,
+    drill_run_id: str,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
+) -> DrillAdminResponse:
+    return get_drill_service(request).close_sharing(
+        drill_run_id,
+        owner_user_id=current_user.uid,
+        course_id=course_id,
+    )
+
+
+@router.post(
+    "/{course_id}/drill-runs/{drill_run_id}/share/reopen",
+    response_model=DrillAdminResponse,
+)
+def reopen_course_drill_sharing(
+    request: Request,
+    course_id: str,
+    drill_run_id: str,
+    current_user: Annotated[AuthenticatedUser, Depends(require_current_user)],
+) -> DrillAdminResponse:
+    return get_drill_service(request).reopen_sharing(
         drill_run_id,
         owner_user_id=current_user.uid,
         course_id=course_id,

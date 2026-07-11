@@ -46,10 +46,12 @@ class AnswerService:
         ):
             raise RuntimeError("AnswerService dependencies are not configured")
 
-        drill_run_id = self._share_token_repository.get_drill_run_id(share_token)
-        if drill_run_id is None:
+        share = self._share_token_repository.get(share_token)
+        if share is None:
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
-        drill_run = self._drill_repository.get(drill_run_id)
+        if share.closed_at is not None:
+            raise AppError("share_closed", "Answer collection has ended.", status_code=410)
+        drill_run = self._drill_repository.get(share.drill_run_id)
         if drill_run is None or not is_distributable_drill_status(drill_run.status):
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
 

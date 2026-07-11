@@ -31,6 +31,7 @@ from app.schemas import (
     PatchStatus,
     QuestionScoreSummary,
     RubricItem,
+    ShareStatus,
     SourceEvidence,
 )
 
@@ -233,6 +234,7 @@ def test_timeline_score_summary_and_metrics_use_camel_case_aliases() -> None:
         questions=[],
         rubric_summary=[],
         share_url="/drills/token",
+        share_status=ShareStatus.OPEN,
         answer_count=2,
         can_analyze=True,
         drill_focus="重要な例外条件",

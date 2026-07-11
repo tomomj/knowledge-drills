@@ -12,6 +12,7 @@ type PageState =
   | { status: 'ready'; drill: LearnerDrill; submitError?: string }
   | { status: 'submitting'; drill: LearnerDrill }
   | { status: 'submitted'; result: SubmitAnswerResponse }
+  | { status: 'closed'; message: string }
   | { status: 'invalidToken'; message: string }
   | { status: 'failed'; message: string }
 
@@ -42,7 +43,9 @@ export function LearnerDrillPage() {
         if (!active) {
           return
         }
-        if (error instanceof ApiClientError && error.error.code === 'invalid_share_token') {
+        if (error instanceof ApiClientError && error.error.code === 'share_closed') {
+          setState({ status: 'closed', message: 'このドリルの回答受付は終了しました。' })
+        } else if (error instanceof ApiClientError && error.error.code === 'invalid_share_token') {
           setState({ status: 'invalidToken', message: '共有 URL が無効です。' })
         } else {
           setState({ status: 'failed', message: 'ドリルの取得に失敗しました。' })
@@ -76,7 +79,11 @@ export function LearnerDrillPage() {
       })
       setState({ status: 'submitted', result })
     } catch (error) {
-      setState({ status: 'ready', drill, submitError: submitErrorMessage(error) })
+      if (error instanceof ApiClientError && error.error.code === 'share_closed') {
+        setState({ status: 'closed', message: 'このドリルの回答受付は終了しました。' })
+      } else {
+        setState({ status: 'ready', drill, submitError: submitErrorMessage(error) })
+      }
     } finally {
       submittingRef.current = false
     }
@@ -97,6 +104,17 @@ export function LearnerDrillPage() {
       <AppShell variant="learner">
         <main className="page page--narrow">
           <StatusBanner tone="error">{state.message}</StatusBanner>
+        </main>
+      </AppShell>
+    )
+  }
+
+  if (state.status === 'closed') {
+    return (
+      <AppShell variant="learner">
+        <main className="page page--narrow">
+          <StatusBanner tone="info">{state.message}</StatusBanner>
+          <p className="learner-note">ご協力ありがとうございました。</p>
         </main>
       </AppShell>
     )
