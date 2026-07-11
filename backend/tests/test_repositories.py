@@ -3,12 +3,14 @@ from threading import Barrier
 
 import pytest
 
+from app.errors import AppError
 from app.repositories.firestore_client import (
     DocumentAlreadyExists,
     DocumentNotFound,
     InMemoryFirestoreClient,
 )
 from app.repositories.repositories import (
+    AnalysisExecutionRepository,
     AnswerRepository,
     CourseRepository,
     DrillRepository,
@@ -17,9 +19,11 @@ from app.repositories.repositories import (
 )
 from app.repositories.user_repository import UserRepository
 from app.schemas import (
+    AnalysisOrigin,
     AnalysisStepStatus,
     AnalysisTimelineItem,
     AnswerStatus,
+    AnswerSubmission,
     Course,
     CourseScoreTrendPoint,
     DocumentPatch,
@@ -58,6 +62,251 @@ def create_drill_run_without_analyzed_answer_count(
             exclude={"analyzed_answer_count"},
         ),
     )
+
+
+def create_manual_claim_fixture(
+    *,
+    status: DrillRunStatus = DrillRunStatus.READY,
+    error_message: str | None = None,
+) -> tuple[
+    InMemoryFirestoreClient,
+    AnalysisExecutionRepository,
+    CourseRepository,
+    DrillRepository,
+    AnswerRepository,
+]:
+    client = InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    course_repository.create(
+        Course(
+            id="course-1",
+            owner_user_id="owner-1",
+            title="講座",
+            markdown="# Body",
+            latest_drill_run_id="older-drill",
+            latest_drill_status=DrillRunStatus.ANALYZED,
+            answer_count=99,
+        )
+    )
+    drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            status=status,
+            error_message=error_message,
+            latest_patch_id="old-patch",
+        )
+    )
+    return (
+        client,
+        AnalysisExecutionRepository(client),
+        course_repository,
+        drill_repository,
+        answer_repository,
+    )
+
+
+def test_manual_analysis_claim_snapshots_all_graded_answers_and_scored_count_separately() -> None:
+    client, repository, course_repository, drill_repository, answer_repository = (
+        create_manual_claim_fixture()
+    )
+    for answer in (
+        AnswerSubmission(
+            id="scored",
+            drill_run_id="drill-1",
+            learner_name="採点済み",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=1,
+            max_score=4,
+        ),
+        AnswerSubmission(
+            id="missing-score",
+            drill_run_id="drill-1",
+            learner_name="スコア欠損",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        ),
+        AnswerSubmission(
+            id="grading",
+            drill_run_id="drill-1",
+            learner_name="採点中",
+            status=AnswerStatus.GRADING,
+            answers={"q1": "回答"},
+            total_score=1,
+            max_score=4,
+        ),
+    ):
+        answer_repository.create_submission(answer)
+
+    claim = repository.claim_manual_analysis("drill-1", "owner-1")
+
+    assert claim.course_id == "course-1"
+    assert claim.drill_run_id == "drill-1"
+    assert claim.owner_user_id == "owner-1"
+    assert claim.course_version == 1
+    assert claim.answer_ids == ("scored", "missing-score")
+    assert claim.snapshot_agent_answer_count == 2
+    assert claim.snapshot_scored_answer_count == 1
+    assert claim.origin is AnalysisOrigin.MANUAL
+
+    saved_drill = drill_repository.get("drill-1")
+    saved_course = course_repository.get("course-1")
+    assert saved_drill is not None
+    assert saved_drill.status is DrillRunStatus.ANALYZING
+    assert saved_drill.error_message is None
+    assert saved_drill.analysis_origin is AnalysisOrigin.MANUAL
+    assert saved_drill.latest_patch_id is None
+    assert [item.id for item in saved_drill.analysis_timeline] == [
+        "collect_answers",
+        "detect_failure_patterns",
+        "match_course_evidence",
+        "decide_patch_strategy",
+        "create_patch",
+    ]
+    assert saved_drill.analysis_timeline[0].status is AnalysisStepStatus.RUNNING
+    assert all(
+        item.status is AnalysisStepStatus.PENDING
+        for item in saved_drill.analysis_timeline[1:]
+    )
+    assert saved_course is not None
+    assert saved_course.latest_drill_run_id == "drill-1"
+    assert saved_course.latest_drill_status is DrillRunStatus.ANALYZING
+    assert saved_course.answer_count == 3
+    assert client.transaction_count == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "error_message"),
+    [
+        (DrillRunStatus.GENERATING, None),
+        (DrillRunStatus.ANALYZING, None),
+        (DrillRunStatus.FAILED, "drill generation failed"),
+    ],
+)
+def test_manual_analysis_claim_preserves_state_guard(
+    status: DrillRunStatus,
+    error_message: str | None,
+) -> None:
+    _client, repository, _course_repository, _drill_repository, answer_repository = (
+        create_manual_claim_fixture(status=status, error_message=error_message)
+    )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-1",
+            drill_run_id="drill-1",
+            learner_name="受講者",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        )
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        repository.claim_manual_analysis("drill-1", "owner-1")
+
+    assert exc_info.value.code == "drill_not_analyzable"
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.parametrize(
+    ("status", "error_message"),
+    [
+        (DrillRunStatus.ANALYZED, None),
+        (DrillRunStatus.FAILED, "analysis failed"),
+    ],
+)
+def test_manual_analysis_claim_preserves_retryable_states(
+    status: DrillRunStatus,
+    error_message: str | None,
+) -> None:
+    _client, repository, _course_repository, drill_repository, answer_repository = (
+        create_manual_claim_fixture(status=status, error_message=error_message)
+    )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-1",
+            drill_run_id="drill-1",
+            learner_name="受講者",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        )
+    )
+
+    repository.claim_manual_analysis("drill-1", "owner-1")
+
+    saved = drill_repository.get("drill-1")
+    assert saved is not None
+    assert saved.status is DrillRunStatus.ANALYZING
+    assert saved.error_message is None
+
+
+def test_manual_analysis_second_claim_conflicts_without_changing_snapshot() -> None:
+    _client, repository, _course_repository, drill_repository, answer_repository = (
+        create_manual_claim_fixture()
+    )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-1",
+            drill_run_id="drill-1",
+            learner_name="受講者",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        )
+    )
+    first_claim = repository.claim_manual_analysis("drill-1", "owner-1")
+
+    with pytest.raises(AppError) as exc_info:
+        repository.claim_manual_analysis("drill-1", "owner-1")
+
+    assert exc_info.value.code == "drill_not_analyzable"
+    assert exc_info.value.status_code == 409
+    assert first_claim.answer_ids == ("answer-1",)
+    saved = drill_repository.get("drill-1")
+    assert saved is not None
+    assert saved.status is DrillRunStatus.ANALYZING
+
+
+def test_manual_analysis_claim_preserves_owner_not_found_boundary() -> None:
+    _client, repository, _course_repository, _drill_repository, answer_repository = (
+        create_manual_claim_fixture()
+    )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-1",
+            drill_run_id="drill-1",
+            learner_name="受講者",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        )
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        repository.claim_manual_analysis("drill-1", "other-owner")
+
+    assert exc_info.value.code == "drill_run_not_found"
+    assert exc_info.value.status_code == 404
+
+
+def test_manual_analysis_claim_requires_a_graded_answer() -> None:
+    _client, repository, _course_repository, _drill_repository, answer_repository = (
+        create_manual_claim_fixture()
+    )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="grading",
+            drill_run_id="drill-1",
+            learner_name="受講者",
+            status=AnswerStatus.GRADING,
+            answers={"q1": "回答"},
+        )
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        repository.claim_manual_analysis("drill-1", "owner-1")
+
+    assert exc_info.value.code == "no_graded_answers"
 
 
 def test_course_repository_creates_and_updates_course() -> None:
