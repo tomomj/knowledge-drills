@@ -7,7 +7,7 @@
   - 完了条件: 既存のバックエンドテストが全て通り、両レスポンスに needsAnalysis が false で現れる
   - _Requirements: 3.1, 3.2_
 
-- [ ] 1.2 InMemory ストレージのトランザクション直列化
+- [x] 1.2 InMemory ストレージのトランザクション直列化
   - InMemory 実装の run_transaction を再入可能ロックで排他し、callback 実行全体を直列化する（FastAPI threadpool 並行実行対策）
   - Google 実装の挙動は変更しない
   - 完了条件: 複数スレッドから同時に run_transaction を呼ぶテストで callback が直列に実行される
