@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from app.analysis_policy import (
     AUTO_ANALYSIS_MIN_ANSWERS,
@@ -243,6 +244,7 @@ class DrillRepository:
 
 
 _ANALYSIS_FAILED_MESSAGE = "analysis failed"
+_COURSE_VERSION_CHANGED_MESSAGE = "Course version changed during analysis."
 _ANALYSIS_STEPS: tuple[tuple[str, str], ...] = (
     ("collect_answers", "回答データを収集"),
     ("detect_failure_patterns", "つまずき箇所を特定"),
@@ -363,6 +365,31 @@ class AnalysisExecutionRepository:
 
         return self._client.run_transaction(claim)
 
+    def update_progress(
+        self,
+        claim: AnalysisClaim,
+        timeline: list[AnalysisTimelineItem],
+    ) -> None:
+        drill_document = self._client.get_document(
+            DrillRepository.collection,
+            claim.drill_run_id,
+        )
+        if drill_document is None:
+            raise _analysis_claim_conflict()
+        drill_run = DrillRun.model_validate(drill_document)
+        if not _drill_matches_active_claim(drill_run, claim):
+            raise _analysis_claim_conflict()
+
+        self._client.update_document(
+            DrillRepository.collection,
+            claim.drill_run_id,
+            {
+                "analysisTimeline": [
+                    item.model_dump(mode="json", by_alias=True) for item in timeline
+                ]
+            },
+        )
+
     def claim_manual_analysis(
         self,
         drill_run_id: str,
@@ -471,7 +498,9 @@ class AnalysisExecutionRepository:
         timeline: list[AnalysisTimelineItem],
         patch: DocumentPatch | None,
     ) -> DocumentPatch | None:
-        def complete() -> DocumentPatch | None:
+        stale_timeline = _mark_timeline_failed(timeline, _COURSE_VERSION_CHANGED_MESSAGE)
+
+        def complete() -> _AnalysisCompletionResult:
             course_document = self._client.get_document(
                 CourseRepository.collection,
                 claim.course_id,
@@ -481,31 +510,23 @@ class AnalysisExecutionRepository:
                 claim.drill_run_id,
             )
             if course_document is None or drill_document is None:
-                raise AppError(
-                    "analysis_claim_conflict",
-                    "Analysis claim no longer matches the persisted state.",
-                    status_code=409,
-                )
+                raise _analysis_claim_conflict()
 
             course = Course.model_validate(course_document)
             drill_run = DrillRun.model_validate(drill_document)
-            if course.version != claim.course_version:
-                raise AppError(
-                    "analysis_course_version_changed",
-                    "Course version changed during analysis.",
-                    status_code=409,
-                )
             if (
-                drill_run.course_id != claim.course_id
-                or drill_run.status is not DrillRunStatus.ANALYZING
-                or drill_run.analysis_origin is not claim.origin
+                not _drill_matches_active_claim(drill_run, claim)
                 or course.owner_user_id != claim.owner_user_id
             ):
-                raise AppError(
-                    "analysis_claim_conflict",
-                    "Analysis claim no longer matches the persisted state.",
-                    status_code=409,
+                raise _analysis_claim_conflict()
+            if course.version != claim.course_version:
+                _write_analysis_failure(
+                    self._client,
+                    claim,
+                    stale_timeline,
+                    _COURSE_VERSION_CHANGED_MESSAGE,
                 )
+                return _AnalysisCompletionResult(course_version_changed=True)
 
             persisted_patch = (
                 patch.model_copy(
@@ -562,9 +583,129 @@ class AnalysisExecutionRepository:
                 claim.course_id,
                 course_summary,
             )
-            return persisted_patch
+            return _AnalysisCompletionResult(patch=persisted_patch)
 
-        return self._client.run_transaction(complete)
+        result = self._client.run_transaction(complete)
+        if result.course_version_changed:
+            raise AppError(
+                "analysis_course_version_changed",
+                _COURSE_VERSION_CHANGED_MESSAGE,
+                status_code=409,
+            )
+        return result.patch
+
+    def fail_analysis(
+        self,
+        claim: AnalysisClaim,
+        timeline: list[AnalysisTimelineItem],
+        error_message: str,
+    ) -> None:
+        def fail() -> None:
+            course_document = self._client.get_document(
+                CourseRepository.collection,
+                claim.course_id,
+            )
+            drill_document = self._client.get_document(
+                DrillRepository.collection,
+                claim.drill_run_id,
+            )
+            if course_document is None or drill_document is None:
+                raise _analysis_claim_conflict()
+
+            course = Course.model_validate(course_document)
+            drill_run = DrillRun.model_validate(drill_document)
+            if (
+                not _drill_matches_active_claim(drill_run, claim)
+                or course.owner_user_id != claim.owner_user_id
+            ):
+                raise _analysis_claim_conflict()
+
+            _write_analysis_failure(
+                self._client,
+                claim,
+                timeline,
+                error_message,
+            )
+
+        self._client.run_transaction(fail)
+
+
+@dataclass(frozen=True)
+class _AnalysisCompletionResult:
+    patch: DocumentPatch | None = None
+    course_version_changed: bool = False
+
+
+def _analysis_claim_conflict() -> AppError:
+    return AppError(
+        "analysis_claim_conflict",
+        "Analysis claim no longer matches the persisted state.",
+        status_code=409,
+    )
+
+
+def _drill_matches_active_claim(drill_run: DrillRun, claim: AnalysisClaim) -> bool:
+    return (
+        drill_run.course_id == claim.course_id
+        and drill_run.status is DrillRunStatus.ANALYZING
+        and drill_run.analysis_origin is claim.origin
+    )
+
+
+def _write_analysis_failure(
+    client: FirestoreClient,
+    claim: AnalysisClaim,
+    timeline: list[AnalysisTimelineItem],
+    error_message: str,
+) -> None:
+    client.update_document(
+        DrillRepository.collection,
+        claim.drill_run_id,
+        {
+            "status": DrillRunStatus.READY.value,
+            "errorMessage": error_message,
+            "analysisTimeline": [
+                item.model_dump(mode="json", by_alias=True) for item in timeline
+            ],
+            "analysisOrigin": claim.origin.value,
+            "latestPatchId": None,
+        },
+    )
+    client.update_document(
+        CourseRepository.collection,
+        claim.course_id,
+        {
+            "latestDrillRunId": claim.drill_run_id,
+            "latestDrillStatus": DrillRunStatus.READY.value,
+        },
+    )
+
+
+def _mark_timeline_failed(
+    timeline: list[AnalysisTimelineItem],
+    error_message: str,
+) -> list[AnalysisTimelineItem]:
+    source = timeline or _initial_analysis_timeline()
+    failed_index = next(
+        (
+            index
+            for index, item in enumerate(source)
+            if item.status is AnalysisStepStatus.RUNNING
+        ),
+        len(source) - 1,
+    )
+    return [
+        item.model_copy(
+            update={
+                "status": AnalysisStepStatus.FAILED,
+                "summary": error_message,
+                "evidence": [],
+            }
+        )
+        if index == failed_index
+        else item
+        for index, item in enumerate(source)
+    ]
 
 
 def _initial_analysis_timeline() -> list[AnalysisTimelineItem]:
