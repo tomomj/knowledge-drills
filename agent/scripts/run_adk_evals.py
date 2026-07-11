@@ -51,6 +51,8 @@ TRANSIENT_ERROR_MARKERS = (
     "UNAVAILABLE",
     "DEADLINE_EXCEEDED",
 )
+OPENAI_VERTEX_MAAS_PREFIX = "openai/google/"
+OPENAI_VERTEX_MAAS_SUFFIX = "-maas"
 
 
 def _load_env_file(path: Path) -> None:
@@ -97,6 +99,57 @@ def _latest_result(history_dir: Path, before: set[Path]) -> Path:
 def _eval_case_ids(evalset_path: Path) -> list[str]:
     payload = json.loads(evalset_path.read_text(encoding="utf-8"))
     return [case["eval_id"] for case in payload["eval_cases"]]
+
+
+def _judge_model(config_path: Path) -> str | None:
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    for criterion in payload.get("criteria", {}).values():
+        judge_model = criterion.get("judge_model_options", {}).get("judge_model")
+        if isinstance(judge_model, str):
+            return judge_model
+    return None
+
+
+def _prepare_vertex_maas_openai_environment(
+    env: dict[str, str], config_path: Path
+) -> None:
+    judge_model = _judge_model(config_path)
+    if not (
+        judge_model
+        and judge_model.startswith(OPENAI_VERTEX_MAAS_PREFIX)
+        and judge_model.endswith(OPENAI_VERTEX_MAAS_SUFFIX)
+    ):
+        return
+
+    project_id = env.get("GOOGLE_CLOUD_PROJECT", "").strip()
+    if not project_id:
+        raise RuntimeError("GOOGLE_CLOUD_PROJECT is required for Vertex AI MaaS judges")
+
+    env.setdefault(
+        "OPENAI_BASE_URL",
+        "https://aiplatform.googleapis.com/v1/"
+        f"projects/{project_id}/locations/global/endpoints/openapi",
+    )
+    if env.get("OPENAI_API_KEY", "").strip():
+        return
+
+    try:
+        completed = subprocess.run(
+            ["gcloud", "auth", "application-default", "print-access-token"],
+            capture_output=True,
+            check=True,
+            text=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError(
+            "Gemma 4 judge authentication requires OPENAI_API_KEY or a working "
+            "`gcloud auth application-default print-access-token` command"
+        ) from exc
+
+    access_token = completed.stdout.strip()
+    if not access_token:
+        raise RuntimeError("gcloud returned an empty application-default access token")
+    env["OPENAI_API_KEY"] = access_token
 
 
 def _is_transient_output(output: str) -> bool:
@@ -154,6 +207,7 @@ def _run_eval_case(
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(AGENT_DIR)
+    _prepare_vertex_maas_openai_environment(env, AGENT_DIR / config)
 
     for attempt in range(1, max_attempts + 1):
         print(f"running {eval_name}:{eval_case_id} (attempt {attempt}/{max_attempts})...")

@@ -71,7 +71,7 @@ make typecheck-agent
 
 ## 実モデル eval
 
-実 Gemini 呼び出しを含む eval は wrapper 経由で実行します。`adk eval` を直接呼ぶと、
+実モデル呼び出しを含む eval は wrapper 経由で実行します。`adk eval` を直接呼ぶと、
 eval 失敗時も exit code 0 になることがあります。
 
 ```sh
@@ -92,7 +92,11 @@ python scripts/run_adk_evals.py --profile quick
 | `KNOWLEDGE_DRILL_AGENT_MODEL` | leaf agent の model。現行既定は `gemini-3.1-flash-lite` |
 | `KNOWLEDGE_DRILL_AGENT_ANALYSIS_MODE` | failure analysis の実行モード |
 
-AI Studio を使う場合は `GOOGLE_API_KEY` でも動きます。eval 依存は通常の `.venv` に入れず、
+LLM judge は Vertex AI MaaS の `gemma-4-26b-a4b-it-maas` を使います。ローカルでは wrapper が
+`gcloud auth application-default print-access-token` から短期トークンを取得し、MaaS の
+OpenAI 互換 endpoint に接続します。CI は WIF で同じ短期トークンを発行します。
+
+被評価 Agent を AI Studio で動かす場合は `GOOGLE_API_KEY` でも動きます。eval 依存は通常の `.venv` に入れず、
 `scripts/run_adk_evals.py` が内部で `uv run --native-tls --isolated --frozen --group eval`
 を使います。
 
