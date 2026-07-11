@@ -66,7 +66,7 @@
   - service testでauto/manualの入力差、Failure Signalなし、Agent例外、既存manual回帰が確認できる。
   - _Requirements: 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 4.1, 4.2, 4.4, 4.5_
 
-- [ ] 2.6 採点後に利用するbest-effort自動分析triggerと監査ログを追加する
+- [x] 2.6 採点後に利用するbest-effort自動分析triggerと監査ログを追加する
   - drill IDからauto claimを試し、claim成功時だけsnapshot executorを一度呼び出す。
   - 条件不成立と競合は正常no-opとし、通常例外は採点responseへ伝播させない。
   - skipped、started、completed、failedを起動元・snapshot件数・安全なcourse/drill識別子とともに記録し、background最上位例外も捕捉する。
