@@ -31,7 +31,7 @@
   - _Boundary: InMemory transaction contract_
 
 - [ ] 2. 共通の分析claimとtransactional lifecycleを実装する
-- [ ] 2.1 manual claimとorigin別snapshotを共通execution境界へ追加する
+- [x] 2.1 manual claimとorigin別snapshotを共通execution境界へ追加する
   - manual claimは既存の実行可否とowner境界を維持し、全GRADED回答をAgent入力として固定する。
   - 同じ回答集合からAgent入力件数と確定スコア件数を別々に記録し、自動条件でmanual実行を制限しない。
   - 同一drill documentのread/writeで二重claimを防ぎ、成功時にANALYZING、manual起動元、初期timeline、patch IDなしを保存する。
