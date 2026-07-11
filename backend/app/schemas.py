@@ -312,11 +312,11 @@ class AnswerSubmission(ApiModel):
 
 class AnswerInput(ApiModel):
     question_id: str
-    answer_text: str
+    answer_text: str = Field(max_length=2_000)
 
 
 class SubmitAnswerRequest(ApiModel):
-    learner_name: str
+    learner_name: str = Field(max_length=50)
     answers: list[AnswerInput]
 
 

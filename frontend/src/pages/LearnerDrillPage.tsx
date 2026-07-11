@@ -18,6 +18,9 @@ type PageState =
 
 type LearnerPhase = 'reading' | 'answering'
 
+const MAX_LEARNER_NAME_LENGTH = 50
+const MAX_ANSWER_TEXT_LENGTH = 2_000
+
 export function LearnerDrillPage() {
   const { shareToken } = useParams()
   const [state, setState] = useState<PageState>({ status: 'loading' })
@@ -202,14 +205,21 @@ export function LearnerDrillPage() {
 
             <div className="card">
               <div className="card__body">
-                <label className="field">
-                  <span className="field__label">お名前</span>
+                <div className="field">
+                  <label className="field__label" htmlFor="learner-name">
+                    お名前
+                  </label>
                   <input
+                    id="learner-name"
                     value={learnerName}
+                    maxLength={MAX_LEARNER_NAME_LENGTH}
                     disabled={isSubmitting}
                     onChange={(event) => setLearnerName(event.target.value)}
                   />
-                </label>
+                  <span className="field__hint" aria-label="お名前の文字数">
+                    {learnerName.length} / {MAX_LEARNER_NAME_LENGTH} 文字
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -222,12 +232,16 @@ export function LearnerDrillPage() {
                       <span className="q-num">{question.id}</span>
                       {answered ? <span className="lq__done">✓ 回答済み</span> : null}
                     </div>
-                    <label className="field">
-                      <span className="lq__question">{question.question}</span>
+                    <div className="field">
+                      <label className="lq__question" htmlFor={`answer-${question.id}`}>
+                        {question.question}
+                      </label>
                       <textarea
+                        id={`answer-${question.id}`}
                         rows={3}
                         placeholder="回答を入力…"
                         value={answers[question.id] ?? ''}
+                        maxLength={MAX_ANSWER_TEXT_LENGTH}
                         disabled={isSubmitting}
                         onChange={(event) =>
                           setAnswers((current) => ({
@@ -236,7 +250,11 @@ export function LearnerDrillPage() {
                           }))
                         }
                       />
-                    </label>
+                      <span className="field__hint" aria-label={`${question.id} の回答文字数`}>
+                        {(answers[question.id] ?? '').length} /{' '}
+                        {MAX_ANSWER_TEXT_LENGTH.toLocaleString('ja-JP')} 文字
+                      </span>
+                    </div>
                   </article>
                 )
               })}
@@ -272,6 +290,12 @@ function validateSubmission(
 ): string | null {
   if (!learnerName.trim()) {
     return '受講者名が必要です。'
+  }
+  if (learnerName.length > MAX_LEARNER_NAME_LENGTH) {
+    return `受講者名は ${MAX_LEARNER_NAME_LENGTH} 文字以内で入力してください。`
+  }
+  if (drill.questions.some((question) => answers[question.id]?.length > MAX_ANSWER_TEXT_LENGTH)) {
+    return `回答は 1 問 ${MAX_ANSWER_TEXT_LENGTH.toLocaleString('ja-JP')} 文字以内で入力してください。`
   }
   if (drill.questions.some((question) => !answers[question.id]?.trim())) {
     return 'すべての問題への回答が必要です。'
