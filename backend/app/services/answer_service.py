@@ -1,3 +1,4 @@
+import logging
 from uuid import uuid4
 
 from app.clients.agent_runtime_client import AgentRuntimeClient
@@ -13,12 +14,15 @@ from app.schemas import (
     AnswerSubmission,
     CourseScoreTrendPoint,
     DrillRun,
+    DrillRunStatus,
     GradingRequest,
     SubmitAnswerRequest,
 )
 from app.services.drill_status_policy import is_distributable_drill_status
 
 EXPECTED_ANSWER_COUNT = 3
+
+logger = logging.getLogger("app.answer")
 
 
 class AnswerService:
@@ -56,6 +60,25 @@ class AnswerService:
             raise AppError("invalid_share_token", "Share token is invalid.", status_code=404)
 
         answers_by_question_id = self.validate_submission(drill_run, request)
+        if (
+            drill_run.status is DrillRunStatus.ANALYZED
+            and drill_run.analyzed_answer_count is None
+        ):
+            try:
+                baseline = sum(
+                    answer.status is AnswerStatus.GRADED
+                    for answer in self._answer_repository.list_by_drill_run(drill_run.id)
+                )
+                self._drill_repository.initialize_analyzed_answer_count(
+                    drill_run.id,
+                    baseline,
+                )
+            except Exception:
+                logger.warning(
+                    "analyzed answer count initialization failed drill_run_id=%s",
+                    drill_run.id,
+                )
+                raise
         answer = AnswerSubmission(
             id=uuid4().hex,
             course_id=drill_run.course_id,

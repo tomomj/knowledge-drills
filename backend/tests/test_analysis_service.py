@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Callable
 from typing import cast
 
 import pytest
@@ -25,6 +26,8 @@ def _service() -> tuple[AnalysisService, DrillRepository, AnswerRepository]:
 
 def _proposal_service(
     invocations: list[tuple[str, dict[str, object]]],
+    *,
+    on_analyze_failures: Callable[[], None] | None = None,
 ) -> tuple[AnalysisService, DrillRepository, AnswerRepository, CourseRepository, PatchRepository]:
     client = InMemoryFirestoreClient()
     course_repository = CourseRepository(client)
@@ -38,6 +41,8 @@ def _proposal_service(
     def invoke(task_name: str, payload: dict[str, object]) -> dict[str, object]:
         invocations.append((task_name, payload))
         if task_name == "analyze_failures":
+            if on_analyze_failures is not None:
+                on_analyze_failures()
             return {
                 "failureSignals": [
                     {
@@ -152,6 +157,85 @@ def test_start_analysis_sets_drill_to_analyzing_when_graded_answer_exists() -> N
         AnalysisStepStatus.PENDING,
         AnalysisStepStatus.PENDING,
     ]
+
+
+@pytest.mark.parametrize(
+    ("agent_result", "expected_status", "should_fail"),
+    [
+        ({"failureSignals": []}, DrillRunStatus.ANALYZED, False),
+        ({"invalid": "payload"}, DrillRunStatus.READY, True),
+    ],
+    ids=["success", "failure"],
+)
+def test_run_analysis_preserves_lazy_initialized_count_across_stale_updates(
+    monkeypatch: pytest.MonkeyPatch,
+    agent_result: dict[str, object],
+    expected_status: DrillRunStatus,
+    should_fail: bool,
+) -> None:
+    client = InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    patch_repository = PatchRepository(client)
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
+    )
+    client.create_document(
+        DrillRepository.collection,
+        "drill-1",
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+        ).model_dump(mode="json", by_alias=True, exclude={"analyzed_answer_count"}),
+    )
+    for index in range(3):
+        answer_repository.create(
+            id=f"answer-{index}",
+            drill_run_id="drill-1",
+            learner_name=f"受講者{index}",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        )
+    service = AnalysisService(
+        drill_repository,
+        answer_repository,
+        course_repository=course_repository,
+        patch_repository=patch_repository,
+        agent_client=AgentRuntimeClient(
+            invoker=lambda _task_name, _payload: agent_result,
+        ),
+    )
+    original_update = drill_repository.update
+    initialized = False
+    count_after_start_update: list[int | None] = []
+
+    def update_after_lazy_initialization(drill_run: DrillRun) -> None:
+        nonlocal initialized
+        if not initialized:
+            initialized = True
+            drill_repository.initialize_analyzed_answer_count(drill_run.id, 3)
+        original_update(drill_run)
+        if not count_after_start_update:
+            saved_after_start = drill_repository.get(drill_run.id)
+            assert saved_after_start is not None
+            count_after_start_update.append(saved_after_start.analyzed_answer_count)
+
+    monkeypatch.setattr(drill_repository, "update", update_after_lazy_initialization)
+
+    if should_fail:
+        with pytest.raises(AgentInvocationError):
+            service.run_analysis("drill-1", "owner-1")
+    else:
+        service.run_analysis("drill-1", "owner-1")
+
+    saved = drill_repository.get("drill-1")
+    assert saved is not None
+    assert count_after_start_update == [3]
+    assert saved.status == expected_status
+    assert saved.analyzed_answer_count is not None
+    assert saved.analyzed_answer_count >= 3
 
 
 def test_start_analysis_requires_at_least_one_graded_answer() -> None:
@@ -271,6 +355,7 @@ def test_run_analysis_persists_patch_and_latest_state() -> None:
     assert saved_drill is not None
     assert saved_course is not None
     assert saved_patch.status == "proposed"
+    assert saved_drill.analyzed_answer_count == 1
     assert [item.status for item in saved_patch.analysis_timeline] == [
         AnalysisStepStatus.COMPLETED,
         AnalysisStepStatus.COMPLETED,
@@ -306,6 +391,46 @@ def test_run_analysis_persists_patch_and_latest_state() -> None:
         "例を追記",
     ]
     assert saved_patch.analysis_timeline == saved_drill.analysis_timeline
+
+
+def test_run_analysis_records_answer_count_snapshot_taken_before_agent_call() -> None:
+    invocations: list[tuple[str, dict[str, object]]] = []
+    answer_repository_holder: list[AnswerRepository] = []
+
+    def add_answer_during_analysis() -> None:
+        answer_repository_holder[0].create(
+            id="late-graded-answer",
+            drill_run_id="drill-1",
+            learner_name="受講者2",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "分析開始後の回答"},
+        )
+
+    service, drill_repository, answer_repository, _course_repository, _patch_repository = (
+        _proposal_service(
+            invocations,
+            on_analyze_failures=add_answer_during_analysis,
+        )
+    )
+    answer_repository_holder.append(answer_repository)
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    answer_repository.create(
+        id="initial-graded-answer",
+        drill_run_id="drill-1",
+        learner_name="受講者1",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "分析対象の回答"},
+    )
+
+    service.run_analysis("drill-1", "owner-1")
+
+    saved_drill = drill_repository.get("drill-1")
+    assert saved_drill is not None
+    assert len(answer_repository.list_by_drill_run("drill-1")) == 2
+    assert len(cast(list[object], invocations[0][1]["answers"])) == 1
+    assert saved_drill.analyzed_answer_count == 1
 
 
 def test_run_analysis_skips_patch_proposal_when_no_failure_signal_is_approved() -> None:
@@ -500,7 +625,12 @@ def test_run_analysis_marks_running_step_failed_and_restores_ready_when_analysis
         Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
     )
     drill_repository.create(
-        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            status=DrillRunStatus.READY,
+            analyzed_answer_count=4,
+        )
     )
     answer_repository.create(
         id="graded-answer",
@@ -530,6 +660,7 @@ def test_run_analysis_marks_running_step_failed_and_restores_ready_when_analysis
     assert saved_drill is not None
     assert saved_course is not None
     assert saved_drill.status == "ready"
+    assert saved_drill.analyzed_answer_count == 4
     assert saved_drill.error_message == "analysis failed"
     assert saved_course.latest_drill_run_id == "drill-1"
     assert saved_course.latest_drill_status == "ready"
@@ -545,3 +676,41 @@ def test_run_analysis_marks_running_step_failed_and_restores_ready_when_analysis
     )
     assert any("step=detect_failure_patterns" in message for message in messages)
     assert any("error_type=AgentInvocationError" in message for message in messages)
+
+
+def test_run_analysis_does_not_return_success_when_completion_update_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    invocations: list[tuple[str, dict[str, object]]] = []
+    service, drill_repository, answer_repository, course_repository, _patch_repository = (
+        _proposal_service(invocations)
+    )
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    answer_repository.create(
+        id="graded-answer",
+        drill_run_id="drill-1",
+        learner_name="受講者1",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+    update = drill_repository.update
+
+    def fail_completion(drill_run: DrillRun) -> None:
+        if drill_run.status is DrillRunStatus.ANALYZED:
+            raise RuntimeError("completion update failed")
+        update(drill_run)
+
+    monkeypatch.setattr(drill_repository, "update", fail_completion)
+
+    with pytest.raises(RuntimeError, match="completion update failed"):
+        service.run_analysis("drill-1", "owner-1")
+
+    saved_drill = drill_repository.get("drill-1")
+    saved_course = course_repository.get("course-1")
+    assert saved_drill is not None
+    assert saved_course is not None
+    assert saved_drill.status is DrillRunStatus.ANALYZING
+    assert saved_drill.analyzed_answer_count is None
+    assert saved_course.latest_drill_status is DrillRunStatus.ANALYZING

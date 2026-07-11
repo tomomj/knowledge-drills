@@ -161,6 +161,7 @@ class CourseSummary(ApiModel):
     latest_patch_id: str | None = None
     score_trend: list[CourseScoreTrendPoint] | None = None
     is_demo: bool = False
+    needs_analysis: bool = False
 
 
 class CourseListResponse(ApiModel):
@@ -254,6 +255,7 @@ class DrillRun(ApiModel):
     analysis_timeline: list[AnalysisTimelineItem] = Field(default_factory=list)
     share_token: str | None = None
     error_message: str | None = None
+    analyzed_answer_count: int | None = None
 
 
 class ShareToken(ApiModel):
@@ -453,6 +455,7 @@ class DrillAdminResponse(ApiModel):
     analysis_timeline: list[AnalysisTimelineItem] = Field(default_factory=list)
     can_analyze: bool
     error_message: str | None = None
+    needs_analysis: bool = False
 
 
 class DrillAnswerAdminItem(ApiModel):

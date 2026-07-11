@@ -214,6 +214,11 @@ export function DrillAdminPage() {
             </p>
           </div>
           <div className="toolbar">
+            {drill.needsAnalysis ? (
+              <StatusBanner tone="warning">
+                低スコア回答が蓄積しています — 分析を推奨
+              </StatusBanner>
+            ) : null}
             <button
               type="button"
               className="btn btn--primary"

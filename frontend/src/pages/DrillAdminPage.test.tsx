@@ -45,6 +45,7 @@ const drill: DrillAdmin = {
   analysisTimeline: [],
   canAnalyze: true,
   errorMessage: null,
+  needsAnalysis: false,
 }
 
 const answersResponse: DrillAnswersResponse = {
@@ -235,6 +236,7 @@ describe('DrillAdminPage', () => {
     expect(within(questionDetails as HTMLElement).getByText('## 方針')).toBeTruthy()
     const button = screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement
     expect(button.disabled).toBe(false)
+    expect(screen.queryByText('低スコア回答が蓄積しています — 分析を推奨')).toBeNull()
 
     // 資料バージョンと回答一覧（先頭の回答者が選択された状態）
     expect(screen.getByText('v2')).toBeTruthy()
@@ -243,6 +245,33 @@ describe('DrillAdminPage', () => {
     expect(screen.getByText('根拠を書きました')).toBeTruthy()
     expect(screen.getByText('例外条件も添えてください。')).toBeTruthy()
     expect(screen.getByText('採点済み')).toBeTruthy()
+  })
+
+  it('shows a non-chip warning banner immediately before the analyze button', async () => {
+    mocks.getDrill.mockResolvedValueOnce({ ...drill, needsAnalysis: true })
+
+    renderDrillAdmin()
+
+    const message = await screen.findByText('低スコア回答が蓄積しています — 分析を推奨')
+    const banner = message.closest('.status-banner')
+    const button = screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement
+    expect(banner).not.toBeNull()
+    expect(banner?.classList.contains('status-banner--warning')).toBe(true)
+    expect(banner?.classList.contains('chip')).toBe(false)
+    expect(banner?.parentElement?.classList.contains('toolbar')).toBe(true)
+    expect(banner?.nextElementSibling).toBe(button)
+    expect(button.disabled).toBe(false)
+  })
+
+  it('shows the needs-analysis banner even when the analyze button is disabled', async () => {
+    mocks.getDrill.mockResolvedValueOnce({ ...noGradedDrill(), needsAnalysis: true })
+    mocks.getDrillAnswers.mockResolvedValueOnce({ ...answersResponse, answers: [] })
+
+    renderDrillAdmin()
+
+    await screen.findByText('低スコア回答が蓄積しています — 分析を推奨')
+    const button = screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
   })
 
   it('disables analysis and shows guidance when there are no graded answers', async () => {

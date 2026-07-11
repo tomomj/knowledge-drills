@@ -14,6 +14,7 @@ from app.schemas import (
     AdminDrillQuestionResponse,
     AnswerStatus,
     AnswerSubmission,
+    Course,
     DrillAdminResponse,
     DrillAnswerAdminItem,
     DrillAnswersResponse,
@@ -30,6 +31,7 @@ from app.schemas import (
     SourceEvidence,
 )
 from app.services.drill_status_policy import is_distributable_drill_status
+from app.services.needs_analysis import evaluate_course_needs_analysis
 from app.services.share_token_service import ShareTokenService
 
 logger = logging.getLogger("app.drill")
@@ -163,11 +165,21 @@ class DrillService:
         owner_user_id: str,
         course_id: str | None = None,
     ) -> DrillAdminResponse:
-        drill_run = self._get_owned_drill_or_404(
+        drill_run, course = self._get_owned_drill_and_course_or_404(
             drill_run_id,
             owner_user_id=owner_user_id,
             course_id=course_id,
         )
+        needs_analysis = False
+        if (
+            self._answer_repository is not None
+            and drill_run.course_version == course.version
+        ):
+            needs_analysis = evaluate_course_needs_analysis(
+                course,
+                self._drill_repository,
+                self._answer_repository,
+            )
 
         submissions = (
             self._answer_repository.list_by_drill_run(drill_run.id)
@@ -197,6 +209,7 @@ class DrillService:
             analysis_timeline=drill_run.analysis_timeline,
             can_analyze=score_summary.graded_answer_count > 0,
             error_message=drill_run.error_message,
+            needs_analysis=needs_analysis,
         )
 
     def list_answers(
@@ -251,6 +264,20 @@ class DrillService:
         owner_user_id: str,
         course_id: str | None = None,
     ) -> DrillRun:
+        drill_run, _course = self._get_owned_drill_and_course_or_404(
+            drill_run_id,
+            owner_user_id=owner_user_id,
+            course_id=course_id,
+        )
+        return drill_run
+
+    def _get_owned_drill_and_course_or_404(
+        self,
+        drill_run_id: str,
+        *,
+        owner_user_id: str,
+        course_id: str | None = None,
+    ) -> tuple[DrillRun, Course]:
         drill_run = self._drill_repository.get(drill_run_id)
         if drill_run is None:
             raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
@@ -259,7 +286,7 @@ class DrillService:
         course = self._course_repository.get(drill_run.course_id)
         if course is None or course.owner_user_id != owner_user_id:
             raise AppError("drill_run_not_found", "Drill run was not found.", status_code=404)
-        return drill_run
+        return drill_run, course
 
     def get_learner_drill(self, share_token: str) -> LearnerDrillResponse:
         if self._share_token_repository is None:

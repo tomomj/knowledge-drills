@@ -15,6 +15,7 @@ from app.schemas import (
     CourseMetricsResponse,
     CourseMetricsRun,
     CourseRevision,
+    CourseSummary,
     CourseUpdateRequest,
     DocumentPatch,
     DrillAdminResponse,
@@ -178,6 +179,25 @@ def test_hackathon_feedback_schema_defaults_support_existing_documents() -> None
     assert analysis.perspectives == []
 
 
+def test_drill_run_analyzed_answer_count_supports_legacy_and_camel_case_data() -> None:
+    legacy_run = DrillRun.model_validate(
+        {"id": "drill-1", "courseId": "course-1", "status": "ready"}
+    )
+    analyzed_run = DrillRun.model_validate(
+        {
+            "id": "drill-2",
+            "courseId": "course-1",
+            "status": "analyzed",
+            "analyzedAnswerCount": 3,
+        }
+    )
+
+    assert legacy_run.analyzed_answer_count is None
+    assert legacy_run.model_dump(by_alias=True)["analyzedAnswerCount"] is None
+    assert analyzed_run.analyzed_answer_count == 3
+    assert analyzed_run.model_dump(by_alias=True)["analyzedAnswerCount"] == 3
+
+
 def test_drill_focus_alias_and_length_constraints() -> None:
     create_payload = CourseCreateRequest.model_validate(
         {"title": "講座", "markdown": "# Body", "drillFocus": "重要な例外条件"}
@@ -256,7 +276,14 @@ def test_timeline_score_summary_and_metrics_use_camel_case_aliases() -> None:
 
     admin_payload = admin.model_dump(by_alias=True)
     metrics_payload = metrics.model_dump(by_alias=True)
+    course_payload = CourseSummary(
+        id="course-1",
+        title="講座",
+        version=1,
+    ).model_dump(by_alias=True)
 
+    assert course_payload["needsAnalysis"] is False
+    assert admin_payload["needsAnalysis"] is False
     assert admin_payload["drillFocus"] == "重要な例外条件"
     assert admin_payload["scoreSummary"]["gradedAnswerCount"] == 2
     assert admin_payload["scoreSummary"]["questions"][0]["commonMissingPoints"] == ["例外条件"]

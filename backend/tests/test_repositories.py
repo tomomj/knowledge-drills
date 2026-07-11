@@ -1,6 +1,13 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
 import pytest
 
-from app.repositories.firestore_client import DocumentAlreadyExists, InMemoryFirestoreClient
+from app.repositories.firestore_client import (
+    DocumentAlreadyExists,
+    DocumentNotFound,
+    InMemoryFirestoreClient,
+)
 from app.repositories.repositories import (
     AnswerRepository,
     CourseRepository,
@@ -10,6 +17,8 @@ from app.repositories.repositories import (
 )
 from app.repositories.user_repository import UserRepository
 from app.schemas import (
+    AnalysisStepStatus,
+    AnalysisTimelineItem,
     AnswerStatus,
     Course,
     CourseScoreTrendPoint,
@@ -19,6 +28,36 @@ from app.schemas import (
     PatchStatus,
     UserProfile,
 )
+
+
+class CountingFirestoreClient(InMemoryFirestoreClient):
+    def __init__(self) -> None:
+        super().__init__()
+        self.update_count = 0
+
+    def update_document(
+        self,
+        collection: str,
+        document_id: str,
+        data: dict[str, object],
+    ) -> None:
+        self.update_count += 1
+        super().update_document(collection, document_id, data)
+
+
+def create_drill_run_without_analyzed_answer_count(
+    client: InMemoryFirestoreClient,
+    drill_run: DrillRun,
+) -> None:
+    client.create_document(
+        DrillRepository.collection,
+        drill_run.id,
+        drill_run.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude={"analyzed_answer_count"},
+        ),
+    )
 
 
 def test_course_repository_creates_and_updates_course() -> None:
@@ -234,6 +273,214 @@ def test_drill_answer_and_patch_repositories_support_status_updates() -> None:
     assert drill_run.status == "ready"
     assert answer.status == "graded"
     assert patch.status == "applied"
+
+
+def test_drill_repository_initializes_analyzed_answer_count_once_under_concurrency() -> None:
+    client = CountingFirestoreClient()
+    repository = DrillRepository(client)
+    create_drill_run_without_analyzed_answer_count(
+        client,
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.ANALYZED)
+    )
+
+    worker_count = 8
+    ready = Barrier(worker_count)
+
+    def initialize(baseline: int) -> None:
+        ready.wait()
+        repository.initialize_analyzed_answer_count("drill-1", baseline)
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = [
+            executor.submit(initialize, baseline) for baseline in range(worker_count)
+        ]
+        for future in futures:
+            future.result()
+
+    saved = repository.get("drill-1")
+    assert saved is not None
+    assert saved.analyzed_answer_count in range(worker_count)
+    assert client.update_count == 1
+
+
+def test_drill_repository_initializes_explicit_null_analyzed_answer_count() -> None:
+    client = InMemoryFirestoreClient()
+    repository = DrillRepository(client)
+    repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+            analyzed_answer_count=None,
+        )
+    )
+
+    repository.initialize_analyzed_answer_count("drill-1", 4)
+
+    saved = repository.get("drill-1")
+    assert saved is not None
+    assert saved.analyzed_answer_count == 4
+
+
+def test_drill_repository_initialization_is_noop_for_analyzing_or_recorded_run() -> None:
+    client = CountingFirestoreClient()
+    repository = DrillRepository(client)
+    create_drill_run_without_analyzed_answer_count(
+        client,
+        DrillRun(id="analyzing", course_id="course-1", status=DrillRunStatus.ANALYZING)
+    )
+    repository.create(
+        DrillRun(
+            id="recorded",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+            analyzed_answer_count=0,
+        )
+    )
+
+    repository.initialize_analyzed_answer_count("analyzing", 3)
+    repository.initialize_analyzed_answer_count("recorded", 2)
+
+    analyzing = repository.get("analyzing")
+    recorded = repository.get("recorded")
+    assert analyzing is not None
+    assert analyzing.analyzed_answer_count is None
+    assert recorded is not None
+    assert recorded.analyzed_answer_count == 0
+    assert client.update_count == 0
+
+
+def test_drill_repository_initialization_updates_only_analyzed_answer_count() -> None:
+    client = InMemoryFirestoreClient()
+    repository = DrillRepository(client)
+    drill_run = DrillRun(
+        id="drill-1",
+        course_id="course-1",
+        status=DrillRunStatus.ANALYZED,
+        analysis_timeline=[
+            AnalysisTimelineItem(
+                id="analysis",
+                title="分析",
+                status=AnalysisStepStatus.COMPLETED,
+                completed_at="2026-07-11T00:01:00+00:00",
+            )
+        ],
+    )
+    create_drill_run_without_analyzed_answer_count(client, drill_run)
+    before = client.get_document(repository.collection, drill_run.id)
+
+    repository.initialize_analyzed_answer_count(drill_run.id, 4)
+
+    after = client.get_document(repository.collection, drill_run.id)
+    assert before is not None
+    assert after == {**before, "analyzedAnswerCount": 4}
+
+
+def test_drill_repository_initialization_preserves_completion_update_ordering() -> None:
+    client = InMemoryFirestoreClient()
+    repository = DrillRepository(client)
+    create_drill_run_without_analyzed_answer_count(
+        client,
+        DrillRun(id="initialize-first", course_id="course-1", status=DrillRunStatus.ANALYZED)
+    )
+    repository.create(
+        DrillRun(id="completion-first", course_id="course-1", status=DrillRunStatus.ANALYZED)
+    )
+
+    repository.initialize_analyzed_answer_count("initialize-first", 3)
+    repository.update(
+        DrillRun(
+            id="initialize-first",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+            analyzed_answer_count=5,
+        )
+    )
+    repository.update(
+        DrillRun(
+            id="completion-first",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+            analyzed_answer_count=5,
+        )
+    )
+    repository.initialize_analyzed_answer_count("completion-first", 3)
+
+    initialize_first = repository.get("initialize-first")
+    completion_first = repository.get("completion-first")
+    assert initialize_first is not None
+    assert initialize_first.analyzed_answer_count == 5
+    assert completion_first is not None
+    assert completion_first.analyzed_answer_count == 5
+
+
+def test_drill_repository_update_never_decreases_analyzed_answer_count() -> None:
+    client = InMemoryFirestoreClient()
+    repository = DrillRepository(client)
+    create_drill_run_without_analyzed_answer_count(
+        client,
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.ANALYZED),
+    )
+    stale = repository.get("drill-1")
+    assert stale is not None
+
+    repository.initialize_analyzed_answer_count("drill-1", 3)
+    repository.update(
+        stale.model_copy(
+            update={
+                "status": DrillRunStatus.ANALYZING,
+                "analysis_timeline": [
+                    AnalysisTimelineItem(
+                        id="analysis",
+                        title="分析",
+                        status=AnalysisStepStatus.RUNNING,
+                    )
+                ],
+            }
+        )
+    )
+
+    after_stale_update = repository.get("drill-1")
+    assert after_stale_update is not None
+    assert after_stale_update.status == DrillRunStatus.ANALYZING
+    assert after_stale_update.analysis_timeline[0].status == AnalysisStepStatus.RUNNING
+    assert after_stale_update.analyzed_answer_count == 3
+
+    repository.update(
+        after_stale_update.model_copy(
+            update={
+                "status": DrillRunStatus.ANALYZED,
+                "analyzed_answer_count": 2,
+                "analysis_timeline": [
+                    AnalysisTimelineItem(
+                        id="analysis",
+                        title="分析",
+                        status=AnalysisStepStatus.COMPLETED,
+                    )
+                ],
+            }
+        )
+    )
+    after_lower_update = repository.get("drill-1")
+    assert after_lower_update is not None
+    assert after_lower_update.status == DrillRunStatus.ANALYZED
+    assert after_lower_update.analysis_timeline[0].status == AnalysisStepStatus.COMPLETED
+    assert after_lower_update.analyzed_answer_count == 3
+
+    repository.update(after_lower_update.model_copy(update={"analyzed_answer_count": 5}))
+    after_higher_update = repository.get("drill-1")
+    assert after_higher_update is not None
+    assert after_higher_update.analyzed_answer_count == 5
+
+
+def test_drill_repository_initialization_validates_baseline_and_propagates_missing() -> None:
+    client = InMemoryFirestoreClient()
+    repository = DrillRepository(client)
+
+    with pytest.raises(ValueError, match="baseline"):
+        repository.initialize_analyzed_answer_count("missing", -1)
+    with pytest.raises(DocumentNotFound):
+        repository.initialize_analyzed_answer_count("missing", 0)
 
 
 def test_transaction_callback_is_observed_for_patch_decision() -> None:

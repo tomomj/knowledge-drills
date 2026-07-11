@@ -11,6 +11,8 @@ type PageState =
   | { status: 'ready'; courses: CourseSummary[] }
   | { status: 'failed'; message: string }
 
+const COURSE_LIST_POLL_INTERVAL_MS = 15_000
+
 export function CourseListPage() {
   const navigate = useNavigate()
   const [state, setState] = useState<PageState>({ status: 'loading' })
@@ -18,7 +20,12 @@ export function CourseListPage() {
 
   useEffect(() => {
     let active = true
+    let fetching = false
     async function load() {
+      if (fetching) {
+        return
+      }
+      fetching = true
       try {
         const response = await api.listCourses()
         if (active) {
@@ -26,13 +33,21 @@ export function CourseListPage() {
         }
       } catch (error) {
         if (active) {
-          setState({ status: 'failed', message: errorMessage(error) })
+          setState((current) =>
+            current.status === 'ready'
+              ? current
+              : { status: 'failed', message: errorMessage(error) },
+          )
         }
+      } finally {
+        fetching = false
       }
     }
     void load()
+    const intervalId = setInterval(() => void load(), COURSE_LIST_POLL_INTERVAL_MS)
     return () => {
       active = false
+      clearInterval(intervalId)
     }
   }, [])
 
@@ -141,10 +156,17 @@ type Chip = { label: string; tone: string }
 
 function statusChips(course: CourseSummary): Chip[] {
   const chips: Chip[] = []
+  if (course.needsAnalysis) {
+    chips.push({ label: '低スコア回答が蓄積 — 分析推奨', tone: 'warning' })
+  }
   if (course.isDemo) {
     chips.push({ label: 'デモ', tone: 'accent' })
   }
-  if (course.drillStatus === 'ready' && course.answerCount > 0) {
+  if (
+    !course.needsAnalysis &&
+    course.drillStatus === 'ready' &&
+    course.answerCount > 0
+  ) {
     chips.push({ label: '分析できます', tone: 'success' })
   }
   if (course.patchStatus === 'proposed') {
