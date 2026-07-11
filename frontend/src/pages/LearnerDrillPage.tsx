@@ -61,6 +61,12 @@ export function LearnerDrillPage() {
     }
   }, [shareToken])
 
+  useEffect(() => {
+    if (phase === 'answering') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [phase])
+
   async function submit(drill: LearnerDrill) {
     if (submittingRef.current) {
       return
