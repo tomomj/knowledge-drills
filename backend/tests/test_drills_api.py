@@ -82,6 +82,169 @@ def test_get_drill_admin_returns_questions_share_url_and_answer_count(client: Te
     assert payload["rubricSummary"] == ["q1: 根拠"]
 
 
+def test_get_current_drill_admin_matches_course_list_needs_analysis(
+    client: TestClient,
+) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(
+            id="course-1",
+            owner_user_id="local-owner",
+            title="講座",
+            markdown="# Body",
+            version=2,
+        )
+    )
+    app.state.drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            course_version=2,
+            status=DrillRunStatus.READY,
+            questions=[_question()],
+        )
+    )
+    for index in range(3):
+        app.state.answer_repository.create_submission(
+            AnswerSubmission(
+                id=f"answer-{index}",
+                course_id="course-1",
+                drill_run_id="drill-1",
+                learner_name=f"受講者{index}",
+                status=AnswerStatus.GRADED,
+                answers={"q1": "回答"},
+                total_score=0,
+                max_score=4,
+            )
+        )
+
+    course_response = client.get("/api/courses")
+    drill_response = client.get("/api/courses/course-1/drill-runs/drill-1")
+
+    assert course_response.status_code == 200
+    assert drill_response.status_code == 200
+    assert course_response.json()["courses"][0]["needsAnalysis"] is True
+    assert drill_response.json()["needsAnalysis"] is True
+    assert drill_response.json()["canAnalyze"] is True
+
+
+def test_get_past_drill_admin_never_evaluates_course_needs_analysis(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(
+            id="course-1",
+            owner_user_id="local-owner",
+            title="講座",
+            markdown="# Body",
+            version=2,
+        )
+    )
+    app.state.drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            course_version=1,
+            status=DrillRunStatus.READY,
+            questions=[_question()],
+        )
+    )
+    for index in range(3):
+        app.state.answer_repository.create_submission(
+            AnswerSubmission(
+                id=f"answer-{index}",
+                course_id="course-1",
+                drill_run_id="drill-1",
+                learner_name=f"受講者{index}",
+                status=AnswerStatus.GRADED,
+                answers={"q1": "回答"},
+                total_score=0,
+                max_score=4,
+            )
+        )
+
+    def fail_evaluation_read(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("past-version admin must not evaluate course needs analysis")
+
+    monkeypatch.setattr(app.state.drill_repository, "list_by_course", fail_evaluation_read)
+
+    response = client.get("/api/courses/course-1/drill-runs/drill-1")
+
+    assert response.status_code == 200
+    assert response.json()["needsAnalysis"] is False
+    assert response.json()["canAnalyze"] is True
+
+
+def test_get_current_drill_admin_defaults_needs_analysis_false_without_answer_repository(
+    client: TestClient,
+) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(id="course-1", owner_user_id="local-owner", title="講座", markdown="# Body")
+    )
+    app.state.drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            status=DrillRunStatus.READY,
+            questions=[_question()],
+        )
+    )
+    app.state.drill_service = DrillService(
+        course_repository=app.state.course_repository,
+        drill_repository=app.state.drill_repository,
+        share_token_service=ShareTokenService(
+            drill_repository=app.state.drill_repository,
+            share_token_repository=app.state.share_token_repository,
+        ),
+        agent_client=AgentRuntimeClient(invoker=lambda _task_name, _payload: {}),
+        answer_repository=None,
+        share_token_repository=app.state.share_token_repository,
+    )
+
+    response = client.get("/api/courses/course-1/drill-runs/drill-1")
+
+    assert response.status_code == 200
+    assert response.json()["needsAnalysis"] is False
+    assert response.json()["canAnalyze"] is False
+
+
+def test_get_drill_admin_applies_owner_guard_before_needs_analysis_reads(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = cast(FastAPI, client.app)
+    app.state.course_repository.create(
+        Course(
+            id="course-1",
+            owner_user_id="other-owner",
+            title="他人の講座",
+            markdown="# Body",
+        )
+    )
+    app.state.drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            status=DrillRunStatus.READY,
+            questions=[_question()],
+        )
+    )
+
+    def fail_related_read(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("owner guard must run before answer or needs-analysis reads")
+
+    monkeypatch.setattr(app.state.drill_repository, "list_by_course", fail_related_read)
+    monkeypatch.setattr(app.state.answer_repository, "list_by_drill_run", fail_related_read)
+
+    response = client.get("/api/courses/course-1/drill-runs/drill-1")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "drill_run_not_found"
+
+
 def test_get_drill_admin_returns_score_summary_from_graded_answers_only(
     client: TestClient,
 ) -> None:
@@ -220,6 +383,7 @@ def test_get_drill_admin_disables_analysis_when_no_graded_answers(
     payload = response.json()
     assert payload["answerCount"] == 1
     assert payload["canAnalyze"] is False
+    assert payload["needsAnalysis"] is False
     assert payload["scoreSummary"]["gradedAnswerCount"] == 0
     assert payload["scoreSummary"]["averageScore"] is None
 
