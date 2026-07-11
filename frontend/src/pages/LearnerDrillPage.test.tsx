@@ -62,10 +62,12 @@ describe('LearnerDrillPage', () => {
   beforeEach(() => {
     mocks.getLearnerDrill.mockReset()
     mocks.submitAnswer.mockReset()
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
   })
 
   afterEach(() => {
     cleanup()
+    vi.restoreAllMocks()
   })
 
   it('renders learner questions without rubric or ideal answer', async () => {
@@ -118,6 +120,17 @@ describe('LearnerDrillPage', () => {
     expect(screen.queryByText('教材を確認する')).toBeNull()
     expect(screen.queryByText('教材バージョン v2')).toBeNull()
     expect(screen.queryByText('業務に直接関係する支出を申請できます。')).toBeNull()
+  })
+
+  it('scrolls to the top after proceeding to the answer form', async () => {
+    const user = userEvent.setup()
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+
+    renderLearner()
+
+    await proceedToAnswering(user)
+
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
   })
 
   it('skips the reading step when courseMarkdown is empty', async () => {
