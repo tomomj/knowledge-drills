@@ -31,6 +31,7 @@ type DrillRunSeed = {
 }
 
 type LearnerDrill = {
+  drillRunId: string
   questions: Array<{
     id: string
     question: string
@@ -54,6 +55,7 @@ type CourseListResponse = {
 
 type AdminDrill = {
   shareUrl: string | null
+  shareStatus: 'open' | 'closed' | 'superseded' | 'unavailable'
 }
 
 test.describe('Knowledge Drill E2E', () => {
@@ -103,7 +105,7 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(
       page.getByText('緊急障害は問い合わせ種別に関係なくサポート窓口へ送る。'),
     ).toBeVisible()
-    await expect(page.getByLabel('お名前')).toHaveCount(0)
+    await expect(page.getByRole('textbox', { name: 'お名前', exact: true })).toHaveCount(0)
     await expect(page.locator('textarea')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '回答を提出する' })).toHaveCount(0)
     await expect(page.getByText('4 pts')).toHaveCount(0)
@@ -114,7 +116,7 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(page.getByText('教材を確認する')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '回答に進む' })).toHaveCount(0)
 
-    await page.getByLabel('お名前').fill('E2E Learner')
+    await page.getByRole('textbox', { name: 'お名前', exact: true }).fill('E2E Learner')
     const drill = await getLearnerDrill(request, seed.shareToken)
     for (const question of drill.questions) {
       await page
@@ -186,6 +188,41 @@ test.describe('Knowledge Drill E2E', () => {
 
     await expect(page.getByText('共有 URL が無効です。')).toBeVisible()
     await expect(page.getByRole('button', { name: '回答を提出する' })).toHaveCount(0)
+  })
+
+  test('新版は固定共有 URL を引き継ぎ、受付を停止・再開できる', async ({
+    page,
+    request,
+  }) => {
+    const first = await createDrillRun(request)
+    const generated = await request.post(
+      `${apiBaseUrl}/api/courses/${first.courseId}/drill-runs`,
+    )
+    expect(generated.ok()).toBeTruthy()
+    const second = (await generated.json()) as { drillRunId: string; shareUrl: string }
+
+    expect(second.shareUrl).toBe(first.shareUrl)
+    const oldAdmin = await getAdminDrill(request, first.courseId, first.drillRunId)
+    expect(oldAdmin.shareStatus).toBe('superseded')
+    const learner = await getLearnerDrill(request, first.shareToken)
+    expect(learner.drillRunId).toBe(second.drillRunId)
+
+    await page.goto(`/courses/${first.courseId}/drill-runs/${second.drillRunId}`)
+    await page.getByRole('button', { name: '回答受付を終了' }).click()
+    await expect(page.getByText('受付停止中')).toBeVisible()
+
+    await page.goto(first.shareUrl)
+    await expect(page.getByText('このドリルの回答受付は終了しました。')).toBeVisible()
+
+    await page.goto(`/courses/${first.courseId}/drill-runs/${second.drillRunId}`)
+    await page.getByRole('button', { name: '回答受付を再開' }).click()
+    await expect(page.getByText('回答受付中')).toBeVisible()
+    const reopened = await request.get(`${apiBaseUrl}/api/drills/${first.shareToken}`)
+    expect(reopened.ok()).toBeTruthy()
+    const reopenedPage = await page.context().newPage()
+    await reopenedPage.goto(first.shareUrl)
+    await expect(reopenedPage.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
+    await reopenedPage.close()
   })
 
   test('デモ講座の受講者画面でも rubric と ideal answer は表示しない', async ({

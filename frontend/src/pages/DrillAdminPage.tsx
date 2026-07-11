@@ -46,6 +46,8 @@ export function DrillAdminPage() {
   const [selectedAnswerId, setSelectedAnswerId] = useState<string | null>(null)
   const [answerQuery, setAnswerQuery] = useState('')
   const [copied, setCopied] = useState(false)
+  const [shareActionLoading, setShareActionLoading] = useState(false)
+  const [shareActionError, setShareActionError] = useState<string | null>(null)
   const [questionsOpen, setQuestionsOpen] = useState(true)
   const [answersOpen, setAnswersOpen] = useState(true)
 
@@ -175,6 +177,25 @@ export function DrillAdminPage() {
     }
   }
 
+  async function toggleSharing() {
+    if (drill.shareStatus !== 'open' && drill.shareStatus !== 'closed') {
+      return
+    }
+    setShareActionLoading(true)
+    setShareActionError(null)
+    try {
+      const updated =
+        drill.shareStatus === 'open'
+          ? await api.closeDrillSharing(drill.courseId, drill.id)
+          : await api.reopenDrillSharing(drill.courseId, drill.id)
+      setState({ status: 'ready', drill: updated })
+    } catch (error) {
+      setShareActionError(errorMessage(error))
+    } finally {
+      setShareActionLoading(false)
+    }
+  }
+
   return (
     <AppShell>
       <main className="page">
@@ -227,6 +248,9 @@ export function DrillAdminPage() {
               drill={drill}
               copied={copied}
               onCopy={() => void copyShareUrl()}
+              actionLoading={shareActionLoading}
+              actionError={shareActionError}
+              onToggle={() => void toggleSharing()}
             />
             <DrillStatusCard drill={drill} statusChip={statusChip} />
             <ScoreSummaryPanel drill={drill} />
@@ -330,13 +354,32 @@ type ShareUrlCardProps = {
   drill: DrillAdmin
   copied: boolean
   onCopy: () => void
+  actionLoading: boolean
+  actionError: string | null
+  onToggle: () => void
 }
 
-function ShareUrlCard({ drill, copied, onCopy }: ShareUrlCardProps) {
+const SHARE_STATUS_LABELS: Record<DrillAdmin['shareStatus'], { label: string; tone: string }> = {
+  open: { label: '回答受付中', tone: 'success' },
+  closed: { label: '受付停止中', tone: 'warning' },
+  superseded: { label: '旧バージョン', tone: 'muted' },
+  unavailable: { label: '未公開', tone: 'muted' },
+}
+
+function ShareUrlCard({
+  drill,
+  copied,
+  onCopy,
+  actionLoading,
+  actionError,
+  onToggle,
+}: ShareUrlCardProps) {
+  const shareStatus = SHARE_STATUS_LABELS[drill.shareStatus]
   return (
     <article className="card">
       <div className="card__head">
         <h2>共有 URL</h2>
+        <span className={`chip chip--${shareStatus.tone}`}>{shareStatus.label}</span>
       </div>
       <div className="card__body share-card">
         <code>{drill.shareUrl ?? '-'}</code>
@@ -354,8 +397,29 @@ function ShareUrlCard({ drill, copied, onCopy }: ShareUrlCardProps) {
               プレビュー
             </a>
           ) : null}
+          {drill.shareStatus === 'open' || drill.shareStatus === 'closed' ? (
+            <button
+              type="button"
+              className="tag-btn"
+              onClick={onToggle}
+              disabled={actionLoading}
+            >
+              {actionLoading
+                ? '更新中…'
+                : drill.shareStatus === 'open'
+                  ? '回答受付を終了'
+                  : '回答受付を再開'}
+            </button>
+          ) : null}
         </div>
-        {drill.answerCount === 0 ? (
+        {actionError ? <StatusBanner tone="error">{actionError}</StatusBanner> : null}
+        {drill.shareStatus === 'superseded' ? (
+          <p className="share-card__hint">このドリルは旧バージョンです。最新版のみ回答できます。</p>
+        ) : null}
+        {drill.shareStatus === 'closed' ? (
+          <p className="share-card__hint">過去の回答は保持したまま、新しい回答を停止しています。</p>
+        ) : null}
+        {drill.shareStatus === 'open' && drill.answerCount === 0 ? (
           <p className="share-card__hint">共有 URL を受講者に配布しましょう。</p>
         ) : null}
       </div>

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -143,6 +143,18 @@ describe('LearnerDrillPage', () => {
     expect(screen.queryByText('判断理由を書いてください。')).toBeNull()
   })
 
+  it('shows an answer-collection-ended state for a closed share URL', async () => {
+    mocks.getLearnerDrill.mockRejectedValueOnce(
+      new ApiClientError(410, { code: 'share_closed', message: 'closed' }),
+    )
+
+    renderLearner()
+
+    await screen.findByText('このドリルの回答受付は終了しました。')
+    expect(screen.getByText('ご協力ありがとうございました。')).toBeTruthy()
+    expect(screen.queryByText('判断理由を書いてください。')).toBeNull()
+  })
+
   it('shows validation error for empty fields', async () => {
     const user = userEvent.setup()
     mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
@@ -154,6 +166,47 @@ describe('LearnerDrillPage', () => {
     await user.click(screen.getByRole('button', { name: '回答を提出する' }))
 
     expect(screen.getByText('受講者名が必要です。')).toBeTruthy()
+    expect(mocks.submitAnswer).not.toHaveBeenCalled()
+  })
+
+  it('limits learner name and each answer while showing character counts', async () => {
+    const user = userEvent.setup()
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+
+    renderLearner()
+
+    await proceedToAnswering(user)
+    const nameInput = screen.getByLabelText('お名前') as HTMLInputElement
+    const answerInput = screen.getByLabelText(/判断理由を書いてください。/) as HTMLTextAreaElement
+    expect(nameInput.maxLength).toBe(50)
+    expect(answerInput.maxLength).toBe(2_000)
+    expect(screen.getByLabelText('お名前の文字数').textContent).toContain('0 / 50 文字')
+    expect(screen.getByLabelText('q1 の回答文字数').textContent).toContain('0 / 2,000 文字')
+
+    await user.type(nameInput, '受講者A')
+    await user.type(answerInput, '根拠です')
+    expect(screen.getByLabelText('お名前の文字数').textContent).toContain('4 / 50 文字')
+    expect(screen.getByLabelText('q1 の回答文字数').textContent).toContain('4 / 2,000 文字')
+  })
+
+  it('blocks oversized text before calling the API', async () => {
+    const user = userEvent.setup()
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+
+    renderLearner()
+
+    await proceedToAnswering(user)
+    fireEvent.change(screen.getByLabelText('お名前'), { target: { value: '名'.repeat(51) } })
+    await user.click(screen.getByRole('button', { name: '回答を提出する' }))
+    expect(screen.getByText('受講者名は 50 文字以内で入力してください。')).toBeTruthy()
+    expect(mocks.submitAnswer).not.toHaveBeenCalled()
+
+    fireEvent.change(screen.getByLabelText('お名前'), { target: { value: '受講者' } })
+    fireEvent.change(screen.getByLabelText(/判断理由を書いてください。/), {
+      target: { value: '回'.repeat(2_001) },
+    })
+    await user.click(screen.getByRole('button', { name: '回答を提出する' }))
+    expect(screen.getByText('回答は 1 問 2,000 文字以内で入力してください。')).toBeTruthy()
     expect(mocks.submitAnswer).not.toHaveBeenCalled()
   })
 
@@ -221,5 +274,25 @@ describe('LearnerDrillPage', () => {
       feedback: ['受付しました。'],
     })
     await waitFor(() => expect(screen.getByText('提出が完了しました。')).toBeTruthy())
+  })
+
+  it('switches to the closed state when collection ends before submit', async () => {
+    const user = userEvent.setup()
+    mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
+    mocks.submitAnswer.mockRejectedValueOnce(
+      new ApiClientError(410, { code: 'share_closed', message: 'closed' }),
+    )
+
+    renderLearner()
+
+    await proceedToAnswering(user)
+    await user.type(screen.getByLabelText('お名前'), '受講者A')
+    await user.type(screen.getByLabelText(/判断理由を書いてください。/), '根拠です')
+    await user.type(screen.getByLabelText(/例外条件を書いてください。/), '例外です')
+    await user.type(screen.getByLabelText(/次の対応を書いてください。/), '対応です')
+    await user.click(screen.getByRole('button', { name: '回答を提出する' }))
+
+    await screen.findByText('このドリルの回答受付は終了しました。')
+    expect(screen.getByText('ご協力ありがとうございました。')).toBeTruthy()
   })
 })

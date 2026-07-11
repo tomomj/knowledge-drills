@@ -62,7 +62,7 @@ test.describe('デモ導線: 審査員の改善ループ一周', () => {
     await shot(learnerPage, '04-learner-drill')
 
     await learnerPage.getByRole('button', { name: '回答に進む' }).click()
-    await learnerPage.getByLabel('お名前').fill('審査員E')
+    await learnerPage.getByRole('textbox', { name: 'お名前', exact: true }).fill('審査員E')
     const answerBoxes = learnerPage.locator('textarea')
     const answerCount = await answerBoxes.count()
     for (let index = 0; index < answerCount; index += 1) {

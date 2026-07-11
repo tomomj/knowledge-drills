@@ -53,6 +53,13 @@ class DrillRunStatus(StrEnum):
     ANALYZED = "analyzed"
 
 
+class ShareStatus(StrEnum):
+    OPEN = "open"
+    CLOSED = "closed"
+    SUPERSEDED = "superseded"
+    UNAVAILABLE = "unavailable"
+
+
 class AnswerStatus(StrEnum):
     GRADING = "grading"
     GRADED = "graded"
@@ -249,6 +256,14 @@ class DrillRun(ApiModel):
     error_message: str | None = None
 
 
+class ShareToken(ApiModel):
+    token: str
+    drill_run_id: str
+    course_id: str | None = None
+    created_at: str | None = None
+    closed_at: str | None = None
+
+
 class GradingResult(ApiModel):
     question_id: str
     score: int = Field(ge=0, le=4)
@@ -297,11 +312,11 @@ class AnswerSubmission(ApiModel):
 
 class AnswerInput(ApiModel):
     question_id: str
-    answer_text: str
+    answer_text: str = Field(max_length=2_000)
 
 
 class SubmitAnswerRequest(ApiModel):
-    learner_name: str
+    learner_name: str = Field(max_length=50)
     answers: list[AnswerInput]
 
 
@@ -432,6 +447,7 @@ class DrillAdminResponse(ApiModel):
     questions: list[AdminDrillQuestionResponse]
     rubric_summary: list[str]
     share_url: str | None
+    share_status: ShareStatus
     answer_count: int
     score_summary: DrillScoreSummary | None = None
     analysis_timeline: list[AnalysisTimelineItem] = Field(default_factory=list)
@@ -543,7 +559,7 @@ class DocumentPatchResponse(ApiModel):
 
 class DrillGenerationStartResponse(ApiModel):
     drill_run_id: str
-    share_url: str
+    share_url: str | None
 
 
 class AnalysisStartResponse(ApiModel):
