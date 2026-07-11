@@ -2,14 +2,14 @@ from unittest.mock import call, create_autospec
 
 import pytest
 
-from app.repositories.repositories import AnswerRepository, DrillRepository
-from app.schemas import AnswerStatus, AnswerSubmission, Course, DrillRun, DrillRunStatus
-from app.services.needs_analysis import (
+from app.analysis_policy import (
     NEEDS_ANALYSIS_MIN_UNANALYZED,
     NEEDS_ANALYSIS_SCORE_RATE_THRESHOLD,
     compute_needs_analysis,
-    evaluate_course_needs_analysis,
 )
+from app.repositories.repositories import AnswerRepository, DrillRepository
+from app.schemas import AnswerStatus, AnswerSubmission, Course, DrillRun, DrillRunStatus
+from app.services.needs_analysis import evaluate_course_needs_analysis
 
 
 def _drill_run(
@@ -18,6 +18,7 @@ def _drill_run(
     course_version: int = 1,
     status: DrillRunStatus = DrillRunStatus.READY,
     analyzed_answer_count: int | None = None,
+    auto_analyzed_scored_answer_count: int | None = None,
 ) -> DrillRun:
     return DrillRun(
         id=drill_run_id,
@@ -25,6 +26,7 @@ def _drill_run(
         course_version=course_version,
         status=status,
         analyzed_answer_count=analyzed_answer_count,
+        auto_analyzed_scored_answer_count=auto_analyzed_scored_answer_count,
     )
 
 
@@ -174,6 +176,75 @@ def test_run_status_controls_unanalyzed_count(
 ) -> None:
     run = _drill_run(status=status, analyzed_answer_count=analyzed_answer_count)
     answers = [_answer(f"answer-{index}") for index in range(4)]
+
+    assert _compute(answers, drill_run=run) is expected
+
+
+def test_dedicated_watermark_controls_needs_analysis_after_manual_analysis() -> None:
+    run = _drill_run(
+        status=DrillRunStatus.ANALYZED,
+        analyzed_answer_count=5,
+        auto_analyzed_scored_answer_count=4,
+    )
+    answers = [_answer(f"answer-{index}") for index in range(5)]
+
+    assert _compute(answers, drill_run=run) is True
+
+
+def test_ready_legacy_count_does_not_change_existing_needs_analysis_result() -> None:
+    run = _drill_run(
+        status=DrillRunStatus.READY,
+        analyzed_answer_count=1,
+        auto_analyzed_scored_answer_count=None,
+    )
+
+    assert _compute([_answer("answer-1")], drill_run=run) is True
+
+
+def test_ready_run_uses_dedicated_watermark_when_recorded() -> None:
+    run = _drill_run(
+        status=DrillRunStatus.READY,
+        analyzed_answer_count=1,
+        auto_analyzed_scored_answer_count=4,
+    )
+    answers = [_answer(f"answer-{index}") for index in range(4)]
+
+    assert _compute(answers, drill_run=run) is False
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (DrillRunStatus.READY, True),
+        (DrillRunStatus.ANALYZED, False),
+        (DrillRunStatus.ANALYZING, False),
+        (DrillRunStatus.GENERATING, False),
+        (DrillRunStatus.FAILED, False),
+    ],
+)
+def test_missing_watermarks_preserve_status_specific_needs_analysis(
+    status: DrillRunStatus,
+    expected: bool,
+) -> None:
+    run = _drill_run(status=status)
+
+    assert _compute([_answer("answer-1")], drill_run=run) is expected
+
+
+@pytest.mark.parametrize(
+    ("legacy_count", "answer_count", "expected"),
+    [(3, 4, True), (4, 4, False), (7, 4, False)],
+)
+def test_legacy_analyzed_document_preserves_needs_analysis_result(
+    legacy_count: int,
+    answer_count: int,
+    expected: bool,
+) -> None:
+    run = _drill_run(
+        status=DrillRunStatus.ANALYZED,
+        analyzed_answer_count=legacy_count,
+    )
+    answers = [_answer(f"answer-{index}") for index in range(answer_count)]
 
     assert _compute(answers, drill_run=run) is expected
 

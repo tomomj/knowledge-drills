@@ -1,6 +1,11 @@
 import pytest
 
-from app.analysis_policy import is_scored_answer, resolve_auto_analysis_watermark
+from app.analysis_policy import (
+    AUTO_ANALYSIS_MIN_ANSWERS,
+    count_unanalyzed_answers,
+    is_scored_answer,
+    resolve_auto_analysis_watermark,
+)
 from app.schemas import AnswerStatus, AnswerSubmission, DrillRun, DrillRunStatus
 
 
@@ -102,3 +107,63 @@ def test_resolver_returns_unknown_without_either_watermark_regardless_of_status(
     drill_run = _drill_run(status=status)
 
     assert resolve_auto_analysis_watermark(drill_run, 5) is None
+
+
+def test_auto_analysis_threshold_is_fixed_at_five_answers() -> None:
+    four_answers = [_answer() for _ in range(4)]
+    five_answers = [_answer() for _ in range(5)]
+
+    assert count_unanalyzed_answers(_drill_run(), four_answers) < AUTO_ANALYSIS_MIN_ANSWERS
+    assert count_unanalyzed_answers(_drill_run(), five_answers) >= AUTO_ANALYSIS_MIN_ANSWERS
+
+
+def test_count_uses_dedicated_watermark_after_manual_analysis() -> None:
+    run = _drill_run(
+        analyzed_answer_count=5,
+        auto_analyzed_scored_answer_count=4,
+    )
+    answers = [_answer() for _ in range(9)]
+
+    assert count_unanalyzed_answers(run, answers) == 5
+
+
+def test_auto_count_uses_legacy_watermark_for_ready_run() -> None:
+    run = _drill_run(
+        status=DrillRunStatus.READY,
+        analyzed_answer_count=1,
+        auto_analyzed_scored_answer_count=None,
+    )
+
+    assert count_unanalyzed_answers(run, [_answer()]) == 0
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (DrillRunStatus.READY, 5),
+        (DrillRunStatus.ANALYZED, 0),
+        (DrillRunStatus.ANALYZING, 0),
+        (DrillRunStatus.GENERATING, 0),
+        (DrillRunStatus.FAILED, 0),
+    ],
+)
+def test_unknown_watermark_uses_status_specific_interpretation(
+    status: DrillRunStatus,
+    expected: int,
+) -> None:
+    answers = [_answer() for _ in range(5)]
+
+    assert count_unanalyzed_answers(_drill_run(status=status), answers) == expected
+
+
+def test_count_excludes_answers_without_final_scores() -> None:
+    answers = [
+        _answer(),
+        _answer(status=AnswerStatus.GRADING),
+        _answer(status=AnswerStatus.FAILED),
+        _answer(total_score=None),
+        _answer(max_score=None),
+        _answer(max_score=0),
+    ]
+
+    assert count_unanalyzed_answers(_drill_run(), answers) == 1
