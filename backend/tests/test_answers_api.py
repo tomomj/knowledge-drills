@@ -186,3 +186,44 @@ def test_submit_answer_invalid_token_returns_404(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json()["code"] == "invalid_share_token"
+
+
+@pytest.mark.parametrize(
+    "learner_name,answer_text",
+    [
+        ("名" * 51, "回答"),
+        ("受講者", "回" * 2_001),
+    ],
+)
+def test_submit_answer_rejects_oversized_text(
+    client: TestClient,
+    learner_name: str,
+    answer_text: str,
+) -> None:
+    _configure_ready_drill_and_answer_service(
+        client,
+        {
+            "questionId": "q1",
+            "score": 3,
+            "maxScore": 4,
+            "correctPoints": [],
+            "missingPoints": [],
+            "feedback": "受付しました。",
+            "failureTags": [],
+        },
+    )
+
+    response = client.post(
+        "/api/drills/share-token/answers",
+        json={
+            "learnerName": learner_name,
+            "answers": [
+                {"questionId": "q1", "answerText": answer_text},
+                {"questionId": "q2", "answerText": "回答"},
+                {"questionId": "q3", "answerText": "回答"},
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
