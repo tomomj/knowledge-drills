@@ -159,6 +159,85 @@ def test_start_analysis_sets_drill_to_analyzing_when_graded_answer_exists() -> N
     ]
 
 
+@pytest.mark.parametrize(
+    ("agent_result", "expected_status", "should_fail"),
+    [
+        ({"failureSignals": []}, DrillRunStatus.ANALYZED, False),
+        ({"invalid": "payload"}, DrillRunStatus.READY, True),
+    ],
+    ids=["success", "failure"],
+)
+def test_run_analysis_preserves_lazy_initialized_count_across_stale_updates(
+    monkeypatch: pytest.MonkeyPatch,
+    agent_result: dict[str, object],
+    expected_status: DrillRunStatus,
+    should_fail: bool,
+) -> None:
+    client = InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    patch_repository = PatchRepository(client)
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
+    )
+    client.create_document(
+        DrillRepository.collection,
+        "drill-1",
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            status=DrillRunStatus.ANALYZED,
+        ).model_dump(mode="json", by_alias=True, exclude={"analyzed_answer_count"}),
+    )
+    for index in range(3):
+        answer_repository.create(
+            id=f"answer-{index}",
+            drill_run_id="drill-1",
+            learner_name=f"受講者{index}",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        )
+    service = AnalysisService(
+        drill_repository,
+        answer_repository,
+        course_repository=course_repository,
+        patch_repository=patch_repository,
+        agent_client=AgentRuntimeClient(
+            invoker=lambda _task_name, _payload: agent_result,
+        ),
+    )
+    original_update = drill_repository.update
+    initialized = False
+    count_after_start_update: list[int | None] = []
+
+    def update_after_lazy_initialization(drill_run: DrillRun) -> None:
+        nonlocal initialized
+        if not initialized:
+            initialized = True
+            drill_repository.initialize_analyzed_answer_count(drill_run.id, 3)
+        original_update(drill_run)
+        if not count_after_start_update:
+            saved_after_start = drill_repository.get(drill_run.id)
+            assert saved_after_start is not None
+            count_after_start_update.append(saved_after_start.analyzed_answer_count)
+
+    monkeypatch.setattr(drill_repository, "update", update_after_lazy_initialization)
+
+    if should_fail:
+        with pytest.raises(AgentInvocationError):
+            service.run_analysis("drill-1", "owner-1")
+    else:
+        service.run_analysis("drill-1", "owner-1")
+
+    saved = drill_repository.get("drill-1")
+    assert saved is not None
+    assert count_after_start_update == [3]
+    assert saved.status == expected_status
+    assert saved.analyzed_answer_count is not None
+    assert saved.analyzed_answer_count >= 3
+
+
 def test_start_analysis_requires_at_least_one_graded_answer() -> None:
     service, drill_repository, _answer_repository = _service()
     drill_repository.create(

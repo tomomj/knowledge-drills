@@ -173,11 +173,25 @@ class DrillRepository:
         self._client.update_document(self.collection, drill_run_id, {"status": status.value})
 
     def update(self, drill_run: DrillRun) -> None:
-        self._client.set_document(
-            self.collection,
-            drill_run.id,
-            drill_run.model_dump(mode="json", by_alias=True),
-        )
+        def update_document() -> None:
+            incoming = drill_run.model_dump(mode="json", by_alias=True)
+            current = self._client.get_document(self.collection, drill_run.id)
+            if current is not None:
+                current_count = current.get("analyzedAnswerCount")
+                incoming_count = incoming.get("analyzedAnswerCount")
+                if (
+                    isinstance(current_count, int)
+                    and not isinstance(current_count, bool)
+                    and (
+                        not isinstance(incoming_count, int)
+                        or isinstance(incoming_count, bool)
+                        or incoming_count < current_count
+                    )
+                ):
+                    incoming["analyzedAnswerCount"] = current_count
+            self._client.set_document(self.collection, drill_run.id, incoming)
+
+        self._client.run_transaction(update_document)
 
     def initialize_analyzed_answer_count(self, drill_run_id: str, baseline: int) -> None:
         if baseline < 0:
