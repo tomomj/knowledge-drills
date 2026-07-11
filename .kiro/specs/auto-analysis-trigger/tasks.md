@@ -103,7 +103,7 @@
   - component testとtypecheckでautomatic表示、manual非表示、既存manual操作の型契約が確認できる。
   - _Requirements: 4.2, 4.3, 5.2, 5.3, 5.4, 5.5_
 
-- [ ] 4.2 Drill Adminで自動分析pollingを開始し成功・見送りを終端する
+- [x] 4.2 Drill Adminで自動分析pollingを開始し成功・見送りを終端する
   - manual stateと分離してpolling回数とpatch見送りを明示的に表現する。
   - automaticかつANALYZINGを1秒間隔で再取得し、ANALYZEDとドリル固有patch IDでは既存patch画面へ遷移する。
   - ANALYZEDかつpatch IDなしでは同画面に見送り完了を表示してpollingを停止する。

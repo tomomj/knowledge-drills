@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { api, ApiClientError } from '../api/client'
@@ -23,6 +23,11 @@ type AnalysisState =
   | { status: 'skipped' }
   | { status: 'failed'; message: string }
 
+type AutomaticAnalysisState =
+  | { status: 'idle' }
+  | { status: 'polling'; attempts: number }
+  | { status: 'noPatch' }
+
 const ANSWER_STATUS_CHIPS: Record<DrillAnswer['status'], { label: string; tone: string }> = {
   grading: { label: '採点中', tone: 'muted' },
   graded: { label: '採点済み', tone: 'success' },
@@ -42,6 +47,8 @@ export function DrillAdminPage() {
   const navigate = useNavigate()
   const [state, setState] = useState<PageState>({ status: 'loading' })
   const [analysisState, setAnalysisState] = useState<AnalysisState | null>(null)
+  const [automaticAnalysisState, setAutomaticAnalysisState] =
+    useState<AutomaticAnalysisState>({ status: 'idle' })
   const [answersState, setAnswersState] = useState<AnswersState>({ status: 'loading' })
   const [selectedAnswerId, setSelectedAnswerId] = useState<string | null>(null)
   const [answerQuery, setAnswerQuery] = useState('')
@@ -50,6 +57,33 @@ export function DrillAdminPage() {
   const [shareActionError, setShareActionError] = useState<string | null>(null)
   const [questionsOpen, setQuestionsOpen] = useState(true)
   const [answersOpen, setAnswersOpen] = useState(true)
+
+  const acceptDrill = useCallback(
+    (drill: DrillAdmin) => {
+      setState({ status: 'ready', drill })
+
+      if (drill.analysisOrigin !== 'automatic') {
+        setAutomaticAnalysisState({ status: 'idle' })
+        return
+      }
+      if (drill.status === 'analyzing') {
+        setAutomaticAnalysisState((current) =>
+          current.status === 'polling' ? current : { status: 'polling', attempts: 0 },
+        )
+        return
+      }
+      if (drill.status === 'analyzed' && drill.latestPatchId) {
+        navigate(`/patches/${drill.latestPatchId}`)
+        return
+      }
+      if (drill.status === 'analyzed') {
+        setAutomaticAnalysisState({ status: 'noPatch' })
+        return
+      }
+      setAutomaticAnalysisState({ status: 'idle' })
+    },
+    [navigate],
+  )
 
   useEffect(() => {
     let active = true
@@ -61,7 +95,7 @@ export function DrillAdminPage() {
       try {
         const drill = await api.getDrill(courseId, drillRunId)
         if (active) {
-          setState({ status: 'ready', drill })
+          acceptDrill(drill)
         }
       } catch (error) {
         if (active) {
@@ -84,7 +118,41 @@ export function DrillAdminPage() {
     return () => {
       active = false
     }
-  }, [courseId, drillRunId])
+  }, [acceptDrill, courseId, drillRunId])
+
+  useEffect(() => {
+    if (automaticAnalysisState.status !== 'polling' || !courseId || !drillRunId) {
+      return
+    }
+
+    let active = true
+    const timer = window.setTimeout(() => {
+      void api
+        .getDrill(courseId, drillRunId)
+        .then((drill) => {
+          if (active) {
+            acceptDrill(drill)
+          }
+        })
+        .catch(() => {
+          // 一時的な取得失敗の扱いと上限は後続taskで明示する
+        })
+        .finally(() => {
+          if (active) {
+            setAutomaticAnalysisState((current) =>
+              current.status === 'polling'
+                ? { status: 'polling', attempts: current.attempts + 1 }
+                : current,
+            )
+          }
+        })
+    }, 1000)
+
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [acceptDrill, automaticAnalysisState, courseId, drillRunId])
 
   useEffect(() => {
     if (analysisState?.status !== 'loading' || !courseId || !drillRunId) {
@@ -135,6 +203,9 @@ export function DrillAdminPage() {
   const statusChip = DRILL_STATUS_CHIPS[drill.status]
 
   async function analyzeAnswers() {
+    if (automaticAnalysisState.status === 'polling') {
+      return
+    }
     setAnalysisState({ status: 'loading' })
     setQuestionsOpen(false)
     setAnswersOpen(false)
@@ -223,7 +294,11 @@ export function DrillAdminPage() {
               type="button"
               className="btn btn--primary"
               onClick={analyzeAnswers}
-              disabled={!drill.canAnalyze || analysisState?.status === 'loading'}
+              disabled={
+                !drill.canAnalyze ||
+                analysisState?.status === 'loading' ||
+                automaticAnalysisState.status === 'polling'
+              }
             >
               回答を分析する
             </button>
@@ -241,6 +316,11 @@ export function DrillAdminPage() {
         {analysisState?.status === 'skipped' ? (
           <StatusBanner tone="info">
             分析は完了しました。承認された所見がなかったため、パッチ提案は見送られました。
+          </StatusBanner>
+        ) : null}
+        {automaticAnalysisState.status === 'noPatch' ? (
+          <StatusBanner tone="info">
+            自動分析は完了しました。承認された所見がなかったため、パッチ提案は見送られました。
           </StatusBanner>
         ) : null}
         {analysisState?.status === 'failed' && analysisState.message ? (
@@ -262,7 +342,11 @@ export function DrillAdminPage() {
           </aside>
 
           <div className="drill-grid__main" aria-label="ドリル主内容">
-            <AnalysisTimeline title="分析タイムライン" items={drill.analysisTimeline} />
+            <AnalysisTimeline
+              title="分析タイムライン"
+              items={drill.analysisTimeline}
+              isAutomatic={drill.analysisOrigin === 'automatic'}
+            />
 
             <details
               className="drill-section"
