@@ -175,6 +175,7 @@ export function PatchReviewPage() {
                 title="分析タイムライン"
                 items={patch.analysisTimeline}
                 evidenceDisplay="collapsed"
+                isAutomatic={patch.analysisOrigin === 'automatic'}
               />
 
               {patch.failureSignals.length > 0 ? (

@@ -37,6 +37,21 @@ const patch: DocumentPatch = {
   ],
 }
 
+const automaticPatch: DocumentPatch = {
+  ...patch,
+  analysisOrigin: 'automatic',
+  analysisTimeline: [
+    {
+      id: 'collect_answers',
+      title: '回答を収集',
+      status: 'completed',
+      summary: '採点済み回答 5 件を確認しました。',
+      evidence: [],
+      completedAt: '2026-07-08T10:00:00Z',
+    },
+  ],
+}
+
 const course: CourseDetail = {
   id: 'course-1',
   title: 'テスト講座',
@@ -78,7 +93,7 @@ vi.mock('../api/client', () => ({
 }))
 
 function renderPatch() {
-  render(
+  return render(
     <MemoryRouter initialEntries={['/patches/patch-1']}>
       <Routes>
         <Route path="/patches/:patchId" element={<PatchReviewPage />} />
@@ -187,6 +202,35 @@ describe('PatchReviewPage', () => {
     expect(timeline.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
+  it('labels an automatic patch timeline without changing the manual timeline DOM', async () => {
+    mocks.getPatch.mockResolvedValueOnce(automaticPatch)
+
+    const { unmount } = renderPatch()
+
+    await screen.findByText('回答を収集')
+    expect(screen.getByText('AI 自動分析')).toBeTruthy()
+
+    unmount()
+    mocks.getPatch.mockResolvedValueOnce({
+      ...patch,
+      analysisTimeline: [
+        {
+          id: 'collect_answers',
+          title: '回答を収集',
+          status: 'completed',
+          summary: '採点済み回答 2 件を確認しました。',
+          evidence: [],
+          completedAt: '2026-07-08T10:00:00Z',
+        },
+      ],
+    })
+
+    renderPatch()
+
+    await screen.findByText('回答を収集')
+    expect(screen.queryByText('AI 自動分析')).toBeNull()
+  })
+
   it('disables apply for stale patch', async () => {
     mocks.getPatch.mockResolvedValueOnce({ ...patch, status: 'stale' })
 
@@ -241,6 +285,40 @@ describe('PatchReviewPage', () => {
       name: 'ドリル確認へ戻る →',
     }) as HTMLAnchorElement
     expect(drillLink.getAttribute('href')).toBe('/courses/course-1/drill-runs/drill-1')
+  })
+
+  it('keeps automatic patch application behind the existing owner action', async () => {
+    const user = userEvent.setup()
+    mocks.getPatch.mockResolvedValueOnce(automaticPatch)
+    mocks.applyPatch.mockResolvedValueOnce({ ...automaticPatch, status: 'applied' })
+
+    renderPatch()
+
+    await screen.findByText('AI 自動分析')
+    expect(mocks.applyPatch).not.toHaveBeenCalled()
+    expect(mocks.rejectPatch).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: '修正を適用する' }))
+
+    expect(mocks.applyPatch).toHaveBeenCalledWith('patch-1', { ownerFeedback: null })
+    await waitFor(() => expect(screen.getByText(/パッチを適用しました。/)).toBeTruthy())
+  })
+
+  it('keeps automatic patch rejection behind the existing owner action', async () => {
+    const user = userEvent.setup()
+    mocks.getPatch.mockResolvedValueOnce(automaticPatch)
+    mocks.rejectPatch.mockResolvedValueOnce({ ...automaticPatch, status: 'rejected' })
+
+    renderPatch()
+
+    await screen.findByText('AI 自動分析')
+    expect(mocks.applyPatch).not.toHaveBeenCalled()
+    expect(mocks.rejectPatch).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: '却下する' }))
+
+    expect(mocks.rejectPatch).toHaveBeenCalledWith('patch-1', { ownerFeedback: null })
+    await waitFor(() => expect(screen.getByText(/パッチを却下しました。/)).toBeTruthy())
   })
 
   it('shows current status when backend returns patch conflict', async () => {

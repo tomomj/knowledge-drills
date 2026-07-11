@@ -117,7 +117,7 @@
   - fake timer testで失敗、一時通信失敗、180回上限、unmount後に追加取得がないことを確認できる。
   - _Requirements: 2.6, 4.3, 4.4, 4.5, 5.3, 5.5_
 
-- [ ] 4.4 (P) Patch Reviewへ自動起動元を表示する
+- [x] 4.4 (P) Patch Reviewへ自動起動元を表示する
   - patchの起動元を既存タイムラインへ渡し、automatic patchだけに「AI 自動分析」を表示する。
   - 自動提案を画面から自動適用・却下せず、既存owner操作だけを提供する。
   - page testでautomatic表示とmanualの表示・apply/reject回帰が確認できる。
