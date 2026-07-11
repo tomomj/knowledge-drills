@@ -1,21 +1,25 @@
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.clients.agent_runtime_client import AgentRuntimeClient
 from app.errors import AppError
 from app.repositories.repositories import (
+    AnalysisExecutionRepository,
     AnswerRepository,
     CourseRepository,
     DrillRepository,
     PatchRepository,
 )
 from app.schemas import (
+    AnalysisClaim,
     AnalysisReviewTimelineStep,
     AnalysisStepStatus,
     AnalysisTimelineItem,
     AnswerStatus,
+    AnswerSubmission,
+    Course,
     DocumentPatch,
     DocumentPatchRequest,
     DrillRun,
@@ -48,12 +52,14 @@ class AnalysisService:
         course_repository: CourseRepository | None = None,
         patch_repository: PatchRepository | None = None,
         agent_client: AgentRuntimeClient | None = None,
+        execution_repository: AnalysisExecutionRepository | None = None,
     ) -> None:
         self._drill_repository = drill_repository
         self._answer_repository = answer_repository
         self._course_repository = course_repository
         self._patch_repository = patch_repository
         self._agent_client = agent_client
+        self._execution_repository = execution_repository
 
     def start_analysis(self, drill_run_id: str, owner_user_id: str | None = None) -> DrillRun:
         drill_run = self._drill_repository.get(drill_run_id)
@@ -160,6 +166,13 @@ class AnalysisService:
         )
 
     def run_analysis(self, drill_run_id: str, owner_user_id: str) -> DocumentPatch | None:
+        if self._execution_repository is not None:
+            claim = self._execution_repository.claim_manual_analysis(
+                drill_run_id,
+                owner_user_id,
+            )
+            return self.run_claimed_analysis(claim)
+
         if self._course_repository is None or self._patch_repository is None:
             raise RuntimeError("AnalysisService dependencies are not configured")
 
@@ -216,6 +229,115 @@ class AnalysisService:
         )
         return patch
 
+    def run_claimed_analysis(self, claim: AnalysisClaim) -> DocumentPatch | None:
+        if (
+            self._course_repository is None
+            or self._agent_client is None
+            or self._execution_repository is None
+        ):
+            raise RuntimeError("AnalysisService dependencies are not configured")
+        execution_repository = self._execution_repository
+
+        try:
+            drill_run = self._drill_repository.get(claim.drill_run_id)
+            course = self._course_repository.get(claim.course_id)
+            if (
+                drill_run is None
+                or drill_run.course_id != claim.course_id
+                or course is None
+                or course.owner_user_id != claim.owner_user_id
+            ):
+                raise AppError(
+                    "analysis_snapshot_invalid",
+                    "Analysis snapshot no longer matches its course and drill.",
+                    status_code=409,
+                )
+
+            answers = self._load_claimed_answers(claim)
+            patch, timeline = self._execute_analysis_with_timeline(
+                drill_run,
+                course,
+                answers,
+                observed_answer_count=claim.snapshot_agent_answer_count,
+                persist_progress=lambda progress: execution_repository.update_progress(
+                    claim,
+                    progress,
+                ),
+            )
+        except Exception as exc:
+            latest_drill_run = self._drill_repository.get(claim.drill_run_id)
+            timeline = _fail_running_step(
+                latest_drill_run.analysis_timeline
+                if latest_drill_run is not None
+                else _initial_timeline("collect_answers")
+            )
+            logger.warning(
+                "analysis failed course_id=%s drill_run_id=%s step=%s error_type=%s",
+                claim.course_id,
+                claim.drill_run_id,
+                _failed_step_id(timeline) or "unknown",
+                type(exc).__name__,
+            )
+            try:
+                execution_repository.fail_analysis(
+                    claim,
+                    timeline,
+                    ANALYSIS_FAILED_MESSAGE,
+                )
+            except Exception:
+                logger.exception(
+                    "analysis failure terminal failed course_id=%s drill_run_id=%s",
+                    claim.course_id,
+                    claim.drill_run_id,
+                )
+            raise
+
+        try:
+            return execution_repository.complete_analysis(claim, timeline, patch)
+        except AppError as exc:
+            if exc.code == "analysis_course_version_changed":
+                raise
+            logger.exception(
+                "analysis completion persistence failed course_id=%s drill_run_id=%s "
+                "error_type=%s",
+                claim.course_id,
+                claim.drill_run_id,
+                type(exc).__name__,
+            )
+            raise
+        except Exception as exc:
+            logger.exception(
+                "analysis completion persistence failed course_id=%s drill_run_id=%s "
+                "error_type=%s",
+                claim.course_id,
+                claim.drill_run_id,
+                type(exc).__name__,
+            )
+            raise
+
+    def _load_claimed_answers(self, claim: AnalysisClaim) -> list[AnswerSubmission]:
+        answers: list[AnswerSubmission] = []
+        for answer_id in claim.answer_ids:
+            answer = self._answer_repository.get(answer_id)
+            if (
+                answer is None
+                or answer.drill_run_id != claim.drill_run_id
+                or answer.status is not AnswerStatus.GRADED
+            ):
+                raise AppError(
+                    "analysis_snapshot_invalid",
+                    "A claimed answer is missing or no longer matches the analysis snapshot.",
+                    status_code=409,
+                )
+            answers.append(answer)
+        if len(answers) != claim.snapshot_agent_answer_count:
+            raise AppError(
+                "analysis_snapshot_invalid",
+                "The claimed answer count does not match the analysis snapshot.",
+                status_code=409,
+            )
+        return answers
+
     def _generate_patch_proposal_with_timeline(
         self,
         drill_run: DrillRun,
@@ -234,18 +356,63 @@ class AnalysisService:
             raise AppError("no_graded_answers", "At least one graded answer is required.")
         analyzed_answer_count = len(graded_answers)
 
-        drill_run = self._update_timeline(
+        patch, timeline = self._execute_analysis_with_timeline(
             drill_run,
+            course,
+            graded_answers,
+            observed_answer_count=len(answers),
+            persist_progress=lambda progress: self._drill_repository.update(
+                drill_run.model_copy(update={"analysis_timeline": progress})
+            ),
+        )
+        return (
+            patch,
+            drill_run.model_copy(update={"analysis_timeline": timeline}),
+            analyzed_answer_count,
+        )
+
+    def _execute_analysis_with_timeline(
+        self,
+        drill_run: DrillRun,
+        course: Course,
+        answers: list[AnswerSubmission],
+        *,
+        observed_answer_count: int,
+        persist_progress: Callable[[list[AnalysisTimelineItem]], None],
+    ) -> tuple[DocumentPatch | None, list[AnalysisTimelineItem]]:
+        if self._agent_client is None:
+            raise RuntimeError("AnalysisService dependencies are not configured")
+
+        timeline = drill_run.analysis_timeline or _initial_timeline("collect_answers")
+
+        def update(
+            step_id: str,
+            status: AnalysisStepStatus,
+            *,
+            summary: str | None = None,
+            evidence: list[str] | None = None,
+        ) -> None:
+            nonlocal timeline
+            timeline = _replace_timeline_item(
+                timeline,
+                step_id,
+                status,
+                summary=summary,
+                evidence=evidence,
+            )
+            persist_progress(timeline)
+
+        answer_count = len(answers)
+        update(
             "collect_answers",
             AnalysisStepStatus.COMPLETED,
-            summary=f"採点済み回答 {analyzed_answer_count} 件を収集しました",
+            summary=f"採点済み回答 {answer_count} 件を収集しました",
             evidence=[
-                f"回答総数 {len(answers)} 件",
-                f"採点済み {analyzed_answer_count} 件",
+                f"回答総数 {observed_answer_count} 件",
+                f"採点済み {answer_count} 件",
             ],
         )
-        drill_run = self._update_timeline(
-            drill_run,
+        update(
             "detect_failure_patterns",
             AnalysisStepStatus.RUNNING,
             summary="採点結果から繰り返し発生するつまずきを抽出しています",
@@ -254,14 +421,13 @@ class AnalysisService:
             FailureAnalysisRequest(
                 course_markdown=course.markdown,
                 questions=drill_run.questions,
-                answers=graded_answers,
+                answers=answers,
                 grading_results=[
-                    result for answer in graded_answers for result in answer.grading_results
+                    result for answer in answers for result in answer.grading_results
                 ],
             )
         )
-        drill_run = self._update_timeline(
-            drill_run,
+        update(
             "detect_failure_patterns",
             AnalysisStepStatus.COMPLETED,
             summary=f"Failure Signal {len(failure_analysis.failure_signals)} 件を特定しました",
@@ -273,8 +439,7 @@ class AnalysisService:
             for signal in failure_analysis.failure_signals
             for section in signal.target_sections
         )
-        drill_run = self._update_timeline(
-            drill_run,
+        update(
             "match_course_evidence",
             AnalysisStepStatus.COMPLETED,
             summary=f"対象セクション {len(target_sections)} 件を照合しました",
@@ -291,8 +456,7 @@ class AnalysisService:
             signal.recommended_change for signal in failure_analysis.failure_signals
         )
         patch_skipped = not failure_analysis.failure_signals
-        drill_run = self._update_timeline(
-            drill_run,
+        update(
             "decide_patch_strategy",
             AnalysisStepStatus.COMPLETED,
             summary=(
@@ -310,8 +474,7 @@ class AnalysisService:
         )
 
         if patch_skipped:
-            drill_run = self._update_timeline(
-                drill_run,
+            update(
                 "create_patch",
                 AnalysisStepStatus.SKIPPED,
                 summary=PATCH_SKIPPED_MESSAGE,
@@ -322,10 +485,9 @@ class AnalysisService:
                 course.id,
                 drill_run.id,
             )
-            return None, drill_run, analyzed_answer_count
+            return None, timeline
 
-        drill_run = self._update_timeline(
-            drill_run,
+        update(
             "create_patch",
             AnalysisStepStatus.RUNNING,
             summary="Markdown patch 案を作成しています",
@@ -336,8 +498,7 @@ class AnalysisService:
                 failure_signals=failure_analysis.failure_signals,
             )
         )
-        drill_run = self._update_timeline(
-            drill_run,
+        update(
             "create_patch",
             AnalysisStepStatus.COMPLETED,
             summary=patch_response.patch_summary,
@@ -355,32 +516,9 @@ class AnalysisService:
             risk_notes=patch_response.risk_notes,
             diff_text=build_unified_diff(course.markdown, patch_response.patched_markdown),
             failure_signals=failure_analysis.failure_signals,
-            analysis_timeline=drill_run.analysis_timeline,
+            analysis_timeline=timeline,
         )
-        return patch, drill_run, analyzed_answer_count
-
-    def _update_timeline(
-        self,
-        drill_run: DrillRun,
-        step_id: str,
-        status: AnalysisStepStatus,
-        *,
-        summary: str | None = None,
-        evidence: list[str] | None = None,
-    ) -> DrillRun:
-        updated = drill_run.model_copy(
-            update={
-                "analysis_timeline": _replace_timeline_item(
-                    drill_run.analysis_timeline,
-                    step_id,
-                    status,
-                    summary=summary,
-                    evidence=evidence,
-                )
-            }
-        )
-        self._drill_repository.update(updated)
-        return updated
+        return patch, timeline
 
     def _ensure_drill_owned_by(self, drill_run: DrillRun, owner_user_id: str) -> None:
         if self._course_repository is None:
@@ -449,6 +587,13 @@ def _fail_running_step(timeline: list[AnalysisTimelineItem]) -> list[AnalysisTim
 def _running_step_id(timeline: list[AnalysisTimelineItem]) -> str | None:
     for item in timeline:
         if item.status == AnalysisStepStatus.RUNNING:
+            return item.id
+    return None
+
+
+def _failed_step_id(timeline: list[AnalysisTimelineItem]) -> str | None:
+    for item in timeline:
+        if item.status == AnalysisStepStatus.FAILED:
             return item.id
     return None
 
