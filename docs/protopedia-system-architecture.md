@@ -1,25 +1,10 @@
 # システム構成
 
+![Knowledge Drills のシステム構成図](images/knowledge-drills-system-architecture.png)
+
+- 編集元: [`protopedia-system-architecture.drawio`](protopedia-system-architecture.drawio)
+
 ## システム全体
-
-```mermaid
-flowchart LR
-    subgraph GC["Google Cloud"]
-        FE["Cloud Run<br/>frontend (React + Vite)"]
-        BE["Cloud Run<br/>backend (FastAPI)"]
-        FS[("Firestore")]
-        VX["Vertex AI<br/>Gemini"]
-    end
-    U["オーナー / 受講者"] --> FE --> BE
-    BE --> FS
-    BE -- "in-process ADK Runner" --> AG["Google ADK<br/>agentic workflow"] --> VX
-
-    subgraph GH["GitHub Actions (WIF / キーレス認証)"]
-        CI["CI: lint / typecheck / test"] --> E2E["E2E: デモ導線"]
-        EVAL["Agent Eval: adk eval<br/>LLM-as-a-judge"] --> CD["CD: Cloud Run deploy"]
-    end
-    GH -. "Terraform で構築" .-> GC
-```
 
 React frontend と FastAPI backend を Cloud Run 上で動かし、Firestore と Vertex AI に接続します。
 Backend 内の Google ADK Runner から、実処理 Agent が Gemini 3.1 Flash Lite を呼び出します。
