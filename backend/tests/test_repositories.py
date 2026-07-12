@@ -587,7 +587,7 @@ def test_auto_analysis_claim_snapshots_only_scored_answers_and_marks_automatic()
     ("fixture_overrides", "expected_status"),
     [
         ({"target_course_version": 1}, DrillRunStatus.READY),
-        ({"scored_answer_count": 4}, DrillRunStatus.READY),
+        ({"scored_answer_count": 2}, DrillRunStatus.READY),
         ({"total_score": 4}, DrillRunStatus.READY),
         ({"target_status": DrillRunStatus.ANALYZING}, DrillRunStatus.ANALYZING),
         ({"target_status": DrillRunStatus.GENERATING}, DrillRunStatus.GENERATING),
@@ -663,9 +663,9 @@ def test_auto_analysis_claim_ignores_proposed_patch_from_another_course() -> Non
     assert claim.origin is AnalysisOrigin.AUTOMATIC
 
 
-def test_auto_analysis_claim_uses_scored_watermark_for_five_answer_threshold() -> None:
+def test_auto_analysis_claim_uses_scored_watermark_for_three_answer_threshold() -> None:
     client, repository, _courses, drills, *_rest = create_auto_claim_fixture(
-        scored_answer_count=6
+        scored_answer_count=4
     )
     drill = drills.get("drill-1")
     assert drill is not None
