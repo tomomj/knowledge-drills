@@ -16,7 +16,7 @@ type PageState =
   | { status: 'invalidToken'; message: string }
   | { status: 'failed'; message: string }
 
-type LearnerPhase = 'reading' | 'answering'
+type LearnerPhase = 'intro' | 'reading' | 'answering'
 
 const MAX_LEARNER_NAME_LENGTH = 50
 const MAX_ANSWER_TEXT_LENGTH = 2_000
@@ -24,7 +24,7 @@ const MAX_ANSWER_TEXT_LENGTH = 2_000
 export function LearnerDrillPage() {
   const { shareToken } = useParams()
   const [state, setState] = useState<PageState>({ status: 'loading' })
-  const [phase, setPhase] = useState<LearnerPhase>('reading')
+  const [phase, setPhase] = useState<LearnerPhase>('intro')
   const [learnerName, setLearnerName] = useState('')
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const submittingRef = useRef(false)
@@ -150,7 +150,9 @@ export function LearnerDrillPage() {
   const drill = state.status === 'ready' || state.status === 'submitting' ? state.drill : null
   const isSubmitting = state.status === 'submitting'
   const submitError = state.status === 'ready' ? state.submitError : null
-  const isReading = phase === 'reading' && Boolean(drill?.courseMarkdown)
+  const hasCourseMaterial = Boolean(drill?.courseMarkdown)
+  const isIntro = phase === 'intro' && Boolean(drill)
+  const isReading = phase === 'reading' && hasCourseMaterial
   const answeredCount = drill
     ? drill.questions.filter((question) => answers[question.id]?.trim()).length
     : 0
@@ -159,18 +161,85 @@ export function LearnerDrillPage() {
   return (
     <AppShell variant="learner">
       <main className="page page--narrow">
-        <section className="learner-hero" aria-labelledby="learner-title">
-          <p className="eyebrow">Learner</p>
-          <h1 id="learner-title">確認ドリル</h1>
-          <p>教材を読んでから回答してください。回答は教材改善の分析に匿名で利用されます。</p>
-        </section>
+        {drill && isIntro ? (
+          <section className="card learner-intro" aria-labelledby="learner-intro-title">
+            <div className="learner-intro__head">
+              <p className="eyebrow">確認ドリルのご案内</p>
+              <h1 id="learner-intro-title">{drill.courseTitle}</h1>
+              <p>
+                教材の理解度を確認するための短いドリルです。
+                {hasCourseMaterial ? '教材を読んでから、' : ''}
+                自分の言葉で回答してください。
+              </p>
+            </div>
+
+            <dl className="learner-intro__meta" aria-label="ドリルの概要">
+              <div>
+                <dt>所要時間</dt>
+                <dd>約5分</dd>
+              </div>
+              <div>
+                <dt>問題数</dt>
+                <dd>{drill.questions.length}問</dd>
+              </div>
+            </dl>
+
+            <ol className="learner-intro__steps" aria-label="回答までの流れ">
+              {hasCourseMaterial ? (
+                <li>
+                  <span className="learner-intro__step-number">1</span>
+                  <div>
+                    <strong>教材を読む</strong>
+                    <p>まずは教材の内容を確認します。</p>
+                  </div>
+                </li>
+              ) : null}
+              <li>
+                <span className="learner-intro__step-number">{hasCourseMaterial ? 2 : 1}</span>
+                <div>
+                  <strong>{drill.questions.length}問に回答する</strong>
+                  <p>正解を調べず、理解した内容を書いてください。</p>
+                </div>
+              </li>
+              <li>
+                <span className="learner-intro__step-number">{hasCourseMaterial ? 3 : 2}</span>
+                <div>
+                  <strong>回答を提出する</strong>
+                  <p>提出後、その場でフィードバックを確認できます。</p>
+                </div>
+              </li>
+            </ol>
+
+            <aside className="learner-intro__privacy" aria-label="回答の取り扱い">
+              <strong>回答について</strong>
+              <p>お名前と回答内容は講座の管理者が確認し、教材改善のために利用します。</p>
+            </aside>
+
+            <div className="learner-intro__action">
+              <button
+                type="button"
+                className="btn btn--primary btn--lg"
+                onClick={() => setPhase(hasCourseMaterial ? 'reading' : 'answering')}
+              >
+                {hasCourseMaterial ? '教材を読んで始める' : '回答を始める'}
+              </button>
+              <span>途中でページを閉じると、入力内容は保存されません</span>
+            </div>
+          </section>
+        ) : (
+          <section className="learner-hero" aria-labelledby="learner-title">
+            <p className="eyebrow">Learner</p>
+            <h1 id="learner-title">確認ドリル</h1>
+            <p>教材を読んでから回答してください。回答は教材改善のために利用されます。</p>
+          </section>
+        )}
 
         {state.status === 'failed' ? (
           <StatusBanner tone="error">{state.message}</StatusBanner>
         ) : null}
         {submitError ? <StatusBanner tone="error">{submitError}</StatusBanner> : null}
 
-        {drill && isReading ? (
+        {drill && !isIntro && isReading ? (
           <>
             <section className="card course-material" aria-label="教材">
               <div className="course-material__body">
@@ -195,7 +264,7 @@ export function LearnerDrillPage() {
           </>
         ) : null}
 
-        {drill && !isReading ? (
+        {drill && !isIntro && !isReading ? (
           <>
             <div className="progress-line" aria-label="回答の進捗">
               <div className="progress-track">
