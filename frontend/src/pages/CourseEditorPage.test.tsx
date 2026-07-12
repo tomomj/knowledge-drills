@@ -130,6 +130,104 @@ describe('CourseEditorPage', () => {
     })
   })
 
+  it('links to the latest drill when it matches the current course version', async () => {
+    mocks.getCourse.mockResolvedValueOnce({
+      id: 'course-1',
+      title: '講座',
+      markdown: '# Body',
+      drillFocus: null,
+      version: 2,
+      latestDrillRunId: 'drill-2',
+      latestPatchId: null,
+    })
+    mocks.getCourseMetrics.mockResolvedValueOnce({
+      courseId: 'course-1',
+      runs: [
+        {
+          drillRunId: 'drill-2',
+          courseVersion: 2,
+          answerCount: 0,
+          averageScore: null,
+          maxScore: null,
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/courses/course-1']}>
+        <Routes>
+          <Route path="/courses/:courseId" element={<CourseEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const link = await screen.findByRole('link', { name: '確認する →' })
+    expect(link.getAttribute('href')).toBe('/courses/course-1/drill-runs/drill-2?view=drill')
+  })
+
+  it('shows the latest drill as ungenerated when it belongs to an older course version', async () => {
+    mocks.getCourse.mockResolvedValueOnce({
+      id: 'course-1',
+      title: '講座',
+      markdown: '# Body',
+      drillFocus: null,
+      version: 2,
+      latestDrillRunId: 'drill-1',
+      latestPatchId: 'patch-1',
+      latestPatchStatus: 'applied',
+    })
+    mocks.getCourseMetrics.mockResolvedValueOnce({
+      courseId: 'course-1',
+      runs: [
+        {
+          drillRunId: 'drill-1',
+          courseVersion: 1,
+          answerCount: 3,
+          averageScore: 2,
+          maxScore: 4,
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/courses/course-1']}>
+        <Routes>
+          <Route path="/courses/:courseId" element={<CourseEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByDisplayValue('講座')
+    const latestDrillRow = screen.getByText('最新ドリル').closest('div') as HTMLElement
+    expect(within(latestDrillRow).getByText('未生成')).toBeTruthy()
+    expect(within(latestDrillRow).queryByRole('link')).toBeNull()
+  })
+
+  it('shows the latest drill as ungenerated when no drill exists', async () => {
+    mocks.getCourse.mockResolvedValueOnce({
+      id: 'course-1',
+      title: '講座',
+      markdown: '# Body',
+      drillFocus: null,
+      version: 1,
+      latestDrillRunId: null,
+      latestPatchId: null,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/courses/course-1']}>
+        <Routes>
+          <Route path="/courses/:courseId" element={<CourseEditorPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByDisplayValue('講座')
+    const latestDrillRow = screen.getByText('最新ドリル').closest('div') as HTMLElement
+    expect(within(latestDrillRow).getByText('未生成')).toBeTruthy()
+    expect(within(latestDrillRow).queryByRole('link')).toBeNull()
+  })
+
   it('shows score progression for all scored runs using score-rate deltas', async () => {
     mocks.getCourse.mockResolvedValueOnce({
       id: 'course-1',
@@ -391,6 +489,9 @@ describe('CourseEditorPage', () => {
       expect(field.value).toBe('講座')
     })
     expect(screen.queryByText('スコアの推移')).toBeNull()
+    expect(screen.getByRole('link', { name: '確認する →' }).getAttribute('href')).toBe(
+      '/courses/course-1/drill-runs/drill-2?view=drill',
+    )
   })
 
   it('uses warning tone when the total score rate goes down', async () => {

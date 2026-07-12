@@ -74,6 +74,11 @@ export function CourseEditorPage() {
 
   const validationError = validateCourse(title, markdown, drillFocus)
   const scoreProgression = buildScoreProgression(metrics)
+  const latestRun = metrics?.runs.find((run) => run.drillRunId === course?.latestDrillRunId)
+  const hasCurrentVersionDrill = Boolean(
+    course?.latestDrillRunId &&
+      (metrics === null || latestRun?.courseVersion === course.version),
+  )
 
   async function saveCourse() {
     if (validationError) {
@@ -256,13 +261,15 @@ export function CourseEditorPage() {
                   <div>
                     <dt>最新ドリル</dt>
                     <dd>
-                      {course?.latestDrillRunId ? (
+                      {course?.latestDrillRunId && hasCurrentVersionDrill ? (
                         <Link
                           className="side-link"
-                          to={`/courses/${course.id}/drill-runs/${course.latestDrillRunId}`}
+                          to={`/courses/${course.id}/drill-runs/${course.latestDrillRunId}?view=drill`}
                         >
                           確認する →
                         </Link>
+                      ) : course ? (
+                        '未生成'
                       ) : (
                         '-'
                       )}
