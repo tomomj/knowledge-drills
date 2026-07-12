@@ -1,7 +1,9 @@
 name: Agent Eval
 
 on:
-  # 全 PR で実行する（required check のため paths フィルタは付けない）。
+  # 全 PR で required check を作る（paths フィルタは付けない）。
+  # 実 GCP credential を使う eval は同一 repository 内の PR だけで実行し、
+  # fork PR では agent-eval job を skip する。
   # agent/ に差分がない PR は wait-for-prerequisite-ci が should_run_eval=false を
   # 返して eval ジョブが skipped になり、required check は通過扱いになる。
   pull_request:
@@ -20,7 +22,6 @@ permissions:
   actions: read
   checks: read
   contents: read
-  id-token: write
   pull-requests: read
 
 concurrency:
@@ -169,8 +170,15 @@ jobs:
   agent-eval:
     name: Agent Eval (${{ matrix.eval }})
     needs: wait-for-prerequisite-ci
-    if: needs.wait-for-prerequisite-ci.outputs.should_run_eval == 'true'
+    if: >-
+      needs.wait-for-prerequisite-ci.outputs.should_run_eval == 'true' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
 
     strategy:
       fail-fast: false

@@ -111,7 +111,7 @@ flowchart LR
 |---|---|---|---|
 | unit（pytest / vitest） | なし | ロジック・スキーマ境界 | 全 PR |
 | E2E（Playwright, local モード） | なし | デモ導線・画面の配線 | CI 成功後の PR |
-| **Agent Eval（`adk eval` + LLM-as-a-judge）** | **実 Gemini** | 4 エージェントの応答品質 | 全 PR（`agent/**` 差分がなければ自動 skip） |
+| **Agent Eval（`adk eval` + LLM-as-a-judge）** | **実 Gemini** | 4 エージェントの応答品質 | 同一 repository の PR（`agent/**` 差分がなければ自動 skip、fork PR は credential-free で skip） |
 | フルスタック E2E（opt-in） | 実 Gemini | backend ↔ ADK の接続 | `E2E_LLM=1` 手動 |
 
 - Agent Eval は rubric ベースの LLM judge（`rubric_based_final_response_quality_v1`）で
@@ -198,8 +198,9 @@ PR だけで実行する。
 - `.github/workflows/backend-ci.yml`: `backend/**` / `agent/**` の通常 CI
 - `.github/workflows/frontend-ci.yml`: `frontend/**`
 - `.github/workflows/e2e.yml`: CI 成功後にデモ導線の Playwright E2E を実行する
-- `.github/workflows/agent-eval.yml`: 全 PR で実行し、`agent/**` 差分時のみ eval 専用 WIF で
-  実 Gemini eval を実行する（差分がなければ skip）。main への required check
+- `.github/workflows/agent-eval.yml`: 全 PR で required check を作り、同一 repository の
+  `agent/**` 差分時のみ eval 専用 WIF で実 Gemini eval を実行する。差分がない PR と
+  fork PR は skip。main への required check
 - `.github/workflows/backend-cd.yml` / `frontend-cd.yml`: main push で Cloud Run へデプロイする。
   エージェント品質は PR の Agent Eval required check で担保済みのため、マージ後は待たずにデプロイする
 
