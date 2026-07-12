@@ -345,7 +345,7 @@ test.describe('Knowledge Drill E2E', () => {
 
     await page.goto(`/courses/${seed.courseId}/drill-runs/${seed.drillRunId}/analysis?patchId=${seed.patchId}`)
 
-    await expect(page.getByText('このパッチは古くなっています。再分析が必要です。')).toBeVisible()
+    await expect(page.getByText('この改善案は古くなっています。再分析が必要です。')).toBeVisible()
     await expect(page.getByText('要再分析')).toBeVisible()
     await expect(page.getByRole('button', { name: '教材に反映する' })).toBeDisabled()
     await expect(page.getByRole('button', { name: '今回は見送る' })).toBeDisabled()
