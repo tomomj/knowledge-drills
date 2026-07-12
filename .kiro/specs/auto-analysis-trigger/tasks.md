@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. 分析状態と判定基盤を整備する
+- [x] 1. 分析状態と判定基盤を整備する
 - [x] 1.1 分析起動元、二重snapshot、二重watermarkの後方互換データ契約を追加する
   - 自動・手動の起動元、Agent入力件数、確定スコア件数、自動閾値専用watermark、ドリル固有patch IDを型安全に表現する。
   - 旧documentは起動元manual、専用watermark未記録、patch IDなしとして読み、既存のcamelCase契約を維持する。
@@ -30,7 +30,7 @@
   - _Requirements: 2.3, 2.5, 2.6, 4.1_
   - _Boundary: InMemory transaction contract_
 
-- [ ] 2. 共通の分析claimとtransactional lifecycleを実装する
+- [x] 2. 共通の分析claimとtransactional lifecycleを実装する
 - [x] 2.1 manual claimとorigin別snapshotを共通execution境界へ追加する
   - manual claimは既存の実行可否とowner境界を維持し、全GRADED回答をAgent入力として固定する。
   - 同じ回答集合からAgent入力件数と確定スコア件数を別々に記録し、自動条件でmanual実行を制限しない。
@@ -74,7 +74,7 @@
   - fake logger testで全4結果と機密情報非出力が観測できる。
   - _Requirements: 1.1, 1.5, 2.7, 2.8, 3.1, 3.2, 3.3, 3.8, 5.1_
 
-- [ ] 3. Backendのroute・composition・管理APIへ統合する
+- [x] 3. Backendのroute・composition・管理APIへ統合する
 - [x] 3.1 shared execution境界をapplication compositionへ接続する
   - shared storageから共通execution境界、manual分析service、自動triggerを構築して同じ状態へ接続する。
   - 既存manual APIのdependency取得と同期結果を維持する。
@@ -96,7 +96,7 @@
   - _Boundary: Drill Admin API_
   - _Depends: 1.1, 2.3_
 
-- [ ] 4. 自動起動元と完了状態をowner UIへ統合する
+- [x] 4. 自動起動元と完了状態をowner UIへ統合する
 - [x] 4.1 Frontend API契約と分析タイムラインの起動元表示を追加する
   - drillとpatchのtyped responseへ起動元とドリル固有patch IDを追加し、既存fixtureを後方互換値へ更新する。
   - automaticの場合だけ分析タイムラインへ「AI 自動分析」を表示し、manualまたは未指定では既存DOMを変えない。
@@ -132,7 +132,7 @@
   - _Requirements: 2.1_
   - _Boundary: Cloud Run runtime_
 
-- [ ] 6. 交差ケースとend-to-end回帰を検証する
+- [x] 6. 交差ケースとend-to-end回帰を検証する
 - [x] 6.1 (P) 実競合とpatch completionのlinearizationを検証する
   - 実threadでauto/autoとmanual/autoを同時開始し、分析開始が高々1件になることを確認する。
   - patch completion先行ではclaim再評価後no-op、auto claim先行では開始済み分析を継続する順序を確認する。
