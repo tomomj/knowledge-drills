@@ -2,10 +2,12 @@ name: Agent Eval
 
 on:
   # 全 PR で required check を作る（paths フィルタは付けない）。
-  # 実 GCP credential を使う eval は同一 repository 内の PR だけで実行し、
-  # fork PR では agent-eval job を skip する。
-  # agent/ に差分がない PR は wait-for-prerequisite-ci が should_run_eval=false を
-  # 返して eval ジョブが skipped になり、required check は通過扱いになる。
+  # 実 GCP credential を使う eval は同一 repository 内の PR だけで実行する。
+  # agent/ に差分がない PR は eval ステップをスキップして success を返す。
+  # 注意: ジョブレベルの if で skip すると check 名が matrix 展開前の
+  # 「Agent Eval (${{ matrix.eval }})」のまま報告され、branch ruleset の
+  # required check（展開後の名前）を永遠に満たせない。そのため skip 判定は
+  # ジョブ内の gate ステップで行う。
   pull_request:
   workflow_dispatch:
     inputs:
@@ -170,10 +172,6 @@ jobs:
   agent-eval:
     name: Agent Eval (${{ matrix.eval }})
     needs: wait-for-prerequisite-ci
-    if: >-
-      needs.wait-for-prerequisite-ci.outputs.should_run_eval == 'true' &&
-      (github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
 
     permissions:
@@ -195,10 +193,35 @@ jobs:
         working-directory: agent
 
     steps:
+      # ジョブ自体は常に実行し、eval を走らせない場合もここで success を返して
+      # required check「Agent Eval (<eval名>)」を成立させる。
+      # fork PR が agent/ を変更した場合は green で素通りさせず fail させる
+      # （実 GCP credential を fork に渡せないため eval を実行できない）。
+      - name: Decide whether to run eval
+        id: gate
+        shell: bash
+        working-directory: .
+        env:
+          SHOULD_RUN_EVAL: ${{ needs.wait-for-prerequisite-ci.outputs.should_run_eval }}
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [[ "$SHOULD_RUN_EVAL" != "true" ]]; then
+            echo "run_eval=false" >> "$GITHUB_OUTPUT"
+            echo "No agent files changed; skipping ADK eval for ${{ matrix.eval }}."
+            exit 0
+          fi
+          if [[ "$IS_FORK_PR" == "true" ]]; then
+            echo "::error::Fork PRs cannot run ADK evals (GCP credentials unavailable). Push the branch to this repository instead."
+            exit 1
+          fi
+          echo "run_eval=true" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
+        if: steps.gate.outputs.run_eval == 'true'
         uses: actions/checkout@v6
 
       - name: Validate eval configuration
+        if: steps.gate.outputs.run_eval == 'true'
         shell: bash
         run: |
           required_vars=(
@@ -216,6 +239,7 @@ jobs:
           done
 
       - name: Authenticate to Google Cloud
+        if: steps.gate.outputs.run_eval == 'true'
         id: auth
         uses: google-github-actions/auth@v3
         with:
@@ -225,11 +249,13 @@ jobs:
           token_format: access_token
 
       - name: Set up Python
+        if: steps.gate.outputs.run_eval == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
       - name: Set up uv
+        if: steps.gate.outputs.run_eval == 'true'
         # v8 系はメジャーエイリアスタグが無いためパッチまで固定する
         uses: astral-sh/setup-uv@v8.3.0
         with:
@@ -237,6 +263,7 @@ jobs:
           cache-dependency-glob: agent/uv.lock
 
       - name: Run ADK evals
+        if: steps.gate.outputs.run_eval == 'true'
         shell: bash
         env:
           OPENAI_API_KEY: ${{ steps.auth.outputs.access_token }}
