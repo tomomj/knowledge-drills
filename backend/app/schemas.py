@@ -148,6 +148,7 @@ class CourseDetailResponse(ApiModel):
     updated_at: str | None = None
     latest_drill_run_id: str | None = None
     latest_patch_id: str | None = None
+    latest_patch_status: PatchStatus | None = None
 
 
 class CourseCreateResponse(ApiModel):

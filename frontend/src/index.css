@@ -17,6 +17,10 @@
   --success-soft: #e4f2e8;
   --warning: #9a6412;
   --warning-soft: #faf0da;
+  --review: #5d43a7;
+  --review-soft: #eeeaff;
+  --review-line: #9b86dd;
+  --review-glow: rgba(93, 67, 167, 0.16);
   --error: #b23a42;
   --error-soft: #f9e8e9;
   --diff-bg: #14201c;
@@ -61,6 +65,10 @@
     --success-soft: #1e3326;
     --warning: #d9a94e;
     --warning-soft: #38301c;
+    --review: #c8b7ff;
+    --review-soft: #292343;
+    --review-line: #7560bd;
+    --review-glow: rgba(158, 130, 255, 0.22);
     --error: #e58b91;
     --error-soft: #3c2426;
     --diff-bg: #0d1512;

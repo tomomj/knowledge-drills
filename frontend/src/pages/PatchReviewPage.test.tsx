@@ -60,6 +60,7 @@ const course: CourseDetail = {
   version: 1,
   latestDrillRunId: 'drill-1',
   latestPatchId: 'patch-1',
+  latestPatchStatus: 'proposed',
 }
 
 const mocks = vi.hoisted(() => ({
@@ -120,7 +121,7 @@ describe('PatchReviewPage', () => {
 
     renderPatch()
 
-    await waitFor(() => expect(screen.getByText('提案中')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('人の確認待ち')).toBeTruthy())
     expect(screen.getByText('回答サンプル 2 件')).toBeTruthy()
     expect(screen.getByRole('heading', { name: '検出されたつまずき' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: '根拠不足' })).toBeTruthy()
@@ -142,8 +143,8 @@ describe('PatchReviewPage', () => {
 
     renderPatch()
 
-    await screen.findByText('提案中')
-    expect(screen.getByRole('button', { name: '修正を適用する' })).toBeTruthy()
+    await screen.findByText('人の確認待ち')
+    expect(screen.getByRole('button', { name: '教材に反映する' })).toBeTruthy()
     expect(screen.getByLabelText('Diff').textContent).toContain('# After')
     expect(screen.queryByText(/v1 → v2/)).toBeNull()
   })
@@ -154,8 +155,8 @@ describe('PatchReviewPage', () => {
 
     renderPatch()
 
-    await screen.findByText('提案中')
-    expect(screen.getByRole('button', { name: '修正を適用する' })).toBeTruthy()
+    await screen.findByText('人の確認待ち')
+    expect(screen.getByRole('button', { name: '教材に反映する' })).toBeTruthy()
     expect(screen.getByLabelText('Diff').textContent).toContain('# After')
     await waitFor(() => expect(mocks.getCourse).toHaveBeenCalledWith('course-1'))
     expect(screen.queryByText(/v1 → v2/)).toBeNull()
@@ -236,8 +237,8 @@ describe('PatchReviewPage', () => {
 
     renderPatch()
 
-    await waitFor(() => expect(screen.getByText('このパッチは古くなっています。再分析が必要です。')).toBeTruthy())
-    const applyButton = screen.getByRole('button', { name: '修正を適用する' }) as HTMLButtonElement
+    await waitFor(() => expect(screen.getByText('この改善案は古くなっています。再分析が必要です。')).toBeTruthy())
+    const applyButton = screen.getByRole('button', { name: '教材に反映する' }) as HTMLButtonElement
     expect(applyButton.disabled).toBe(true)
   })
 
@@ -252,12 +253,12 @@ describe('PatchReviewPage', () => {
 
     renderPatch()
 
-    await screen.findByText('提案中')
+    await screen.findByText('人の確認待ち')
     await user.type(screen.getByLabelText(/オーナーコメント/), '反映します')
-    await user.click(screen.getByRole('button', { name: '修正を適用する' }))
+    await user.click(screen.getByRole('button', { name: '教材に反映する' }))
 
     expect(mocks.applyPatch).toHaveBeenCalledWith('patch-1', { ownerFeedback: '反映します' })
-    await waitFor(() => expect(screen.getByText(/パッチを適用しました。/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/改善案を反映しました。/)).toBeTruthy())
     const scoreLink = screen.getByRole('link', {
       name: '講座管理でスコアの推移を確認 →',
     }) as HTMLAnchorElement
@@ -275,12 +276,12 @@ describe('PatchReviewPage', () => {
 
     renderPatch()
 
-    await screen.findByText('提案中')
+    await screen.findByText('人の確認待ち')
     await user.type(screen.getByLabelText(/オーナーコメント/), '不要です')
-    await user.click(screen.getByRole('button', { name: '却下する' }))
+    await user.click(screen.getByRole('button', { name: '今回は見送る' }))
 
     expect(mocks.rejectPatch).toHaveBeenCalledWith('patch-1', { ownerFeedback: '不要です' })
-    await waitFor(() => expect(screen.getByText(/パッチを却下しました。/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/改善案を見送りました。/)).toBeTruthy())
     const drillLink = screen.getByRole('link', {
       name: 'ドリル確認へ戻る →',
     }) as HTMLAnchorElement
@@ -298,10 +299,10 @@ describe('PatchReviewPage', () => {
     expect(mocks.applyPatch).not.toHaveBeenCalled()
     expect(mocks.rejectPatch).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: '修正を適用する' }))
+    await user.click(screen.getByRole('button', { name: '教材に反映する' }))
 
     expect(mocks.applyPatch).toHaveBeenCalledWith('patch-1', { ownerFeedback: null })
-    await waitFor(() => expect(screen.getByText(/パッチを適用しました。/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/改善案を反映しました。/)).toBeTruthy())
   })
 
   it('keeps automatic patch rejection behind the existing owner action', async () => {
@@ -315,10 +316,10 @@ describe('PatchReviewPage', () => {
     expect(mocks.applyPatch).not.toHaveBeenCalled()
     expect(mocks.rejectPatch).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: '却下する' }))
+    await user.click(screen.getByRole('button', { name: '今回は見送る' }))
 
     expect(mocks.rejectPatch).toHaveBeenCalledWith('patch-1', { ownerFeedback: null })
-    await waitFor(() => expect(screen.getByText(/パッチを却下しました。/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/改善案を見送りました。/)).toBeTruthy())
   })
 
   it('shows current status when backend returns patch conflict', async () => {
@@ -334,8 +335,8 @@ describe('PatchReviewPage', () => {
 
     renderPatch()
 
-    await screen.findByText('提案中')
-    await user.click(screen.getByRole('button', { name: '修正を適用する' }))
+    await screen.findByText('人の確認待ち')
+    await user.click(screen.getByRole('button', { name: '教材に反映する' }))
 
     await waitFor(() => expect(screen.getByText('Patch status: applied')).toBeTruthy())
   })
