@@ -160,7 +160,7 @@
   - legacy ANALYZEDへの新回答は保存前lazy初期化後に追加回答だけが差分となり、既存要分析判定の結果が変わらないことを確認できる。
   - _Requirements: 1.2, 1.3, 1.4, 2.3, 3.2, 4.5_
 
-- [ ] 6.5 (P) 自動提案と既存manual flowをbrowser E2Eで検証する
+- [x] 6.5 (P) 自動提案と既存manual flowをbrowser E2Eで検証する
   - 4回答済みdemoへ5件目を投稿し、人間が分析ボタンを押さずに自動分析から正しいpatch reviewへ到達する。
   - 自動patchに「AI 自動分析」を表示し、教材変更は既存owner apply/reject操作まで待つことを確認する。
   - 1回答のmanual分析では自動表示がなく、patch作成・適用が従来どおり完走することを確認する。
