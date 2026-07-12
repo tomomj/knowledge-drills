@@ -53,31 +53,39 @@ class InMemoryFirestoreClient:
         self.transaction_count = 0
 
     def create_document(self, collection: str, document_id: str, data: DocumentData) -> None:
-        collection_data = self._collections.setdefault(collection, {})
-        if document_id in collection_data:
-            raise DocumentAlreadyExists(f"{collection}/{document_id} already exists")
-        collection_data[document_id] = deepcopy(data)
+        with self._transaction_lock:
+            collection_data = self._collections.setdefault(collection, {})
+            if document_id in collection_data:
+                raise DocumentAlreadyExists(f"{collection}/{document_id} already exists")
+            collection_data[document_id] = deepcopy(data)
 
     def set_document(self, collection: str, document_id: str, data: DocumentData) -> None:
-        self._collections.setdefault(collection, {})[document_id] = deepcopy(data)
+        with self._transaction_lock:
+            self._collections.setdefault(collection, {})[document_id] = deepcopy(data)
 
     def get_document(self, collection: str, document_id: str) -> DocumentData | None:
-        document = self._collections.get(collection, {}).get(document_id)
-        if document is None:
-            return None
-        return deepcopy(document)
+        with self._transaction_lock:
+            document = self._collections.get(collection, {}).get(document_id)
+            if document is None:
+                return None
+            return deepcopy(document)
 
     def update_document(self, collection: str, document_id: str, data: DocumentData) -> None:
-        collection_data = self._collections.setdefault(collection, {})
-        if document_id not in collection_data:
-            raise DocumentNotFound(f"{collection}/{document_id} was not found")
-        collection_data[document_id].update(deepcopy(data))
+        with self._transaction_lock:
+            collection_data = self._collections.setdefault(collection, {})
+            if document_id not in collection_data:
+                raise DocumentNotFound(f"{collection}/{document_id} was not found")
+            collection_data[document_id].update(deepcopy(data))
 
     def delete_document(self, collection: str, document_id: str) -> None:
-        self._collections.setdefault(collection, {}).pop(document_id, None)
+        with self._transaction_lock:
+            self._collections.setdefault(collection, {}).pop(document_id, None)
 
     def list_documents(self, collection: str) -> list[DocumentData]:
-        return [deepcopy(document) for document in self._collections.get(collection, {}).values()]
+        with self._transaction_lock:
+            return [
+                deepcopy(document) for document in self._collections.get(collection, {}).values()
+            ]
 
     def list_documents_by_field(
         self,
@@ -85,16 +93,22 @@ class InMemoryFirestoreClient:
         field_name: str,
         field_value: object,
     ) -> list[DocumentData]:
-        return [
-            deepcopy(document)
-            for document in self._collections.get(collection, {}).values()
-            if document.get(field_name) == field_value
-        ]
+        with self._transaction_lock:
+            return [
+                deepcopy(document)
+                for document in self._collections.get(collection, {}).values()
+                if document.get(field_name) == field_value
+            ]
 
     def run_transaction(self, callback: Callable[[], T]) -> T:
         with self._transaction_lock:
             self.transaction_count += 1
-            return callback()
+            snapshot = deepcopy(self._collections)
+            try:
+                return callback()
+            except Exception:
+                self._collections = snapshot
+                raise
 
 
 class GoogleFirestoreClient:

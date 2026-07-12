@@ -13,6 +13,7 @@ type AnalysisTimelineProps = {
   title: string
   items: AnalysisTimelineItemView[]
   evidenceDisplay?: 'expanded' | 'collapsed'
+  isAutomatic?: boolean
 }
 
 type ChipTone = 'accent' | 'error' | 'muted' | 'success' | 'warning'
@@ -74,6 +75,7 @@ export function AnalysisTimeline({
   title,
   items,
   evidenceDisplay = 'expanded',
+  isAutomatic = false,
 }: AnalysisTimelineProps) {
   if (items.length === 0) {
     return null
@@ -85,6 +87,7 @@ export function AnalysisTimeline({
   return (
     <section className="analysis-timeline" aria-label={title}>
       <h2>{title}</h2>
+      {isAutomatic ? <span className="chip chip--accent">AI 自動分析</span> : null}
       <div className="analysis-timeline__groups">
         {phases.map((phase) => (
           <div key={phase.id} className="analysis-timeline__group">
