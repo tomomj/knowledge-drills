@@ -12,10 +12,10 @@
 
 ### Goals
 
-- 採点成功時だけ、対象drillの未分析5件と既存`needsAnalysis`を評価して自動分析を開始する。
+- 採点成功時だけ、対象drillの未分析3件と既存`needsAnalysis`を評価して自動分析を開始する。
 - manual/autoが共通のtransactional claimを使い、同一drillの分析を高々1件にする。
 - 分析開始時の回答ID snapshotだけをAgentへ渡し、成功時にその件数だけを消化する。
-- Agent入力件数と自動閾値用の確定スコアwatermarkを分離し、manual/autoを跨いでも未分析5件を正しく数える。
+- Agent入力件数と自動閾値用の確定スコアwatermarkを分離し、manual/autoを跨いでも未分析3件を正しく数える。
 - timelineとpatchで「AI 自動分析」を表示し、教材変更は人間のapply/rejectに限定する。
 
 ### Non-Goals
@@ -31,7 +31,7 @@
 ### This Spec Owns
 
 - 採点成功後に一度だけ登録されるprocess-local自動分析task。
-- 対象drillの未分析5件、current version、既存`needsAnalysis`、`PROPOSED`なしを検証するauto claim。
+- 対象drillの未分析3件、current version、既存`needsAnalysis`、`PROPOSED`なしを検証するauto claim。
 - manual/auto共通の同一drill transaction予約と、開始時answer ID snapshot。
 - analysis成功・Failure Signal 0件・通常例外失敗のtransactional終端。
 - 自動閾値専用`autoAnalyzedScoredAnswerCount`の保存と、originを跨ぐ単調非減少更新。
@@ -79,7 +79,7 @@ routeは条件判定を持たず、repositoryはAgentやFastAPIへ依存しな�
 
 既存backendは薄いroute、service、repository、共有`FirestoreClient`で構成される。`AnalysisService`は
 分析開始からpatch作成・失敗復帰までを同期実行し、manual APIから直接呼ばれる。`needsAnalysis`は
-course current version全体を判定し、対象drillの未分析5件判定とは集計単位が異なる。
+course current version全体を判定し、対象drillの未分析3件判定とは集計単位が異なる。
 
 現行`start_analysis()`のstatus readと`ANALYZING` writeは一つのtransactional claimではない。また成功時の
 patch、drill、course更新は一つのtransactionではない。本設計はこのanalysis lifecycleだけを局所的に
@@ -185,7 +185,7 @@ backend/tests/test_auto_analysis.py         # auto条件、no-op、通常失敗�
   polling停止を検証する。
 - `frontend/src/pages/PatchReviewPage.tsx` — patch originをtimelineへ渡す。
 - `frontend/src/pages/PatchReviewPage.test.tsx` — automatic chipとmanual apply/reject回帰を検証する。
-- `frontend/e2e/ux-audit.spec.ts` — 5件目投稿後のmanual clickをauto patch pollingへ変更する。
+- `frontend/e2e/ux-audit.spec.ts` — 3件目投稿後のmanual clickをauto patch pollingへ変更する。
 - `frontend/e2e/knowledge-drill.spec.ts` — 1件manual flowでautomatic chipがないことを確認する。
 
 **Infrastructure**
@@ -254,7 +254,7 @@ stateDiagram-v2
 | 1.3 | 対象drill未分析件数 | AnalysisPolicy | `count_unanalyzed_answers`, `autoAnalyzedScoredAnswerCount` | Claim transaction |
 | 1.4 | 未採点・スコア未確定除外 | AnalysisPolicy, AnalysisClaim | `is_scored_answer`, scored snapshot count | Claim transaction |
 | 1.5 | 条件不成立no-op | AutoTrigger | optional claim | Auto sequence |
-| 1.6 | 固定5件 | AnalysisPolicy | `AUTO_ANALYSIS_MIN_ANSWERS` | Claim transaction |
+| 1.6 | 固定3件 | AnalysisPolicy | `AUTO_ANALYSIS_MIN_ANSWERS` | Claim transaction |
 | 2.1 | response非阻害 | Learn route, Background task | `add_task` | Auto sequence |
 | 2.2 | 開始時snapshot | ExecutionRepository | `AnalysisClaim.answer_ids` | Claim transaction |
 | 2.3 | snapshotだけ消化 | AnalysisClaim, ExecutionRepository, InMemory transaction | dual snapshot counts, `complete_analysis` | Analysis lifecycle |
@@ -264,7 +264,7 @@ stateDiagram-v2
 | 2.7 | 即時・定期retryなし | AutoTrigger | grading-only trigger | Auto sequence |
 | 2.8 | 採点結果不変 | Learn route | response boundary | Auto sequence |
 | 3.1 | 採点以外で起動しない | Learn route | registration boundary | Auto sequence |
-| 3.2 | rollout時に既存5件を起動しない | Learn route | grading-only registration | Auto sequence |
+| 3.2 | rollout時に既存3件を起動しない | Learn route | grading-only registration | Auto sequence |
 | 3.3 | patch解消で起動しない | PatchService boundary | no trigger integration | Auto sequence |
 | 3.4 | analyzing中no-op | ExecutionRepository | claim state guard | Claim transaction |
 | 3.5 | auto/auto高々1件 | ExecutionRepository | transactional claim | Claim transaction |
@@ -321,15 +321,15 @@ stateDiagram-v2
   resolverが`None`を返し、READYはbaseline 0、ANALYZEDは従来どおり未分析0件として扱う。
   legacy countから過去の確定スコア集合を完全復元できないため、このfallbackはmigrationなしで再計上を
   最小化する後方互換境界であり、次の分析成功後は使用しない。
-- 同じeffective watermark解決を対象drillの5件判定と既存`compute_needs_analysis`の未分析件数へ共有する。
+- 同じeffective watermark解決を対象drillの3件判定と既存`compute_needs_analysis`の未分析件数へ共有する。
   legacy時の`scored - min(legacy, scored)`は現行`max(0, scored - legacy)`と同値で、既存結果を変えない。
 - 既存`analyzed_answer_count`はAgent入力件数の後方互換fieldとして維持し、自動閾値計算には使用しない。
-- 自動起動閾値5をこのpolicyで一元管理する。
+- 自動起動閾値3をこのpolicyで一元管理する。
 
 **Contracts**: Service [x]
 
 ```python
-AUTO_ANALYSIS_MIN_ANSWERS: int = 5
+AUTO_ANALYSIS_MIN_ANSWERS: int = 3
 
 def is_scored_answer(answer: AnswerSubmission) -> bool: ...
 
@@ -391,7 +391,7 @@ class AutoAnalysisTrigger:
 **Responsibilities & Constraints**
 
 - manual `run_analysis(drill_run_id, owner_user_id)` APIは維持する。
-- manualはmanual policyでclaimし、autoの5件・needsAnalysis・PROPOSED条件を適用しない。
+- manualはmanual policyでclaimし、autoの3件・needsAnalysis・PROPOSED条件を適用しない。
 - manual claimの対象は現行どおり`status == GRADED`の全回答とし、`total_score` / `max_score`の
   欠落や値によって除外しない。自動用`AnalysisPolicy.is_scored_answer`を流用しない。
 - manual claimでも、閾値watermark更新用に同じclaim時点の回答から`is_scored_answer`件数を別途記録する。
@@ -647,7 +647,7 @@ class DrillAdminResponse(ApiModel):
 
 ### Unit Tests
 
-1. 対象drillの未分析4件/5件、専用watermark、非graded、旧versionをpure helperで検証する。
+1. 対象drillの未分析2件/3件、専用watermark、非graded、旧versionをpure helperで検証する。
    `GRADED + total_score=None`、`GRADED + max_score=None`、`GRADED + max_score<=0`もauto閾値、auto `answer_ids`、
    scored snapshot、専用watermarkから除外する（1.2–1.6）。
 2. AutoAnalysisTriggerがclaimなしでexecutorを呼ばず、claimありで一度だけ呼び、例外をresponse境界へ返さない
@@ -675,26 +675,26 @@ class DrillAdminResponse(ApiModel):
    開始される（1.1, 2.1, 2.8, 3.1）。
 7. InMemory transactionでpatch作成後にdrillまたはcourse更新を故意に失敗させ、全collectionがcallback前へ
    rollbackされること、およびtransaction中に別threadのCRUDが割り込まないことを検証する（2.3, 2.5–2.6, 4.1）。
-8. manualが「確定スコア4件＋score欠損1件」を成功分析した後、確定スコア回答を5件追加すると、
-   `analyzedAnswerCount=5`ではなく専用watermark 4を差し引いて未分析5件となりauto claimが成功する
+8. manualが「確定スコア2件＋score欠損1件」を成功分析した後、確定スコア回答を3件追加すると、
+   `analyzedAnswerCount=3`ではなく専用watermark 2を差し引いて未分析3件となりauto claimが成功する
    （1.2–1.4, 2.3, 4.4–4.5）。
 9. 専用field欠落旧documentは`min(analyzedAnswerCount, current scored count)`をbaselineとする。
    READYで両field欠落なら0、ANALYZEDで両field欠落の読み取りは未分析0件とする。後者への新回答受付では、
    保存前の既存lazy初期化後のlegacy countを採点成功後のauto評価に使い、追加回答だけを差分に残す。
    rollout・一覧表示・patch解消だけでは起動せず、次の分析成功で専用fieldを確定する
    （1.1–1.4, 3.1–3.3）。
-10. score欠損回答を多数含むmanual成功後も、`compute_needs_analysis`と対象drillの5件判定が同じ専用
+10. score欠損回答を多数含むmanual成功後も、`compute_needs_analysis`と対象drillの3件判定が同じ専用
     watermarkを使い、新しい確定スコア回答を過少計上しない。専用field欠損legacy fixtureでは従来の
     `needsAnalysis`結果が変わらないことも検証する（1.2–1.4, 4.4–4.5）。
-11. auto snapshotに確定スコア5件とscore欠損GRADED 1件がある場合、閾値と`answer_ids`は5件、
+11. auto snapshotに確定スコア3件とscore欠損GRADED 1件がある場合、閾値と`answer_ids`は3件、
     `snapshot_agent_answer_count` / `snapshot_scored_answer_count`も5となり、manual snapshotでは同じ回答集合の
-    Agent入力が6件、scored件数が5件になることを検証する（1.4, 2.2–2.3, 4.4–4.5）。
+    Agent入力が4件、scored件数が3件になることを検証する（1.4, 2.2–2.3, 4.4–4.5）。
 
 ### Frontend and E2E Tests
 
 1. automatic failed timelineでchip、failed step、enabled manual buttonを表示する（2.6, 5.3）。
 2. automatic patchでchipを表示し、apply/rejectは既存どおり動く（4.2–4.3, 5.4）。
-3. 4回答済みdemoへ5件目を投稿し、manual clickなしでpatchをpollして「AI 自動分析」を確認する
+3. 2回答済みdemoへ3件目を投稿し、manual clickなしでpatchをpollして「AI 自動分析」を確認する
    （1.1–1.2, 4.1, 5.1, 5.4）。
 4. 1回答の既存manual E2Eはautomatic chipなしで成功する（4.4–4.5, 5.2, 5.5）。
 5. 自動分析の`analyzed + latestPatchId`で正しいpatchへ遷移し、`analyzed + null`、failed、180回上限では
@@ -728,6 +728,6 @@ class DrillAdminResponse(ApiModel):
 - legacyの`ANALYZED` runで既存`analyzedAnswerCount`も欠損している場合は、現行AnswerServiceが新回答保存前に
   既存全GRADED件数をlazy初期化する契約を維持し、採点成功後のauto claimはその値からfallbackを解決する。
 - deploymentで新backend/frontend/schemaを同時にrolloutする。旧frontendは追加fieldを無視できる。
-- TerraformでCloud Run CPU設定を適用し、backend deploy後に5件目auto E2Eを確認する。
+- TerraformでCloud Run CPU設定を適用し、backend deploy後に3件目auto E2Eを確認する。
 - rollbackは旧backend imageへ戻し、必要なら`cpu_idle=true`へ戻す。新fieldは旧readerが無視する。
 - rollback時に残る`ANALYZING`の自動回収は行わず、運用上の既知制約として扱う。

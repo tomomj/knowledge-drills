@@ -194,12 +194,12 @@ test.describe('Knowledge Drill E2E', () => {
     expect(course.latestPatchId).toMatch(/^[0-9a-f]+$/)
   })
 
-  test('4回答済みデモへの5件目投稿で自動分析し、owner Apply まで教材を変更しない', async ({
+  test('2回答済みデモへの3件目投稿で自動分析し、owner Apply まで教材を変更しない', async ({
     page,
     request,
   }) => {
     const demo = await getDemoCourse(request, 'DevOps x AI Agent Hackathon 2026 参加ガイド')
-    expect(demo.answerCount).toBe(4)
+    expect(demo.answerCount).toBe(2)
     expect(demo.latestDrillRunId).toBeTruthy()
 
     const drillRunId = demo.latestDrillRunId ?? ''
@@ -208,7 +208,7 @@ test.describe('Knowledge Drill E2E', () => {
     expect(drillBeforeAnswer.latestPatchId).toBeNull()
     const courseBeforeAnswer = await getCourse(request, demo.id)
 
-    // 5件目だけは learner UI から提出する。admin の手動分析ボタンは操作しない。
+    // 3件目だけは learner UI から提出する。admin の手動分析ボタンは操作しない。
     await page.goto(drillBeforeAnswer.shareUrl ?? '')
     await expect(page.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
     await page.getByRole('button', { name: '回答に進む' }).click()
