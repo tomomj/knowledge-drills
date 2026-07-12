@@ -101,9 +101,18 @@
 - **Trade-offs**: CourseEditorPage への小変更が入る(本 spec の所有として File Structure Plan に明記)
 - **Follow-up**: 削除成功後は講座一覧へ遷移する
 
+## 実 Agent 歩留まり確認(2026-07-12)
+
+- **Runtime**: Vertex AI `gemini-3.1-flash-lite`、`GOOGLE_CLOUD_LOCATION=global`
+- **Input**: 通常生成契約へ揃えたハッカソンデモ(3問・各4点)と初期採点済み回答2件
+- **Grading result**: seed の q1 を実採点し、`questionId=q1 / score=4 / maxScore=4` の schema-valid 応答を確認
+- **Analysis result**: 実分析で教材の「提出物」セクションに、デモURLの公開状態・認証不要条件が欠けていることを Failure Signal として検出
+- **Patch result**: 実 document patch agent が、公開設定と認証情報の記載要件を「提出物」へ追記するパッチを提案。`patchedMarkdown` に「認証」が含まれることを確認
+- **Conclusion**: seed の採点・分析入力は Agent schema を通過し、意図した教材ギャップからパッチ提案まで到達した
+
 ## Risks & Mitigations
 - デモ教材①(ハッカソン概要)の要約が公式文言と酷似する → 構成・表現を独自に書き下ろし、転載を避ける(R2.2)。レビュー時に目視確認
-- 実 agent がデモ講座①の分析で意図した教材ギャップを見つけない → 誤答 4 件の過半数を記載不足箇所に集中させ(R2.5)、提出前に実際に分析を回して歩留まりを確認する
+- 実 agent がデモ講座①の分析で意図した教材ギャップを見つけない → 初期回答 2 件の過半数を記載不足箇所に集中させ、次の回答で自動分析の3件閾値へ到達させる(R2.5)。提出前に実際に分析を回して歩留まりを確認する
 - シード途中失敗による部分データ → claim 方式の trade-off として許容し、警告ログ + 講座削除でリカバリ可能にする
 - 削除カスケードの途中失敗 → 子→親順で再試行可能。冪等な delete
 - `scoreTrend` バックフィルが一覧の N+1 回避テストと衝突 → バックフィルは「欠損時のみ」の既存前例と同条件にし、通常時は course ドキュメントのみで構成されることをテストで維持

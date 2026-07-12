@@ -216,18 +216,18 @@ class DemoSeedService:
         """講座一覧取得の前段で呼ばれる。対象外なら何もしない。"""
 ```
 - Preconditions: 認証済み uid が渡される
-- Postconditions: 対象オーナーの場合、courses×2・course_revisions(①1 件+②3 件)・drill_runs(①1 件+②3 件)・share_tokens・answers(① 4 件+② 各 run 分)・patches(② applied 1 件)が投入され、`users/{uid}.demoSeededAt` が設定される
+- Postconditions: 対象オーナーの場合、courses×2・course_revisions(①1 件+②3 件)・drill_runs(①1 件+②3 件)・share_tokens・answers(① 2 件+② 各 run 分)・patches(② applied 1 件)が投入され、`users/{uid}.demoSeededAt` が設定される
 - Invariants: 同一 uid への投入は最大 1 回(claim による)。LLM / agent は呼ばない。投入データの `ownerUserId` は必ずリクエスト uid
 
 **Implementation Notes**
 - Integration: claim は `run_transaction` で「`demoSeededAt` 未設定なら現在時刻を設定して True」を返す。False なら投入しない。users ドキュメント不在時は作成する
-- Validation: 投入後のデモ講座①で `can_analyze == true`(採点済み 4 件由来)、②でスコア推移カードの表示条件(scored run ≥ 2)を満たすことをテストで確認
+- Validation: 投入後のデモ講座①で `can_analyze == true`(採点済み 2 件由来)、次の回答で自動分析の3件閾値へ到達すること、②でスコア推移カードの表示条件(scored run ≥ 2)を満たすことをテストで確認
 - Risks: 投入途中の失敗で部分データが残る(claim 方式の trade-off)。警告ログ + 講座削除でリカバリ
 
 #### demo_seed_data(定数モジュール)
 
-- デモ講座①「DevOps × AI Agent Hackathon 2026 参加ガイド(デモ)」: ハッカソン概要(テーマ・審査基準 5 項目・必須技術・提出物)を**独自の文章で要約した** Markdown v1。意図的な記載不足を 1 箇所含める(例: 提出物の要件は列挙するが「デプロイ URL が認証を要する場合の扱い」を書かない)。設問 3 問(各設問の `sourceEvidence.excerpt` は教材本文と文字列一致)、採点済み回答 4 件(誤答 3 件は記載不足箇所に関連するつまずき、平均 2 点前後 / 4 点)
-- デモ講座②「経費精算の判断基準(デモ・改善 3 周済み)」: v1→v2→v3 の教材 3 版(差分が改善として読める内容)、バージョン別 drill_run 3 件+採点済み回答(平均 1.8 → 2.9 → 3.6 / 4 点)、v2→v3 に対応する applied パッチ 1 件(failure_signals・完了済み analysis_timeline・diff_text は `build_unified_diff` で生成)
+- デモ講座①「DevOps × AI Agent Hackathon 2026 参加ガイド(デモ)」: ハッカソン概要(テーマ・審査基準 5 項目・必須技術・提出物)を**独自の文章で要約した** Markdown v1。意図的な記載不足を 1 箇所含める(例: 提出物の要件は列挙するが「デプロイ URL が認証を要する場合の扱い」を書かない)。通常生成と同じ設問 3 問・各4点(各設問の `sourceEvidence.excerpt` は教材本文と文字列一致)、採点済み回答 2 件(誤答の過半数は記載不足箇所に関連するつまずき、平均 6 点 / 12 点)
+- デモ講座②「経費精算の判断基準(デモ・改善 3 周済み)」: v1→v2→v3 の教材 3 版(差分が改善として読める内容)、通常生成と同じ設問3問・各4点のバージョン別 drill_run 3 件+採点済み回答(平均 5.4 → 8.7 → 10.8 / 12 点)、v2→v3 に対応する applied パッチ 1 件(failure_signals・完了済み analysis_timeline・diff_text は `build_unified_diff` で生成)
 - 公式ページの文章は転載しない(独自要約であることをレビューで確認)
 
 ### repositories
@@ -270,7 +270,7 @@ def delete_course(self, course_id: str, owner_user_id: str) -> None
 #### scoreTrend の非正規化(CourseService / AnswerService)
 
 - `Course.score_trend: list[CourseScoreTrendPoint] | None`(`{courseVersion, averageScore, maxScore}`、courseVersion 昇順)
-- **スケールの定義**: 各エントリの値は既存 metrics(`_build_metrics_run`)と**同一の計算規則**とする — `averageScore` = その run の GRADED かつ totalScore 非 null の回答の totalScore 平均(raw 値)、`maxScore` = drill_run.questions の maxScore 合計(0 なら graded answer の maxScore フォールバック)。デモ講座②の 1.8 → 2.9 → 3.6 は満点 4 のこのスケール上の値であり、シードの回答スコアはこの平均になるよう定義する。同一 courseVersion に複数 run がある場合は metrics と同じ `(courseVersion, id)` 昇順で後の run を採用する
+- **スケールの定義**: 各エントリの値は既存 metrics(`_build_metrics_run`)と**同一の計算規則**とする — `averageScore` = その run の GRADED かつ totalScore 非 null の回答の totalScore 平均(raw 値)、`maxScore` = drill_run.questions の maxScore 合計(0 なら graded answer の maxScore フォールバック)。デモ講座②の 5.4 → 8.7 → 10.8 は通常生成と同じ3問・各4点、満点12のスケール上の値であり、シードの回答スコアはこの平均になるよう定義する。同一 courseVersion に複数 run がある場合は metrics と同じ `(courseVersion, id)` 昇順で後の run を採用する
 - 更新点: (a) AnswerService が回答の採点完了時に該当 drill_run の graded answers から上記規則で再計算し、その run の courseVersion のエントリを更新 (b) シード時に同じスケールの固定値を書く (c) `_summarize` で `answerCount > 0` かつ `score_trend` 欠損の場合のみ metrics と同じ集計で書き戻す(既存バックフィル前例と同条件)
 - **一致の担保**: `GET /metrics` の runs と `CourseSummary.scoreTrend` が同一データで一致することをテストで検証する
 - `CourseSummary` に `scoreTrend` / `isDemo` を追加(欠損時は null。既存クライアントへは追加フィールドのみで後方互換、6.3)
@@ -318,7 +318,7 @@ def delete_course(self, course_id: str, owner_user_id: str) -> None
   - 講座を持つオーナーには投入されない(1.4)
   - **seed → `GET /api/me` → デモ講座削除 → 一覧再取得、の順でも再投入されない**(`upsert_current_user` が `demo_seeded_at` を保持すること)(1.2, 1.3)
   - 投入処理を失敗させても一覧取得が 200 を返す(1.6)
-  - デモ講座①: 設問の `sourceEvidence.excerpt` が教材本文に文字列一致し(6.4)、採点済み回答 4 件で `canAnalyze` が true(2.4-2.6)
+  - デモ講座①: 設問の `sourceEvidence.excerpt` が教材本文に文字列一致し(6.4)、採点済み回答 2 件で `canAnalyze` が true、次の回答で自動分析の3件閾値へ到達する(2.4-2.6)
   - デモ講座②: revisions が v1-v3 で diff 取得可能(3.1)、metrics が 3 run 分の上昇する平均点を返す(3.3)、applied パッチが取得できる(3.5)
   - 投入データの `ownerUserId` がリクエスト uid で、他オーナーの一覧に出ない(6.1)
 - `test_course_delete.py`:

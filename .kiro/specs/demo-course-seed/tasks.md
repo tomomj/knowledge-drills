@@ -41,8 +41,8 @@
 
 - [x] 6. デモシードを実装する
 - [x] 6.1 (P) 固定デモデータの定義
-  - デモ講座①: ハッカソン概要の独自要約教材(転載なし、意図的な記載不足 1 箇所)、設問 3 問(sourceEvidence.excerpt が教材本文に文字列一致)、採点済み回答 4 件(誤答の過半数が記載不足箇所関連、平均 2 点前後 / 4 点)
-  - デモ講座②: 経費精算教材 v1→v3 の 3 版、バージョン別採点済み run 3 件(平均 1.8→2.9→3.6 / 4 点、metrics と同一スケール)、v2→v3 の applied パッチ(failure_signals・完了済みタイムライン・build_unified_diff による diffText)
+  - デモ講座①: ハッカソン概要の独自要約教材(転載なし、意図的な記載不足 1 箇所)、通常生成と同じ設問 3 問・各4点(sourceEvidence.excerpt が教材本文に文字列一致)、採点済み回答 2 件(次の回答で自動分析の3件閾値へ到達、誤答の過半数が記載不足箇所関連、平均 6 点 / 12 点)
+  - デモ講座②: 経費精算教材 v1→v3 の 3 版、通常生成と同じ設問3問・各4点のバージョン別採点済み run 3 件(平均 5.4→8.7→10.8 / 12 点、metrics と同一スケール)、v2→v3 の applied パッチ(failure_signals・完了済みタイムライン・build_unified_diff による diffText)
   - 両講座の scoreTrend 固定値(metrics と同一スケール)と isDemo=true をデータ定義に含める
   - excerpt の教材一致・スコア平均の定義値をアサートする data テストが green になっていること
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.5, 6.4_
@@ -87,7 +87,7 @@
   - _Requirements: 5.3_
   - _Depends: 7.1_
 
-- [ ] 8. 統合検証
+- [x] 8. 統合検証
 - [x] 8.1 e2e テストの追加
   - 削除した講座の共有 URL を開くと無効な共有 URL 表示になるシナリオを追加
   - learner 画面にデモ講座でも rubric / idealAnswer が表示されないことを確認
@@ -99,7 +99,7 @@
   - backend(pytest / ruff / mypy)と frontend(typecheck / lint / test / build)がすべて green になっていること
   - _Requirements: 6.3_
 
-- [ ] 8.3 実分析の歩留まり確認
+- [x] 8.3 実分析の歩留まり確認
   - デモ講座①で実 agent の分析を 1 回実行し、教材の記載不足に言及するパッチが提案されることを確認する(agent 出力は非決定的なため自動テストではなく手動確認)
   - 確認結果(実行日時・提案内容の要旨)を spec の research.md に追記して記録すること
   - _Requirements: 2.7_
