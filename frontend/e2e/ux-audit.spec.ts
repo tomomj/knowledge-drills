@@ -101,7 +101,7 @@ test.describe('デモ導線: 審査員の改善ループ一周', () => {
 
     // 4. 3件目の採点で自動分析が起動し、資料修正案レビューへ遷移
     await page.goto(`/courses/${playable!.id}/drill-runs/${playable!.latestDrillRunId}`)
-    await expect(page.getByRole('heading', { name: '資料修正案のレビュー' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'AIによる教材改善案' })).toBeVisible({
       timeout: 90_000,
     })
     await expect(page.getByText('AI 自動分析')).toBeVisible()
@@ -109,7 +109,7 @@ test.describe('デモ導線: 審査員の改善ループ一周', () => {
     await shot(page, '06-patch-review-proposed')
 
     // 5. 適用 → 行き止まりにならず、スコアの推移への導線が出る
-    await page.getByRole('button', { name: '修正を適用する' }).click()
+    await page.getByRole('button', { name: '教材に反映する' }).click()
     const scoreLink = page.getByRole('link', { name: '講座管理でスコアの推移を確認 →' })
     await expect(scoreLink).toBeVisible()
     await shot(page, '07-patch-review-applied')
