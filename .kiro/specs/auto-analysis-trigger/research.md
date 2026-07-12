@@ -18,7 +18,7 @@
 ## Analysis Summary
 
 - 既存の採点、講座単位の要分析判定、分析パイプライン、パッチ見送り、失敗復帰、分析済み件数は再利用できる。
-- 主な不足は、採点成功後の起動フック、対象ドリル専用の未分析5件判定、原子的な開始予約、厳密な開始時
+- 主な不足は、採点成功後の起動フック、対象ドリル専用の未分析3件判定、原子的な開始予約、厳密な開始時
   snapshot、起動元の永続化とUI表示である。
 - 現行の `AnalysisService.start_analysis()` は状態確認と `ANALYZING` 更新が一つの原子的な予約ではないため、
   auto/auto および manual/auto の同時開始を防げない。
@@ -42,9 +42,9 @@
 | `backend/app/main.py` | repository / service構築とapp state登録 | trigger coordinatorのDI追加先 |
 
 既存の `needsAnalysis` は、講座の現行versionに属する全drill runを対象に、採点済み回答全体の
-平均スコア率と未分析件数を集計する。一方、自動起動閾値の5件は回答が投稿された単一drillを対象とする。
+平均スコア率と未分析件数を集計する。一方、自動起動閾値の3件は回答が投稿された単一drillを対象とする。
 したがって既存の `compute_needs_analysis()` の閾値・平均スコア・status規則は警告判定として再利用し、
-対象drillの5件判定は別の小さなpure helperとして追加する。両方の未分析差分は比較可能な専用scored
+対象drillの3件判定は別の小さなpure helperとして追加する。両方の未分析差分は比較可能な専用scored
 watermarkを共有し、既存警告の1件閾値は変更しない。
 
 既存分析はFailure Signalが0件ならpatchを作らず正常に `ANALYZED` となり、Agentへ渡した全`GRADED`件数を
@@ -77,7 +77,7 @@ manual後に過少計上する。失敗時に件数を維持し、failed timelin
 | 採点成功時だけ評価 | `AnswerService.submit_answer()` の `GRADED` 保存 | **Missing**: route / serviceからtriggerへの接続 |
 | 現行version判定 | `needs_analysis.py` | Reusable |
 | 既存の要分析判定 | `evaluate_course_needs_analysis()` | Reusable |
-| 対象drillの未分析5件 | 比較可能な既存watermarkなし | **Missing**: 専用scored watermarkとcount helper |
+| 対象drillの未分析3件 | 比較可能な既存watermarkなし | **Missing**: 専用scored watermarkとcount helper |
 | 無効な回答の除外 | `_score_rate()` と既存テスト | Reusable |
 | `PROPOSED` patch抑止 | `PatchRepository.list_by_course()` | **Missing**: 自動判定で未使用 |
 | 受講者response非阻害 | 既存submitは同期処理のみ | **Missing / Constraint**: background実行境界 |
@@ -198,7 +198,7 @@ Cloud Tasksは永続配送を提供する一方、at-least-onceと自動再配�
 
 ### Option C: Small trigger service + existing analysis（Hybrid）
 
-新しい小さなtrigger serviceが、現行version、対象drillの未分析5件、既存needsAnalysis、PROPOSEDを評価する。
+新しい小さなtrigger serviceが、現行version、対象drillの未分析3件、既存needsAnalysis、PROPOSEDを評価する。
 repositoryへ同一drillのtransactional claimを追加し、manual/autoが共通利用する。既存AnalysisServiceは
 claimとexecutorに分け、process-local runnerまたはdesignで選択した実行境界からexecutorを呼ぶ。
 
@@ -223,8 +223,8 @@ claimとexecutorに分け、process-local runnerまたはdesignで選択した�
 - automaticの場合だけDrill timelineとPatch headerに「AI 自動分析」を表示する。
 - manualまたはfield欠落時は追加表示を出さず、既存表示を維持する。
 - 自動失敗済みdrillを初回GETした場合に、failed timelineと手動ボタンを確認するpage testを追加する。
-- `frontend/e2e/ux-audit.spec.ts` は4回答済みdemoへ5件目を投稿した後、手動分析ボタンを押す現行契約を持つ。
-  新仕様と直接競合するため、「5件目投稿 → 自動patch作成をpoll → Patch画面でAI自動分析表示」へ変更する。
+- `frontend/e2e/ux-audit.spec.ts` は2回答済みdemoへ3件目を投稿した後、手動分析ボタンを押す現行契約を持つ。
+  新仕様と直接競合するため、「3件目投稿 → 自動patch作成をpoll → Patch画面でAI自動分析表示」へ変更する。
 - 1回答だけで手動分析する `knowledge-drill.spec.ts` / `llm-agent.spec.ts` は、閾値未満でmanual表示を維持する
   回帰テストとして利用できる。
 
@@ -232,8 +232,8 @@ claimとexecutorに分け、process-local runnerまたはdesignで選択した�
 
 ### Backend
 
-- 対象drillの未分析4件ではno-op、5件目の採点成功で一度だけclaimする。
-- 採点中、採点失敗、スコア未確定、旧versionを5件に含めない。
+- 対象drillの未分析2件ではno-op、3件目の採点成功で一度だけclaimする。
+- 採点中、採点失敗、スコア未確定、旧versionを3件に含めない。
 - `needsAnalysis=false`、`PROPOSED`あり、すでに`ANALYZING`の各条件で状態を変更しない。
 - auto/autoおよびmanual/autoの競合でagent invocationが一回だけになる。
 - claim後に追加された回答が今回のsnapshotと分析済み件数に入らない。
@@ -248,7 +248,7 @@ claimとexecutorに分け、process-local runnerまたはdesignで選択した�
 - manual / field欠落時は既存表示のままにする。
 - 自動失敗timelineを表示し、手動分析ボタンが利用可能である。
 - patch apply/rejectが従来どおり動く。
-- 5件目を使うauto E2Eと、1件でのmanual E2Eを分ける。
+- 3件目を使うauto E2Eと、1件でのmanual E2Eを分ける。
 
 ## Complexity and Risk
 
@@ -265,7 +265,7 @@ claimとexecutorに分け、process-local runnerまたはdesignで選択した�
 4. process-local best-effortと`cpu_idle=false`を採用し、infrastructure interruption後の回収は境界外とする。
 5. `PROPOSED`条件はcourse documentを共通transaction競合点とするclaim linearizationで保証する。
 6. pure判定をrepository非依存policyへ分離して循環依存を避ける。
-7. `ux-audit.spec.ts`の5件目をauto E2Eへ更新し、既存1件シナリオをmanual回帰として残す。
+7. `ux-audit.spec.ts`の3件目をauto E2Eへ更新し、既存1件シナリオをmanual回帰として残す。
 
 ---
 
@@ -379,12 +379,12 @@ claimとexecutorに分け、process-local runnerまたはdesignで選択した�
 #### Decision: 自動閾値専用の確定スコアwatermarkを追加する
 
 - **Context**: manualの全GRADED件数とautoの確定スコア件数は母集団が異なり、既存
-  `analyzedAnswerCount`一つへ保存すると未分析5件を過少計上する。
+  `analyzedAnswerCount`一つへ保存すると未分析3件を過少計上する。
 - **Alternatives Considered**: 既存watermarkを両originで共有する、manualのAgent入力を確定スコアだけへ狭める、
   自動閾値専用watermarkを追加する。
 - **Selected Approach**: 既存`analyzedAnswerCount`の意味を維持し、DrillRunへ
   `autoAnalyzedScoredAnswerCount`を追加する。manual/auto両方の成功時に、claim時点の
-  `is_scored_answer`総数まで単調に進める。失敗時は進めない。対象drillの5件判定と既存
+  `is_scored_answer`総数まで単調に進める。失敗時は進めない。対象drillの3件判定と既存
   `compute_needs_analysis`の未分析差分は同じeffective watermarkを利用する。
 - **Rationale**: manualの後方互換性を保ちつつ、自動閾値を常に同じ確定スコア母集団で比較できる。
 - **Compatibility**: 専用field欠損時の`scored - min(legacy, scored)`は、現行の
@@ -395,7 +395,7 @@ claimとexecutorに分け、process-local runnerまたはdesignで選択した�
   `None`で表し、READYは0、ANALYZEDは未分析0件とする。
   過去のscored集合はcountだけから完全復元できないため近似だが、単純0より既存回答の再計上を抑えられる。
   migrationは行わず、次の分析成功後は正確な専用fieldだけを使う。
-- **Follow-up**: 「確定スコア4件＋score欠損1件」のmanual成功後に確定スコア5件を追加し、
+- **Follow-up**: 「確定スコア2件＋score欠損1件」のmanual成功後に確定スコア3件を追加し、
   専用watermark 4との差分5でautoが起動する交差testを追加する。
 
 #### Decision: drill固有patch IDと有限pollingで自動分析完了を扱う
@@ -419,4 +419,4 @@ claimとexecutorに分け、process-local runnerまたはdesignで選択した�
   fallbackにする。両field欠損のANALYZEDは現行どおり未分析0件とし、READYだけ0 baselineにする。
 - 自動分析後にpatchへ到達できない／無限pollingになる — drill固有`latestPatchId`と180回上限を使う。
 - 旧documentに起動元fieldがない — schema defaultを`manual`にして無移行で読む。
-- 既存E2Eの5件目がauto起動と競合する — `ux-audit.spec.ts`をauto flowへ更新する。
+- 既存E2Eの3件目がauto起動と競合する — `ux-audit.spec.ts`をauto flowへ更新する。

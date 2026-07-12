@@ -15,12 +15,12 @@
   - スコア欠損、専用値、legacy fallback、両field未記録のunit testが成功する。
   - _Requirements: 1.3, 1.4, 2.2, 2.3, 4.5_
 
-- [x] 1.3 既存要分析判定と対象ドリル5件判定へ共通policyを適用する
+- [x] 1.3 既存要分析判定と対象ドリル3件判定へ共通policyを適用する
   - 既存の要分析判定は1件閾値、70%未満、status別規則を維持し、確定スコアwatermarkだけを共通resolverへ寄せる。
-  - 対象ドリルの未分析数を同じeffective watermarkから算出し、自動起動閾値を固定5件にする。
+  - 対象ドリルの未分析数を同じeffective watermarkから算出し、自動起動閾値を固定3件にする。
   - resolverがbaseline不明を返した場合は、READYをbaseline 0、ANALYZEDを未分析0件として解釈する。
   - 判定ロジックをrepository非依存に保ち、既存serviceはread wrapperとして維持する。
-  - 4件/5件、manual後の専用watermark、両field未記録のstatus別結果、legacy documentで既存要分析結果が変わらないことをunit testで確認できる。
+  - 2件/3件、manual後の専用watermark、両field未記録のstatus別結果、legacy documentで既存要分析結果が変わらないことをunit testで確認できる。
   - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.6, 2.3, 4.5_
 
 - [x] 1.4 (P) InMemory transactionを複数documentのall-or-nothing境界へ強化する
@@ -39,7 +39,7 @@
   - _Requirements: 2.2, 2.4, 3.4, 3.6, 4.4, 4.5, 5.2_
 
 - [x] 2.2 自動起動条件と原子的auto claimを実装する
-  - current version、未分析の確定スコア回答5件、既存要分析判定、非ANALYZING、同じ講座にレビュー待ちpatchなしを全read後に判定する。
+  - current version、未分析の確定スコア回答3件、既存要分析判定、非ANALYZING、同じ講座にレビュー待ちpatchなしを全read後に判定する。
   - autoは確定スコア回答だけをsnapshotとし、同一drillとcourse documentを競合点にする。
   - 条件不成立と既存状態競合はwriteなしの正常no-opとする。
   - repository-level testで各guard、二回目auto claimのno-op、成功時のautomatic起動元とsnapshotが確認できる。
@@ -61,7 +61,7 @@
 
 - [x] 2.5 既存分析workflowをclaim済みsnapshot executorへ移行する
   - Agentにはclaimで固定した回答IDだけを渡し、分析中に追加された回答を今回の集合へ混入させない。
-  - manualの同期interface、owner認可、patch optional結果を維持し、auto固有の5件条件でmanual実行を制限しない。
+  - manualの同期interface、owner認可、patch optional結果を維持し、auto固有の3件条件でmanual実行を制限しない。
   - autoは確定スコア回答のみ、manualはscore欠損を含む全GRADED回答を処理し、成功・見送り・失敗を共通終端へ渡す。
   - service testでauto/manualの入力差、Failure Signalなし、Agent例外、既存manual回帰が確認できる。
   - _Requirements: 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 4.1, 4.2, 4.4, 4.5_
@@ -143,7 +143,7 @@
   - _Depends: 2.2, 2.3, 2.4, 3.1_
 
 - [x] 6.2 origin別snapshot集合と件数の交差ケースを固定する
-  - manualで確定スコア4件とscore欠損1件を分析後、確定スコア5件追加でauto claimが成立することを検証する。
+  - manualで確定スコア2件とscore欠損1件を分析後、確定スコア3件追加でauto claimが成立することを検証する。
   - auto後のmanualとclaim後の追加回答で、origin固有の回答IDとAgent入力件数が開始時snapshotから変化しないことを検証する。
   - autoの5確定スコア＋1 score欠損とmanualの同一回答集合で、Agent入力件数と確定スコア件数が混用されないことを確認できる。
   - _Requirements: 1.2, 1.3, 1.4, 2.2, 2.3, 2.4, 4.4, 4.5_
@@ -161,7 +161,7 @@
   - _Requirements: 1.2, 1.3, 1.4, 2.3, 3.2, 4.5_
 
 - [x] 6.5 (P) 自動提案と既存manual flowをbrowser E2Eで検証する
-  - 4回答済みdemoへ5件目を投稿し、人間が分析ボタンを押さずに自動分析から正しいpatch reviewへ到達する。
+  - 2回答済みdemoへ3件目を投稿し、人間が分析ボタンを押さずに自動分析から正しいpatch reviewへ到達する。
   - 自動patchに「AI 自動分析」を表示し、教材変更は既存owner apply/reject操作まで待つことを確認する。
   - 1回答のmanual分析では自動表示がなく、patch作成・適用が従来どおり完走することを確認する。
   - 自動・手動の両E2Eが成功し、監視からAI提案、人間承認までの主要デモ経路を再現できる。

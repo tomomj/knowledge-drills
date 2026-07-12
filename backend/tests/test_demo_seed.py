@@ -56,7 +56,7 @@ def test_demo_seed_inserts_two_owned_courses_and_content(client: TestClient) -> 
     assert drill.status_code == 200
     drill_payload = drill.json()
     assert drill_payload["canAnalyze"] is True
-    assert drill_payload["scoreSummary"]["gradedAnswerCount"] == 4
+    assert drill_payload["scoreSummary"]["gradedAnswerCount"] == 2
     for question in drill_payload["questions"]:
         for evidence in question["sourceEvidence"]:
             assert evidence["excerpt"] in markdown
