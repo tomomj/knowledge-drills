@@ -99,14 +99,12 @@ test.describe('デモ導線: 審査員の改善ループ一周', () => {
     await expect(page.getByRole('button', { name: '回答を分析する' })).toBeDisabled()
     await expect(page.getByText('低スコア回答を検知しました — 分析を推奨')).toHaveCount(0)
 
-    // 4. 分析実行 → 資料修正案レビューへ自動遷移
+    // 4. 3件目の採点で自動分析が起動し、資料修正案レビューへ遷移
     await page.goto(`/courses/${playable!.id}/drill-runs/${playable!.latestDrillRunId}`)
-    const analyzeButton = page.getByRole('button', { name: '回答を分析する' })
-    await expect(analyzeButton).toBeEnabled()
-    await analyzeButton.click()
     await expect(page.getByRole('heading', { name: '資料修正案のレビュー' })).toBeVisible({
       timeout: 90_000,
     })
+    await expect(page.getByText('AI 自動分析')).toBeVisible()
     await expect(page.getByText('分析タイムライン')).toBeVisible()
     await shot(page, '06-patch-review-proposed')
 

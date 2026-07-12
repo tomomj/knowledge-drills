@@ -201,16 +201,7 @@ def _hackathon_course() -> DemoCourseDefinition:
                 answers=(
                     _hackathon_answer("a1", "審査員A", "agent で作ったものを提出する。", (0, 1, 0)),
                     _hackathon_answer(
-                        "a2", "審査員B", "短い改善サイクルと GitHub、動画を用意する。", (1, 0, 1)
-                    ),
-                    _hackathon_answer(
-                        "a3", "審査員C", "評価観点を押さえ、動作デモと設計メモを出す。", (0, 1, 1)
-                    ),
-                    _hackathon_answer(
-                        "a4",
-                        "審査員D",
-                        "agent 活用、検証、発表を示し、GitHub と動画をそろえる。",
-                        (1, 1, 1),
+                        "a2", "審査員B", "短い改善サイクルと GitHub、動画を用意する。", (1, 1, 1)
                     ),
                 ),
             ),

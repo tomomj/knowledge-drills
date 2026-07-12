@@ -174,6 +174,105 @@ def test_in_memory_firestore_client_transactions_are_reentrant() -> None:
     assert client.transaction_count == 2
 
 
+def test_in_memory_firestore_client_commits_multiple_documents_atomically() -> None:
+    client = InMemoryFirestoreClient()
+    client.create_document("drillRuns", "run-1", {"status": "analyzing"})
+
+    def callback() -> str:
+        client.update_document("drillRuns", "run-1", {"status": "analyzed"})
+        client.create_document("patches", "patch-1", {"status": "proposed"})
+        client.set_document("courses", "course-1", {"latestPatchId": "patch-1"})
+        return "committed"
+
+    assert client.run_transaction(callback) == "committed"
+    assert client.get_document("drillRuns", "run-1") == {"status": "analyzed"}
+    assert client.get_document("patches", "patch-1") == {"status": "proposed"}
+    assert client.get_document("courses", "course-1") == {"latestPatchId": "patch-1"}
+
+
+def test_in_memory_firestore_client_rolls_back_all_documents_on_failure() -> None:
+    client = InMemoryFirestoreClient()
+    client.create_document(
+        "drillRuns",
+        "run-1",
+        {"status": "analyzing", "timeline": [{"status": "started"}]},
+    )
+    client.create_document("courses", "course-1", {"latestPatchId": None})
+    injected_failure = RuntimeError("injected persistence failure")
+
+    def callback() -> None:
+        client.update_document(
+            "drillRuns",
+            "run-1",
+            {"status": "analyzed", "timeline": [{"status": "completed"}]},
+        )
+        client.create_document("patches", "patch-1", {"status": "proposed"})
+        client.delete_document("courses", "course-1")
+        raise injected_failure
+
+    with pytest.raises(RuntimeError) as caught:
+        client.run_transaction(callback)
+
+    assert caught.value is injected_failure
+    assert client.get_document("drillRuns", "run-1") == {
+        "status": "analyzing",
+        "timeline": [{"status": "started"}],
+    }
+    assert client.get_document("patches", "patch-1") is None
+    assert client.get_document("courses", "course-1") == {"latestPatchId": None}
+
+
+@pytest.mark.parametrize(
+    "operation",
+    ["create", "set", "get", "update", "delete", "list", "field_query"],
+)
+def test_in_memory_firestore_client_crud_waits_for_active_transaction(operation: str) -> None:
+    client = InMemoryFirestoreClient()
+    client.create_document("items", "existing", {"kind": "seed", "value": 1})
+    transaction_entered = Event()
+    operation_started = Event()
+    operation_finished = Event()
+    release_transaction = Event()
+
+    def transaction_callback() -> None:
+        client.update_document("items", "existing", {"value": 2})
+        transaction_entered.set()
+        assert release_transaction.wait(timeout=1)
+
+    def run_operation() -> None:
+        operation_started.set()
+        if operation == "create":
+            client.create_document("items", "created", {"kind": "new"})
+        elif operation == "set":
+            client.set_document("items", "set", {"kind": "new"})
+        elif operation == "get":
+            client.get_document("items", "existing")
+        elif operation == "update":
+            client.update_document("items", "existing", {"kind": "updated"})
+        elif operation == "delete":
+            client.delete_document("items", "existing")
+        elif operation == "list":
+            client.list_documents("items")
+        else:
+            client.list_documents_by_field("items", "kind", "seed")
+        operation_finished.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        transaction = executor.submit(client.run_transaction, transaction_callback)
+        assert transaction_entered.wait(timeout=1)
+        concurrent_operation = executor.submit(run_operation)
+        assert operation_started.wait(timeout=1)
+        try:
+            assert not operation_finished.wait(timeout=0.1)
+        finally:
+            release_transaction.set()
+
+        transaction.result(timeout=1)
+        concurrent_operation.result(timeout=1)
+
+    assert operation_finished.is_set()
+
+
 def test_google_firestore_client_maps_document_operations() -> None:
     sdk = FakeFirestoreSdk()
     client = _client(sdk)

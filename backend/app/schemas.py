@@ -53,6 +53,11 @@ class DrillRunStatus(StrEnum):
     ANALYZED = "analyzed"
 
 
+class AnalysisOrigin(StrEnum):
+    MANUAL = "manual"
+    AUTOMATIC = "automatic"
+
+
 class ShareStatus(StrEnum):
     OPEN = "open"
     CLOSED = "closed"
@@ -256,6 +261,20 @@ class DrillRun(ApiModel):
     share_token: str | None = None
     error_message: str | None = None
     analyzed_answer_count: int | None = None
+    auto_analyzed_scored_answer_count: int | None = Field(default=None, ge=0)
+    analysis_origin: AnalysisOrigin = AnalysisOrigin.MANUAL
+    latest_patch_id: str | None = None
+
+
+class AnalysisClaim(ApiModel):
+    course_id: str
+    drill_run_id: str
+    owner_user_id: str
+    course_version: int
+    answer_ids: tuple[str, ...]
+    snapshot_agent_answer_count: int = Field(ge=0)
+    snapshot_scored_answer_count: int = Field(ge=0)
+    origin: AnalysisOrigin
 
 
 class ShareToken(ApiModel):
@@ -390,6 +409,7 @@ class DocumentPatch(ApiModel):
     failure_signals: list[FailureSignal] = Field(default_factory=list)
     analysis_timeline: list[AnalysisTimelineItem] = Field(default_factory=list)
     owner_feedback: str | None = None
+    analysis_origin: AnalysisOrigin = AnalysisOrigin.MANUAL
 
 
 class PatchDecisionRequest(ApiModel):
@@ -456,6 +476,8 @@ class DrillAdminResponse(ApiModel):
     can_analyze: bool
     error_message: str | None = None
     needs_analysis: bool = False
+    analysis_origin: AnalysisOrigin = AnalysisOrigin.MANUAL
+    latest_patch_id: str | None = None
 
 
 class DrillAnswerAdminItem(ApiModel):

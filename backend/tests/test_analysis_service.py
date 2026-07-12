@@ -8,12 +8,21 @@ from app.clients.agent_runtime_client import AgentInvocationError, AgentRuntimeC
 from app.errors import AppError
 from app.repositories.firestore_client import InMemoryFirestoreClient
 from app.repositories.repositories import (
+    AnalysisExecutionRepository,
     AnswerRepository,
     CourseRepository,
     DrillRepository,
     PatchRepository,
 )
-from app.schemas import AnalysisStepStatus, AnswerStatus, Course, DrillRun, DrillRunStatus
+from app.schemas import (
+    AnalysisOrigin,
+    AnalysisStepStatus,
+    AnswerStatus,
+    AnswerSubmission,
+    Course,
+    DrillRun,
+    DrillRunStatus,
+)
 from app.services.analysis_service import AnalysisService
 
 
@@ -37,7 +46,6 @@ def _proposal_service(
     course_repository.create(
         Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
     )
-
     def invoke(task_name: str, payload: dict[str, object]) -> dict[str, object]:
         invocations.append((task_name, payload))
         if task_name == "analyze_failures":
@@ -117,6 +125,45 @@ def _proposal_service(
             patch_repository=patch_repository,
             agent_client=AgentRuntimeClient(invoker=invoke),
         ),
+        drill_repository,
+        answer_repository,
+        course_repository,
+        patch_repository,
+    )
+
+
+def _claimed_service(
+    invoke: Callable[[str, dict[str, object]], dict[str, object]],
+) -> tuple[
+    AnalysisService,
+    AnalysisExecutionRepository,
+    InMemoryFirestoreClient,
+    DrillRepository,
+    AnswerRepository,
+    CourseRepository,
+    PatchRepository,
+]:
+    client = InMemoryFirestoreClient()
+    course_repository = CourseRepository(client)
+    drill_repository = DrillRepository(client)
+    answer_repository = AnswerRepository(client)
+    patch_repository = PatchRepository(client)
+    execution_repository = AnalysisExecutionRepository(client)
+    course_repository.create(
+        Course(id="course-1", owner_user_id="owner-1", title="講座", markdown="# Before\n")
+    )
+    service = AnalysisService(
+        drill_repository,
+        answer_repository,
+        course_repository=course_repository,
+        patch_repository=patch_repository,
+        agent_client=AgentRuntimeClient(invoker=invoke),
+        execution_repository=execution_repository,
+    )
+    return (
+        service,
+        execution_repository,
+        client,
         drill_repository,
         answer_repository,
         course_repository,
@@ -714,3 +761,371 @@ def test_run_analysis_does_not_return_success_when_completion_update_fails(
     assert saved_drill.status is DrillRunStatus.ANALYZING
     assert saved_drill.analyzed_answer_count is None
     assert saved_course.latest_drill_status is DrillRunStatus.ANALYZING
+
+
+def test_claimed_manual_analysis_uses_fixed_all_graded_snapshot_without_auto_threshold() -> None:
+    invocations: list[tuple[str, dict[str, object]]] = []
+    answer_repository_holder: list[AnswerRepository] = []
+
+    def invoke(task_name: str, payload: dict[str, object]) -> dict[str, object]:
+        invocations.append((task_name, payload))
+        if task_name == "analyze_failures":
+            answer_repository_holder[0].create_submission(
+                AnswerSubmission(
+                    id="late-answer",
+                    drill_run_id="drill-1",
+                    learner_name="後着受講者",
+                    status=AnswerStatus.GRADED,
+                    answers={"q1": "分析開始後の回答"},
+                    total_score=1,
+                    max_score=4,
+                )
+            )
+            return {"failureSignals": []}
+        raise AssertionError(f"unexpected task: {task_name}")
+
+    (
+        service,
+        _execution_repository,
+        _client,
+        drill_repository,
+        answer_repository,
+        _course_repository,
+        _patch_repository,
+    ) = _claimed_service(invoke)
+    answer_repository_holder.append(answer_repository)
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="scored-answer",
+            drill_run_id="drill-1",
+            learner_name="採点済み",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=1,
+            max_score=4,
+        )
+    )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="missing-score-answer",
+            drill_run_id="drill-1",
+            learner_name="スコア欠損",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        )
+    )
+
+    patch = service.run_analysis("drill-1", "owner-1")
+
+    payload_answers = cast(list[dict[str, object]], invocations[0][1]["answers"])
+    saved = drill_repository.get("drill-1")
+    assert patch is None
+    assert [answer["id"] for answer in payload_answers] == [
+        "scored-answer",
+        "missing-score-answer",
+    ]
+    assert saved is not None
+    assert saved.status is DrillRunStatus.ANALYZED
+    assert saved.analysis_origin is AnalysisOrigin.MANUAL
+    assert saved.analyzed_answer_count == 2
+    assert saved.auto_analyzed_scored_answer_count == 1
+    assert len(answer_repository.list_by_drill_run("drill-1")) == 3
+
+
+def test_claimed_automatic_analysis_uses_only_claimed_scored_answers() -> None:
+    invocations: list[tuple[str, dict[str, object]]] = []
+
+    def invoke(task_name: str, payload: dict[str, object]) -> dict[str, object]:
+        invocations.append((task_name, payload))
+        return {"failureSignals": []}
+
+    (
+        service,
+        execution_repository,
+        _client,
+        drill_repository,
+        answer_repository,
+        _course_repository,
+        _patch_repository,
+    ) = _claimed_service(invoke)
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    for index in range(5):
+        answer_repository.create_submission(
+            AnswerSubmission(
+                id=f"scored-{index}",
+                drill_run_id="drill-1",
+                learner_name=f"採点済み{index}",
+                status=AnswerStatus.GRADED,
+                answers={"q1": "回答"},
+                total_score=1,
+                max_score=4,
+            )
+        )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="missing-score",
+            drill_run_id="drill-1",
+            learner_name="スコア欠損",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+        )
+    )
+    claim = execution_repository.claim_auto_analysis("drill-1")
+    assert claim is not None
+
+    patch = service.run_claimed_analysis(claim)
+
+    payload_answers = cast(list[dict[str, object]], invocations[0][1]["answers"])
+    saved = drill_repository.get("drill-1")
+    assert patch is None
+    assert [answer["id"] for answer in payload_answers] == [
+        "scored-0",
+        "scored-1",
+        "scored-2",
+        "scored-3",
+        "scored-4",
+    ]
+    assert saved is not None
+    assert saved.status is DrillRunStatus.ANALYZED
+    assert saved.analysis_origin is AnalysisOrigin.AUTOMATIC
+    assert saved.analyzed_answer_count == 5
+    assert saved.auto_analyzed_scored_answer_count == 5
+
+
+def test_claimed_analysis_failure_uses_common_failure_terminal() -> None:
+    (
+        service,
+        _execution_repository,
+        _client,
+        drill_repository,
+        answer_repository,
+        _course_repository,
+        _patch_repository,
+    ) = _claimed_service(lambda _task_name, _payload: {"invalid": "payload"})
+    drill_repository.create(
+        DrillRun(
+            id="drill-1",
+            course_id="course-1",
+            status=DrillRunStatus.READY,
+            analyzed_answer_count=4,
+            auto_analyzed_scored_answer_count=3,
+        )
+    )
+    answer_repository.create_submission(
+        AnswerSubmission(
+            id="answer-1",
+            drill_run_id="drill-1",
+            learner_name="受講者",
+            status=AnswerStatus.GRADED,
+            answers={"q1": "回答"},
+            total_score=1,
+            max_score=4,
+        )
+    )
+
+    with pytest.raises(AgentInvocationError):
+        service.run_analysis("drill-1", "owner-1")
+
+    saved = drill_repository.get("drill-1")
+    assert saved is not None
+    assert saved.status is DrillRunStatus.READY
+    assert saved.error_message == "analysis failed"
+    assert saved.analyzed_answer_count == 4
+    assert saved.auto_analyzed_scored_answer_count == 3
+    failed_step_ids = [
+        item.id
+        for item in saved.analysis_timeline
+        if item.status is AnalysisStepStatus.FAILED
+    ]
+    assert failed_step_ids == ["detect_failure_patterns"]
+
+
+def test_claimed_analysis_missing_snapshot_answer_fails_without_querying_replacement() -> None:
+    (
+        service,
+        execution_repository,
+        _client,
+        drill_repository,
+        answer_repository,
+        _course_repository,
+        _patch_repository,
+    ) = _claimed_service(lambda _task_name, _payload: {"failureSignals": []})
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    answer_repository.create(
+        id="claimed-answer",
+        drill_run_id="drill-1",
+        learner_name="受講者",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+    claim = execution_repository.claim_manual_analysis("drill-1", "owner-1")
+    answer_repository.delete("claimed-answer")
+    answer_repository.create(
+        id="replacement-answer",
+        drill_run_id="drill-1",
+        learner_name="後着受講者",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "後着回答"},
+    )
+
+    with pytest.raises(AppError) as exc_info:
+        service.run_claimed_analysis(claim)
+
+    saved = drill_repository.get("drill-1")
+    assert exc_info.value.code == "analysis_snapshot_invalid"
+    assert saved is not None
+    assert saved.status is DrillRunStatus.READY
+    assert saved.error_message == "analysis failed"
+
+
+def test_claimed_analysis_returns_persisted_patch_with_claim_origin() -> None:
+    def invoke(task_name: str, _payload: dict[str, object]) -> dict[str, object]:
+        if task_name == "analyze_failures":
+            return {
+                "failureSignals": [
+                    {
+                        "id": "fs-1",
+                        "title": "教材ギャップ",
+                        "severity": "medium",
+                        "evidence": ["回答根拠"],
+                        "likelyCause": "例が不足",
+                        "suspectedDocumentGap": "例が不足",
+                        "targetSections": ["## 方針"],
+                        "recommendedChange": "例を追加",
+                        "affectedCount": 1,
+                        "sampleSize": 1,
+                    }
+                ]
+            }
+        return {
+            "patchedMarkdown": "# After\n",
+            "patchSummary": "例を追加",
+            "riskNotes": [],
+        }
+
+    (
+        service,
+        _execution_repository,
+        _client,
+        drill_repository,
+        answer_repository,
+        _course_repository,
+        patch_repository,
+    ) = _claimed_service(invoke)
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    answer_repository.create(
+        id="answer-1",
+        drill_run_id="drill-1",
+        learner_name="受講者",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+
+    patch = service.run_analysis("drill-1", "owner-1")
+
+    assert patch is not None
+    saved_patch = patch_repository.get(patch.id)
+    assert patch.analysis_origin is AnalysisOrigin.MANUAL
+    assert saved_patch == patch
+
+
+def test_claimed_analysis_completion_persistence_failure_preserves_active_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (
+        service,
+        execution_repository,
+        _client,
+        drill_repository,
+        answer_repository,
+        course_repository,
+        _patch_repository,
+    ) = _claimed_service(lambda _task_name, _payload: {"failureSignals": []})
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    answer_repository.create(
+        id="answer-1",
+        drill_run_id="drill-1",
+        learner_name="受講者",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+    fail_calls = 0
+
+    def fail_completion(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("completion persistence failed")
+
+    def record_fail(*_args: object, **_kwargs: object) -> None:
+        nonlocal fail_calls
+        fail_calls += 1
+
+    monkeypatch.setattr(execution_repository, "complete_analysis", fail_completion)
+    monkeypatch.setattr(execution_repository, "fail_analysis", record_fail)
+
+    with pytest.raises(RuntimeError, match="completion persistence failed"):
+        service.run_analysis("drill-1", "owner-1")
+
+    saved_drill = drill_repository.get("drill-1")
+    saved_course = course_repository.get("course-1")
+    assert fail_calls == 0
+    assert saved_drill is not None
+    assert saved_drill.status is DrillRunStatus.ANALYZING
+    assert saved_course is not None
+    assert saved_course.latest_drill_status is DrillRunStatus.ANALYZING
+
+
+def test_claimed_analysis_does_not_fail_twice_after_stale_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_holder: list[InMemoryFirestoreClient] = []
+
+    def invoke(_task_name: str, _payload: dict[str, object]) -> dict[str, object]:
+        client_holder[0].update_document("courses", "course-1", {"version": 2})
+        return {"failureSignals": []}
+
+    (
+        service,
+        execution_repository,
+        client,
+        drill_repository,
+        answer_repository,
+        _course_repository,
+        _patch_repository,
+    ) = _claimed_service(invoke)
+    client_holder.append(client)
+    drill_repository.create(
+        DrillRun(id="drill-1", course_id="course-1", status=DrillRunStatus.READY)
+    )
+    answer_repository.create(
+        id="answer-1",
+        drill_run_id="drill-1",
+        learner_name="受講者",
+        status=AnswerStatus.GRADED,
+        answers={"q1": "回答"},
+    )
+    fail_calls = 0
+
+    def fail_twice_guard(*_args: object, **_kwargs: object) -> None:
+        nonlocal fail_calls
+        fail_calls += 1
+
+    monkeypatch.setattr(execution_repository, "fail_analysis", fail_twice_guard)
+
+    with pytest.raises(AppError) as exc_info:
+        service.run_analysis("drill-1", "owner-1")
+
+    saved = drill_repository.get("drill-1")
+    assert exc_info.value.code == "analysis_course_version_changed"
+    assert fail_calls == 0
+    assert saved is not None
+    assert saved.status is DrillRunStatus.READY

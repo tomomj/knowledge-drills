@@ -77,3 +77,14 @@ def test_create_app_uses_firestore_client_in_firestore_mode(
     app = create_app()
 
     assert app.state.firestore_client is firestore_client
+
+
+def test_create_app_shares_analysis_execution_boundary() -> None:
+    app = create_app()
+
+    execution_repository = app.state.analysis_execution_repository
+
+    assert execution_repository._client is app.state.firestore_client
+    assert app.state.analysis_service._execution_repository is execution_repository
+    assert app.state.auto_analysis_trigger._execution_repository is execution_repository
+    assert app.state.auto_analysis_trigger._analysis_service is app.state.analysis_service

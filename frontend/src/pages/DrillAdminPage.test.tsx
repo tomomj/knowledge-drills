@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { useState } from 'react'
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AnalysisStartResponse, DrillAdmin, DrillAnswersResponse } from '../api/types'
@@ -42,6 +43,8 @@ const drill: DrillAdmin = {
       },
     ],
   },
+  analysisOrigin: 'manual',
+  latestPatchId: null,
   analysisTimeline: [],
   canAnalyze: true,
   errorMessage: null,
@@ -115,16 +118,58 @@ vi.mock('../api/client', () => ({
   ApiClientError: mocks.ApiClientError,
 }))
 
-function renderDrillAdmin() {
-  render(
-    <MemoryRouter initialEntries={['/courses/course-1/drill-runs/drill-1']}>
+function DrillAdminTestRoutes({
+  withRouteSwitch = false,
+  withUnmountControl = false,
+}: {
+  withRouteSwitch?: boolean
+  withUnmountControl?: boolean
+}) {
+  const navigate = useNavigate()
+  const [adminMounted, setAdminMounted] = useState(true)
+  return (
+    <>
+      {withRouteSwitch ? (
+        <button
+          type="button"
+          onClick={() => navigate('/courses/course-2/drill-runs/drill-2')}
+        >
+          別のドリルへ移動
+        </button>
+      ) : null}
+      {withUnmountControl ? (
+        <button type="button" onClick={() => setAdminMounted(false)}>
+          Drill Adminをunmount
+        </button>
+      ) : null}
       <Routes>
-        <Route path="/courses/:courseId/drill-runs/:drillRunId" element={<DrillAdminPage />} />
+        <Route
+          path="/courses/:courseId/drill-runs/:drillRunId"
+          element={adminMounted ? <DrillAdminPage /> : <div>Drill Admin Unmounted</div>}
+        />
         <Route
           path="/courses/:courseId/drill-runs/:drillRunId/analysis"
           element={<div>Patch Review</div>}
         />
+        <Route path="/patches/patch-auto" element={<div>Automatic Patch Review</div>} />
       </Routes>
+    </>
+  )
+}
+
+function renderDrillAdmin({
+  withRouteSwitch = false,
+  withUnmountControl = false,
+}: {
+  withRouteSwitch?: boolean
+  withUnmountControl?: boolean
+} = {}) {
+  return render(
+    <MemoryRouter initialEntries={['/courses/course-1/drill-runs/drill-1']}>
+      <DrillAdminTestRoutes
+        withRouteSwitch={withRouteSwitch}
+        withUnmountControl={withUnmountControl}
+      />
     </MemoryRouter>,
   )
 }
@@ -174,6 +219,13 @@ function runningDrill(): DrillAdmin {
         completedAt: '2026-07-08T10:00:01Z',
       },
     ],
+  }
+}
+
+function automaticRunningDrill(): DrillAdmin {
+  return {
+    ...runningDrill(),
+    analysisOrigin: 'automatic',
   }
 }
 
@@ -378,6 +430,436 @@ describe('DrillAdminPage', () => {
       await vi.advanceTimersByTimeAsync(2000)
     })
     expect(mocks.getDrill).toHaveBeenCalledTimes(callsAfterNavigation)
+  })
+
+  it('polls an automatic analyzing drill every second and marks its timeline as automatic', async () => {
+    const automaticDrill = automaticRunningDrill()
+    mocks.getDrill.mockResolvedValue(automaticDrill)
+    vi.useFakeTimers()
+
+    renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(screen.getByText('AI 自動分析')).toBeTruthy()
+    const analyzeButton = screen.getByRole('button', {
+      name: '回答を分析する',
+    }) as HTMLButtonElement
+    expect(analyzeButton.disabled).toBe(true)
+    fireEvent.click(analyzeButton)
+    expect(mocks.analyzeDrill).not.toHaveBeenCalled()
+    expect(mocks.getDrill).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not start automatic polling for a manual analyzing drill', async () => {
+    mocks.getDrill.mockResolvedValue(runningDrill())
+    vi.useFakeTimers()
+
+    renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(screen.getByText('回答を収集')).toBeTruthy()
+    expect(screen.queryByText('AI 自動分析')).toBeNull()
+    expect(mocks.getDrill).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not start automatic polling before the automatic analysis is analyzing', async () => {
+    mocks.getDrill.mockResolvedValue({ ...drill, analysisOrigin: 'automatic' })
+    vi.useFakeTimers()
+
+    renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops automatic polling and navigates with the drill latest patch id', async () => {
+    const analyzedDrill: DrillAdmin = {
+      ...automaticRunningDrill(),
+      status: 'analyzed',
+      latestPatchId: 'patch-auto',
+    }
+    mocks.getDrill
+      .mockResolvedValueOnce(automaticRunningDrill())
+      .mockResolvedValue(analyzedDrill)
+    vi.useFakeTimers()
+
+    renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(screen.getByText('AI 自動分析')).toBeTruthy()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+
+    expect(screen.getByText('Automatic Patch Review')).toBeTruthy()
+    expect(mocks.getDrill).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops automatic polling and shows completion when no patch was proposed', async () => {
+    const analyzedDrill: DrillAdmin = {
+      ...automaticRunningDrill(),
+      status: 'analyzed',
+      latestPatchId: null,
+    }
+    mocks.getDrill
+      .mockResolvedValueOnce(automaticRunningDrill())
+      .mockResolvedValue(analyzedDrill)
+    vi.useFakeTimers()
+
+    renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(screen.getByText('AI 自動分析')).toBeTruthy()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+
+    expect(
+      screen.getByText(
+        '自動分析は完了しました。承認された所見がなかったため、パッチ提案は見送られました。',
+      ),
+    ).toBeTruthy()
+    expect(mocks.getDrill).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops automatic polling on a failed timeline and enables manual retry', async () => {
+    const failedDrill: DrillAdmin = {
+      ...automaticRunningDrill(),
+      status: 'ready',
+      canAnalyze: true,
+      analysisTimeline: [
+        ...automaticRunningDrill().analysisTimeline,
+        {
+          id: 'analyze_failures',
+          title: '失敗傾向を分析',
+          status: 'failed',
+          summary: '分析 Agent の実行に失敗しました。',
+          evidence: [],
+          completedAt: '2026-07-08T10:00:02Z',
+        },
+      ],
+    }
+    mocks.getDrill
+      .mockResolvedValueOnce(automaticRunningDrill())
+      .mockResolvedValue(failedDrill)
+    vi.useFakeTimers()
+
+    renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+
+    expect(screen.getByText('自動分析に失敗しました。手動で再実行できます。')).toBeTruthy()
+    expect(screen.getByText('分析 Agent の実行に失敗しました。')).toBeTruthy()
+    expect(
+      (screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement).disabled,
+    ).toBe(false)
+    expect(mocks.getDrill).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps the last successful timeline and continues polling after a temporary failure', async () => {
+    mocks.getDrill
+      .mockResolvedValueOnce(automaticRunningDrill())
+      .mockRejectedValueOnce(new Error('temporary network failure'))
+      .mockResolvedValue(automaticRunningDrill())
+    vi.useFakeTimers()
+
+    renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(screen.getByText('採点済み回答 1 件を収集しました。')).toBeTruthy()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(screen.getByText('採点済み回答 1 件を収集しました。')).toBeTruthy()
+    expect(mocks.getDrill).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(3)
+    expect(screen.getByText('採点済み回答 1 件を収集しました。')).toBeTruthy()
+  })
+
+  it('times out after 180 polls, prevents the 181st poll, and can explicitly reload', async () => {
+    const automaticDrill = automaticRunningDrill()
+    const reload = deferred<DrillAdmin>()
+    const analyzedWithoutPatch: DrillAdmin = {
+      ...automaticDrill,
+      status: 'analyzed',
+      latestPatchId: null,
+    }
+    mocks.getDrill.mockImplementation(() =>
+      mocks.getDrill.mock.calls.length <= 181 ? Promise.resolve(automaticDrill) : reload.promise,
+    )
+    vi.useFakeTimers()
+
+    renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+    }
+
+    expect(screen.getByText('状態確認がタイムアウトしました。')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '状態を再読み込み' })).toBeTruthy()
+    expect(screen.getByText('採点済み回答 1 件を収集しました。')).toBeTruthy()
+    expect(mocks.getDrill).toHaveBeenCalledTimes(181)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(181)
+
+    const reloadButton = screen.getByRole('button', {
+      name: '状態を再読み込み',
+    }) as HTMLButtonElement
+    const analyzeButton = screen.getByRole('button', {
+      name: '回答を分析する',
+    }) as HTMLButtonElement
+    expect(analyzeButton.disabled).toBe(true)
+
+    fireEvent.click(analyzeButton)
+    fireEvent.click(reloadButton)
+    fireEvent.click(reloadButton)
+
+    expect(mocks.getDrill).toHaveBeenCalledTimes(182)
+    expect(reloadButton.disabled).toBe(true)
+    expect(mocks.analyzeDrill).not.toHaveBeenCalled()
+
+    await act(async () => {
+      reload.resolve(analyzedWithoutPatch)
+      await reload.promise
+    })
+
+    expect(mocks.getDrill).toHaveBeenCalledTimes(182)
+    expect(
+      screen.getByText(
+        '自動分析は完了しました。承認された所見がなかったため、パッチ提案は見送られました。',
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText('状態確認がタイムアウトしました。')).toBeNull()
+  })
+
+  it('restarts automatic polling from a timed-out explicit reload when analysis is still running', async () => {
+    const automaticDrill = automaticRunningDrill()
+    const reload = deferred<DrillAdmin>()
+    const analyzedWithoutPatch: DrillAdmin = {
+      ...automaticDrill,
+      status: 'analyzed',
+      latestPatchId: null,
+    }
+    mocks.getDrill.mockImplementation(() => {
+      const callCount = mocks.getDrill.mock.calls.length
+      if (callCount <= 181) {
+        return Promise.resolve(automaticDrill)
+      }
+      if (callCount === 182) {
+        return reload.promise
+      }
+      return Promise.resolve(analyzedWithoutPatch)
+    })
+    vi.useFakeTimers()
+
+    renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: '状態を再読み込み' }))
+    await act(async () => {
+      reload.resolve(automaticDrill)
+      await reload.promise
+    })
+    expect(screen.queryByText('状態確認がタイムアウトしました。')).toBeNull()
+    expect(
+      (screen.getByRole('button', { name: '回答を分析する' }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+
+    expect(mocks.getDrill).toHaveBeenCalledTimes(183)
+    expect(
+      screen.getByText(
+        '自動分析は完了しました。承認された所見がなかったため、パッチ提案は見送られました。',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('ignores an obsolete timed-out reload response after route params change', async () => {
+    const automaticDrill = automaticRunningDrill()
+    const reload = deferred<DrillAdmin>()
+    const nextRouteDrill: DrillAdmin = {
+      ...drill,
+      id: 'drill-2',
+      courseId: 'course-2',
+      shareUrl: '/drills/next-route',
+    }
+    const oldRoutePatch: DrillAdmin = {
+      ...automaticDrill,
+      status: 'analyzed',
+      latestPatchId: 'patch-auto',
+    }
+    mocks.getDrill.mockImplementation(() => {
+      const callCount = mocks.getDrill.mock.calls.length
+      if (callCount <= 181) {
+        return Promise.resolve(automaticDrill)
+      }
+      if (callCount === 182) {
+        return reload.promise
+      }
+      return Promise.resolve(nextRouteDrill)
+    })
+    vi.useFakeTimers()
+
+    renderDrillAdmin({ withRouteSwitch: true })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: '状態を再読み込み' }))
+    fireEvent.click(screen.getByRole('button', { name: '別のドリルへ移動' }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(screen.getByText('/drills/next-route')).toBeTruthy()
+
+    await act(async () => {
+      reload.resolve(oldRoutePatch)
+      await reload.promise
+    })
+
+    expect(screen.getByText('/drills/next-route')).toBeTruthy()
+    expect(screen.queryByText('Automatic Patch Review')).toBeNull()
+  })
+
+  it('ignores a timed-out reload response after unmount', async () => {
+    const automaticDrill = automaticRunningDrill()
+    const reload = deferred<DrillAdmin>()
+    const analyzedWithPatch: DrillAdmin = {
+      ...automaticDrill,
+      status: 'analyzed',
+      latestPatchId: 'patch-auto',
+    }
+    mocks.getDrill.mockImplementation(() =>
+      mocks.getDrill.mock.calls.length <= 181 ? Promise.resolve(automaticDrill) : reload.promise,
+    )
+    vi.useFakeTimers()
+
+    renderDrillAdmin({ withUnmountControl: true })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: '状態を再読み込み' }))
+    expect(mocks.getDrill).toHaveBeenCalledTimes(182)
+    fireEvent.click(screen.getByRole('button', { name: 'Drill Adminをunmount' }))
+    expect(screen.getByText('Drill Admin Unmounted')).toBeTruthy()
+
+    await act(async () => {
+      reload.resolve(analyzedWithPatch)
+      await reload.promise
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+
+    expect(mocks.getDrill).toHaveBeenCalledTimes(182)
+    expect(screen.getByText('Drill Admin Unmounted')).toBeTruthy()
+    expect(screen.queryByText('Automatic Patch Review')).toBeNull()
+  })
+
+  it('clears the pending automatic poll when unmounted', async () => {
+    mocks.getDrill.mockResolvedValue(automaticRunningDrill())
+    vi.useFakeTimers()
+
+    const { unmount } = renderDrillAdmin()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(mocks.getDrill).toHaveBeenCalledTimes(1)
+
+    unmount()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+
+    expect(mocks.getDrill).toHaveBeenCalledTimes(1)
   })
 
   it('shows an error banner and stops polling when analysis fails', async () => {

@@ -56,7 +56,13 @@ frontend / backend はどちらも `min_instance_count = 0` で scale to zero �
 | Service | 主な設定 |
 |---|---|
 | frontend | concurrency 80、timeout 60s、max instances 2、memory 512Mi |
-| backend | concurrency 20、timeout 300s、max instances 3、memory 1Gi |
+| backend | concurrency 20、timeout 300s、max instances 3、memory 1Gi、instance-based CPU allocation |
+
+backend は HTTP response 送信後も process-local の自動分析へ CPU を割り当てるため、
+instance-based CPU allocation（`cpu_idle = false`）を使用します。この自動分析は best-effort
+であり、durable retry は行いません。`min_instance_count = 0` による scale to zero は維持するため、
+処理中に instance が終了すると `ANALYZING` のまま未回収となる場合があります。Cloud Tasks などの
+queue や scheduler はこの運用境界に含めず、process-local task の自動再配送・回収は保証しません。
 
 backend には主に次の環境変数を設定します。
 

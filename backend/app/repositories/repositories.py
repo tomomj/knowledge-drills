@@ -1,9 +1,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 
+from app.analysis_policy import (
+    AUTO_ANALYSIS_MIN_ANSWERS,
+    compute_needs_analysis,
+    count_unanalyzed_answers,
+    is_scored_answer,
+)
+from app.errors import AppError
 from app.repositories.firestore_client import DocumentNotFound, FirestoreClient
 from app.schemas import (
+    AnalysisClaim,
+    AnalysisOrigin,
+    AnalysisStepStatus,
+    AnalysisTimelineItem,
     AnswerStatus,
     AnswerSubmission,
     Course,
@@ -229,6 +241,486 @@ class DrillRepository:
 
     def delete(self, drill_run_id: str) -> None:
         self._client.delete_document(self.collection, drill_run_id)
+
+
+_ANALYSIS_FAILED_MESSAGE = "analysis failed"
+_COURSE_VERSION_CHANGED_MESSAGE = "Course version changed during analysis."
+_ANALYSIS_STEPS: tuple[tuple[str, str], ...] = (
+    ("collect_answers", "回答データを収集"),
+    ("detect_failure_patterns", "つまずき箇所を特定"),
+    ("match_course_evidence", "教材の根拠を照合"),
+    ("decide_patch_strategy", "改善方針を判断"),
+    ("create_patch", "修正案を作成"),
+)
+
+
+class AnalysisExecutionRepository:
+    def __init__(self, client: FirestoreClient) -> None:
+        self._client = client
+
+    def claim_auto_analysis(self, drill_run_id: str) -> AnalysisClaim | None:
+        def claim() -> AnalysisClaim | None:
+            drill_document = self._client.get_document(
+                DrillRepository.collection,
+                drill_run_id,
+            )
+            if drill_document is None:
+                return None
+            drill_run = DrillRun.model_validate(drill_document)
+
+            course_document = self._client.get_document(
+                CourseRepository.collection,
+                drill_run.course_id,
+            )
+            if course_document is None:
+                return None
+            course = Course.model_validate(course_document)
+
+            course_drill_documents = self._client.list_documents_by_field(
+                DrillRepository.collection,
+                "courseId",
+                course.id,
+            )
+            course_drill_runs = [
+                DrillRun.model_validate(document) for document in course_drill_documents
+            ]
+            current_drill_runs = [
+                current_drill
+                for current_drill in course_drill_runs
+                if current_drill.course_version == course.version
+            ]
+            answers_by_run = {
+                current_drill.id: [
+                    AnswerSubmission.model_validate(document)
+                    for document in self._client.list_documents_by_field(
+                        AnswerRepository.collection,
+                        "drillRunId",
+                        current_drill.id,
+                    )
+                ]
+                for current_drill in current_drill_runs
+            }
+            patch_documents = self._client.list_documents_by_field(
+                PatchRepository.collection,
+                "courseId",
+                course.id,
+            )
+            course_patches = [
+                DocumentPatch.model_validate(document) for document in patch_documents
+            ]
+
+            target_answers = answers_by_run.get(drill_run.id, [])
+            scored_answers = [
+                answer for answer in target_answers if is_scored_answer(answer)
+            ]
+            if (
+                course.owner_user_id is None
+                or drill_run.course_version != course.version
+                or drill_run.status is DrillRunStatus.ANALYZING
+                or count_unanalyzed_answers(drill_run, target_answers)
+                < AUTO_ANALYSIS_MIN_ANSWERS
+                or not compute_needs_analysis(
+                    course.version,
+                    current_drill_runs,
+                    answers_by_run,
+                )
+                or any(patch.status is PatchStatus.PROPOSED for patch in course_patches)
+            ):
+                return None
+
+            timeline = _initial_analysis_timeline()
+            self._client.update_document(
+                DrillRepository.collection,
+                drill_run.id,
+                {
+                    "status": DrillRunStatus.ANALYZING.value,
+                    "errorMessage": None,
+                    "analysisTimeline": [
+                        item.model_dump(mode="json", by_alias=True) for item in timeline
+                    ],
+                    "analysisOrigin": AnalysisOrigin.AUTOMATIC.value,
+                    "latestPatchId": None,
+                },
+            )
+            self._client.update_document(
+                CourseRepository.collection,
+                course.id,
+                {
+                    "latestDrillRunId": drill_run.id,
+                    "latestDrillStatus": DrillRunStatus.ANALYZING.value,
+                    "answerCount": len(target_answers),
+                },
+            )
+            snapshot_count = len(scored_answers)
+            return AnalysisClaim(
+                course_id=course.id,
+                drill_run_id=drill_run.id,
+                owner_user_id=course.owner_user_id,
+                course_version=course.version,
+                answer_ids=tuple(answer.id for answer in scored_answers),
+                snapshot_agent_answer_count=snapshot_count,
+                snapshot_scored_answer_count=snapshot_count,
+                origin=AnalysisOrigin.AUTOMATIC,
+            )
+
+        return self._client.run_transaction(claim)
+
+    def update_progress(
+        self,
+        claim: AnalysisClaim,
+        timeline: list[AnalysisTimelineItem],
+    ) -> None:
+        drill_document = self._client.get_document(
+            DrillRepository.collection,
+            claim.drill_run_id,
+        )
+        if drill_document is None:
+            raise _analysis_claim_conflict()
+        drill_run = DrillRun.model_validate(drill_document)
+        if not _drill_matches_active_claim(drill_run, claim):
+            raise _analysis_claim_conflict()
+
+        self._client.update_document(
+            DrillRepository.collection,
+            claim.drill_run_id,
+            {
+                "analysisTimeline": [
+                    item.model_dump(mode="json", by_alias=True) for item in timeline
+                ]
+            },
+        )
+
+    def claim_manual_analysis(
+        self,
+        drill_run_id: str,
+        owner_user_id: str,
+    ) -> AnalysisClaim:
+        def claim() -> AnalysisClaim:
+            drill_document = self._client.get_document(DrillRepository.collection, drill_run_id)
+            if drill_document is None:
+                raise AppError(
+                    "drill_run_not_found",
+                    "Drill run was not found.",
+                    status_code=404,
+                )
+            drill_run = DrillRun.model_validate(drill_document)
+
+            course_document = self._client.get_document(
+                CourseRepository.collection,
+                drill_run.course_id,
+            )
+            if course_document is None:
+                raise AppError(
+                    "drill_run_not_found",
+                    "Drill run was not found.",
+                    status_code=404,
+                )
+            course = Course.model_validate(course_document)
+            if course.owner_user_id != owner_user_id:
+                raise AppError(
+                    "drill_run_not_found",
+                    "Drill run was not found.",
+                    status_code=404,
+                )
+
+            if (
+                drill_run.status is DrillRunStatus.FAILED
+                and drill_run.error_message != _ANALYSIS_FAILED_MESSAGE
+            ) or drill_run.status not in {
+                DrillRunStatus.READY,
+                DrillRunStatus.ANALYZED,
+                DrillRunStatus.FAILED,
+            }:
+                raise AppError(
+                    "drill_not_analyzable",
+                    "Drill run is not analyzable.",
+                    status_code=409,
+                )
+
+            answers = [
+                AnswerSubmission.model_validate(document)
+                for document in self._client.list_documents_by_field(
+                    AnswerRepository.collection,
+                    "drillRunId",
+                    drill_run.id,
+                )
+            ]
+            graded_answers = [
+                answer for answer in answers if answer.status is AnswerStatus.GRADED
+            ]
+            if not graded_answers:
+                raise AppError(
+                    "no_graded_answers",
+                    "At least one graded answer is required.",
+                )
+
+            timeline = _initial_analysis_timeline()
+            self._client.update_document(
+                DrillRepository.collection,
+                drill_run.id,
+                {
+                    "status": DrillRunStatus.ANALYZING.value,
+                    "errorMessage": None,
+                    "analysisTimeline": [
+                        item.model_dump(mode="json", by_alias=True) for item in timeline
+                    ],
+                    "analysisOrigin": AnalysisOrigin.MANUAL.value,
+                    "latestPatchId": None,
+                },
+            )
+            self._client.update_document(
+                CourseRepository.collection,
+                course.id,
+                {
+                    "latestDrillRunId": drill_run.id,
+                    "latestDrillStatus": DrillRunStatus.ANALYZING.value,
+                    "answerCount": len(answers),
+                },
+            )
+            return AnalysisClaim(
+                course_id=course.id,
+                drill_run_id=drill_run.id,
+                owner_user_id=owner_user_id,
+                course_version=course.version,
+                answer_ids=tuple(answer.id for answer in graded_answers),
+                snapshot_agent_answer_count=len(graded_answers),
+                snapshot_scored_answer_count=sum(
+                    is_scored_answer(answer) for answer in graded_answers
+                ),
+                origin=AnalysisOrigin.MANUAL,
+            )
+
+        return self._client.run_transaction(claim)
+
+    def complete_analysis(
+        self,
+        claim: AnalysisClaim,
+        timeline: list[AnalysisTimelineItem],
+        patch: DocumentPatch | None,
+    ) -> DocumentPatch | None:
+        stale_timeline = _mark_timeline_failed(timeline, _COURSE_VERSION_CHANGED_MESSAGE)
+
+        def complete() -> _AnalysisCompletionResult:
+            course_document = self._client.get_document(
+                CourseRepository.collection,
+                claim.course_id,
+            )
+            drill_document = self._client.get_document(
+                DrillRepository.collection,
+                claim.drill_run_id,
+            )
+            if course_document is None or drill_document is None:
+                raise _analysis_claim_conflict()
+
+            course = Course.model_validate(course_document)
+            drill_run = DrillRun.model_validate(drill_document)
+            if (
+                not _drill_matches_active_claim(drill_run, claim)
+                or course.owner_user_id != claim.owner_user_id
+            ):
+                raise _analysis_claim_conflict()
+            if course.version != claim.course_version:
+                _write_analysis_failure(
+                    self._client,
+                    claim,
+                    stale_timeline,
+                    _COURSE_VERSION_CHANGED_MESSAGE,
+                )
+                return _AnalysisCompletionResult(course_version_changed=True)
+
+            persisted_patch = (
+                patch.model_copy(
+                    update={
+                        "course_id": claim.course_id,
+                        "drill_run_id": claim.drill_run_id,
+                        "analysis_origin": claim.origin,
+                    }
+                )
+                if patch is not None
+                else None
+            )
+            if persisted_patch is not None:
+                self._client.create_document(
+                    PatchRepository.collection,
+                    persisted_patch.id,
+                    persisted_patch.model_dump(mode="json", by_alias=True),
+                )
+
+            self._client.update_document(
+                DrillRepository.collection,
+                claim.drill_run_id,
+                {
+                    "status": DrillRunStatus.ANALYZED.value,
+                    "errorMessage": None,
+                    "analysisTimeline": [
+                        item.model_dump(mode="json", by_alias=True) for item in timeline
+                    ],
+                    "analysisOrigin": claim.origin.value,
+                    "analyzedAnswerCount": max(
+                        drill_run.analyzed_answer_count or 0,
+                        claim.snapshot_agent_answer_count,
+                    ),
+                    "autoAnalyzedScoredAnswerCount": max(
+                        drill_run.auto_analyzed_scored_answer_count or 0,
+                        claim.snapshot_scored_answer_count,
+                    ),
+                    "latestPatchId": (persisted_patch.id if persisted_patch is not None else None),
+                },
+            )
+            course_summary: dict[str, object] = {
+                "latestDrillRunId": claim.drill_run_id,
+                "latestDrillStatus": DrillRunStatus.ANALYZED.value,
+            }
+            if persisted_patch is not None:
+                course_summary.update(
+                    {
+                        "latestPatchId": persisted_patch.id,
+                        "latestPatchStatus": persisted_patch.status.value,
+                    }
+                )
+            self._client.update_document(
+                CourseRepository.collection,
+                claim.course_id,
+                course_summary,
+            )
+            return _AnalysisCompletionResult(patch=persisted_patch)
+
+        result = self._client.run_transaction(complete)
+        if result.course_version_changed:
+            raise AppError(
+                "analysis_course_version_changed",
+                _COURSE_VERSION_CHANGED_MESSAGE,
+                status_code=409,
+            )
+        return result.patch
+
+    def fail_analysis(
+        self,
+        claim: AnalysisClaim,
+        timeline: list[AnalysisTimelineItem],
+        error_message: str,
+    ) -> None:
+        def fail() -> None:
+            course_document = self._client.get_document(
+                CourseRepository.collection,
+                claim.course_id,
+            )
+            drill_document = self._client.get_document(
+                DrillRepository.collection,
+                claim.drill_run_id,
+            )
+            if course_document is None or drill_document is None:
+                raise _analysis_claim_conflict()
+
+            course = Course.model_validate(course_document)
+            drill_run = DrillRun.model_validate(drill_document)
+            if (
+                not _drill_matches_active_claim(drill_run, claim)
+                or course.owner_user_id != claim.owner_user_id
+            ):
+                raise _analysis_claim_conflict()
+
+            _write_analysis_failure(
+                self._client,
+                claim,
+                timeline,
+                error_message,
+            )
+
+        self._client.run_transaction(fail)
+
+
+@dataclass(frozen=True)
+class _AnalysisCompletionResult:
+    patch: DocumentPatch | None = None
+    course_version_changed: bool = False
+
+
+def _analysis_claim_conflict() -> AppError:
+    return AppError(
+        "analysis_claim_conflict",
+        "Analysis claim no longer matches the persisted state.",
+        status_code=409,
+    )
+
+
+def _drill_matches_active_claim(drill_run: DrillRun, claim: AnalysisClaim) -> bool:
+    return (
+        drill_run.course_id == claim.course_id
+        and drill_run.status is DrillRunStatus.ANALYZING
+        and drill_run.analysis_origin is claim.origin
+    )
+
+
+def _write_analysis_failure(
+    client: FirestoreClient,
+    claim: AnalysisClaim,
+    timeline: list[AnalysisTimelineItem],
+    error_message: str,
+) -> None:
+    client.update_document(
+        DrillRepository.collection,
+        claim.drill_run_id,
+        {
+            "status": DrillRunStatus.READY.value,
+            "errorMessage": error_message,
+            "analysisTimeline": [
+                item.model_dump(mode="json", by_alias=True) for item in timeline
+            ],
+            "analysisOrigin": claim.origin.value,
+            "latestPatchId": None,
+        },
+    )
+    client.update_document(
+        CourseRepository.collection,
+        claim.course_id,
+        {
+            "latestDrillRunId": claim.drill_run_id,
+            "latestDrillStatus": DrillRunStatus.READY.value,
+        },
+    )
+
+
+def _mark_timeline_failed(
+    timeline: list[AnalysisTimelineItem],
+    error_message: str,
+) -> list[AnalysisTimelineItem]:
+    source = timeline or _initial_analysis_timeline()
+    failed_index = next(
+        (
+            index
+            for index, item in enumerate(source)
+            if item.status is AnalysisStepStatus.RUNNING
+        ),
+        len(source) - 1,
+    )
+    return [
+        item.model_copy(
+            update={
+                "status": AnalysisStepStatus.FAILED,
+                "summary": error_message,
+                "evidence": [],
+            }
+        )
+        if index == failed_index
+        else item
+        for index, item in enumerate(source)
+    ]
+
+
+def _initial_analysis_timeline() -> list[AnalysisTimelineItem]:
+    return [
+        AnalysisTimelineItem(
+            id=step_id,
+            title=title,
+            status=(
+                AnalysisStepStatus.RUNNING
+                if step_id == "collect_answers"
+                else AnalysisStepStatus.PENDING
+            ),
+        )
+        for step_id, title in _ANALYSIS_STEPS
+    ]
 
 
 class ShareTokenRepository:
