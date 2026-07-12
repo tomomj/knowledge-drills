@@ -109,12 +109,12 @@ def test_resolver_returns_unknown_without_either_watermark_regardless_of_status(
     assert resolve_auto_analysis_watermark(drill_run, 5) is None
 
 
-def test_auto_analysis_threshold_is_fixed_at_five_answers() -> None:
-    four_answers = [_answer() for _ in range(4)]
-    five_answers = [_answer() for _ in range(5)]
+def test_auto_analysis_threshold_is_fixed_at_three_answers() -> None:
+    two_answers = [_answer() for _ in range(2)]
+    three_answers = [_answer() for _ in range(3)]
 
-    assert count_unanalyzed_answers(_drill_run(), four_answers) < AUTO_ANALYSIS_MIN_ANSWERS
-    assert count_unanalyzed_answers(_drill_run(), five_answers) >= AUTO_ANALYSIS_MIN_ANSWERS
+    assert count_unanalyzed_answers(_drill_run(), two_answers) < AUTO_ANALYSIS_MIN_ANSWERS
+    assert count_unanalyzed_answers(_drill_run(), three_answers) >= AUTO_ANALYSIS_MIN_ANSWERS
 
 
 def test_count_uses_dedicated_watermark_after_manual_analysis() -> None:

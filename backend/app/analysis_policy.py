@@ -3,7 +3,7 @@ from fractions import Fraction
 
 from app.schemas import AnswerStatus, AnswerSubmission, DrillRun, DrillRunStatus
 
-AUTO_ANALYSIS_MIN_ANSWERS: int = 5
+AUTO_ANALYSIS_MIN_ANSWERS: int = 3
 NEEDS_ANALYSIS_MIN_UNANALYZED: int = 1
 NEEDS_ANALYSIS_SCORE_RATE_THRESHOLD: float = 0.7
 
