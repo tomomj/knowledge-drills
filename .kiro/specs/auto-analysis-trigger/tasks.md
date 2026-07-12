@@ -177,7 +177,7 @@
   - _Boundary: Backend validation_
   - _Depends: 3.1, 3.2, 3.3, 6.1, 6.2, 6.3, 6.4_
 
-- [ ] 6.7 (P) Frontendの回帰・lint・型検査・buildを完了する
+- [x] 6.7 (P) Frontendの回帰・lint・型検査・buildを完了する
   - automatic/manualのcomponent・page testを含むFrontend testを実行する。
   - Frontend lint、型検査、buildを実行し、有限pollingと起動元表示による回帰を解消する。
   - Frontendの全自動検証が成功するか、外部環境依存の未実行項目と理由が明示された状態にする。
