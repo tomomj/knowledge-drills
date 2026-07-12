@@ -82,7 +82,9 @@ backend には主に次の環境変数を設定します。
 ## GitHub Actions WIF
 
 deploy 用 provider は `tomomj/knowledge-drills` の `main` branch を信頼します。agent eval 用
-provider は `Agent Eval` workflow の `pull_request` と `workflow_dispatch` を信頼します。
+provider は `Agent Eval` workflow のうち、`tomomj` が開始した `pull_request`、
+`workflow_dispatch`、`main` push を信頼します。workflow 側でも fork PR の eval job は skip し、
+外部 PR のコードへ GCP credential を渡しません。
 
 Terraform apply 後、GitHub repository variables には outputs の値を設定します。
 
@@ -102,6 +104,16 @@ terraform fmt
 terraform validate
 terraform plan
 ```
+
+初回だけ、gitignore 対象の `local.auto.tfvars` に Cloud Monitoring の通知先を設定します。
+
+```hcl
+alert_email = "alerts@example.com"
+```
+
+実アドレスを含む `local.auto.tfvars` は repository に commit しません。Terraform は
+このファイルを自動で読み込むため、以後の `plan` / `apply` で追加指定は不要です。
+commit 前には `git check-ignore local.auto.tfvars` で除外を確認できます。
 
 backend 設定や state bucket を変更した場合は次を使います。
 

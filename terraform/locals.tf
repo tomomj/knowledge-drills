@@ -1,3 +1,14 @@
+variable "alert_email" {
+  description = "Email address for Cloud Monitoring alerts. Set with an untracked local.auto.tfvars file."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$", var.alert_email))
+    error_message = "alert_email must be a valid email address."
+  }
+}
+
 locals {
   project_id     = "onyx-harmony-457309-p9"
   project_number = "96923902284"
@@ -44,8 +55,7 @@ locals {
   firestore_location      = local.region
 
   # Uptime monitoring keeps the hackathon demo URLs observable through judging.
-  # 通知先メールアドレスは仮置き。確定したらここだけ変更する。
-  alert_email = "tomo.sandbox.address@gmail.com"
+  alert_email = var.alert_email
 
   # 無料枠に収める控えめな設定: 15 分間隔 + 最小構成の 3 リージョン。
   uptime_check_period  = "900s"

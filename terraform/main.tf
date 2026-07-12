@@ -121,7 +121,7 @@ resource "google_iam_workload_identity_pool_provider" "github_actions_agent_eval
   attribute_condition = join(" && ", [
     "assertion.repository == \"${local.github_repository}\"",
     "assertion.workflow == \"Agent Eval\"",
-    "(assertion.event_name == \"pull_request\" || assertion.event_name == \"workflow_dispatch\" || (assertion.event_name == \"push\" && assertion.ref == \"refs/heads/main\"))",
+    "((assertion.event_name == \"pull_request\" && assertion.actor == \"tomomj\") || assertion.event_name == \"workflow_dispatch\" || (assertion.event_name == \"push\" && assertion.ref == \"refs/heads/main\"))",
   ])
 
   attribute_mapping = {
