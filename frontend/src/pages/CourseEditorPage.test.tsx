@@ -139,6 +139,7 @@ describe('CourseEditorPage', () => {
       version: 3,
       latestDrillRunId: 'drill-3',
       latestPatchId: 'patch-1',
+      latestPatchStatus: 'proposed',
     })
     mocks.getCourseMetrics.mockResolvedValueOnce({
       courseId: 'course-1',
@@ -201,7 +202,9 @@ describe('CourseEditorPage', () => {
     const cardText = metricsCard.textContent ?? ''
     expect(cardText.indexOf('v1')).toBeLessThan(cardText.indexOf('v2'))
     expect(cardText.indexOf('v2')).toBeLessThan(cardText.indexOf('v3'))
-    expect(screen.getByRole('link', { name: 'レビュー →' }).getAttribute('href')).toBe(
+    expect(screen.getByText('✦ AIの改善案')).toBeTruthy()
+    expect(screen.getByText('人の承認後に教材へ反映')).toBeTruthy()
+    expect(screen.getByRole('link', { name: '人が確認する →' }).getAttribute('href')).toBe(
       '/patches/patch-1',
     )
   })

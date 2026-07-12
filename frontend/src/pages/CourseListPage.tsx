@@ -163,7 +163,7 @@ function statusChips(course: CourseSummary): Chip[] {
     chips.push({ label: 'デモ', tone: 'accent' })
   }
   if (course.patchStatus === 'proposed') {
-    chips.push({ label: 'パッチ提案あり', tone: 'warning' })
+    chips.push({ label: 'AIの改善案あり', tone: 'review' })
   } else if (course.patchStatus === 'applied') {
     chips.push({ label: '修正適用済み', tone: 'accent' })
   }

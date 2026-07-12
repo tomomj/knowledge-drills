@@ -164,8 +164,8 @@ test.describe('Knowledge Drill E2E', () => {
     await page.getByRole('button', { name: '回答を分析する' }).click()
 
     await expect(page).toHaveURL(/\/analysis\?patchId=[0-9a-f]+$/)
-    await expect(page.getByRole('heading', { name: '資料修正案のレビュー' })).toBeVisible()
-    await expect(page.getByText('提案中')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '教材改善案のレビュー' })).toBeVisible()
+    await expect(page.getByText('人の確認待ち')).toBeVisible()
     await expect(page.getByText(/要約：/)).toBeVisible()
     await expect(page.getByRole('heading', { name: '例外条件の説明不足' })).toBeVisible()
     await expect(page.getByText('リスクと注意点')).toBeVisible()
@@ -181,12 +181,12 @@ test.describe('Knowledge Drill E2E', () => {
     })
 
     await page.getByLabel(/オーナーコメント/).fill('E2E で適用確認')
-    await page.getByRole('button', { name: '修正を適用する' }).click()
+    await page.getByRole('button', { name: '教材に反映する' }).click()
 
-    await expect(page.getByText('パッチを適用しました。')).toBeVisible()
+    await expect(page.getByText('改善案を反映しました。')).toBeVisible()
     await expect(page.getByText('適用済み')).toBeVisible()
-    await expect(page.getByRole('button', { name: '修正を適用する' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: '却下する' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: '教材に反映する' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: '今回は見送る' })).toBeDisabled()
 
     const course = await getCourse(request, seed.courseId)
     expect(course.version).toBe(2)
@@ -224,11 +224,11 @@ test.describe('Knowledge Drill E2E', () => {
 
     await page.goto(`/courses/${demo.id}/drill-runs/${drillRunId}`)
     await expect(page).toHaveURL(/\/patches\/[0-9a-f-]+$/, { timeout: 30_000 })
-    await expect(page.getByRole('heading', { name: '資料修正案のレビュー' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'AIによる教材改善案' })).toBeVisible()
     await expect(page.getByText('AI 自動分析')).toBeVisible()
-    await expect(page.getByText('提案中')).toBeVisible()
-    await expect(page.getByRole('button', { name: '修正を適用する' })).toBeEnabled()
-    await expect(page.getByRole('button', { name: '却下する' })).toBeEnabled()
+    await expect(page.getByText('人の確認待ち')).toBeVisible()
+    await expect(page.getByRole('button', { name: '教材に反映する' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: '今回は見送る' })).toBeEnabled()
 
     const analyzedDrill = await getAdminDrill(request, demo.id, drillRunId)
     expect(analyzedDrill.analysisOrigin).toBe('automatic')
@@ -244,9 +244,9 @@ test.describe('Knowledge Drill E2E', () => {
     })
 
     await page.getByLabel(/オーナーコメント/).fill('E2E 自動提案を確認して適用')
-    await page.getByRole('button', { name: '修正を適用する' }).click()
+    await page.getByRole('button', { name: '教材に反映する' }).click()
 
-    await expect(page.getByText('パッチを適用しました。')).toBeVisible()
+    await expect(page.getByText('改善案を反映しました。')).toBeVisible()
     await expect(page.getByText('適用済み')).toBeVisible()
     const courseAfterApply = await getCourse(request, demo.id)
     expect(courseAfterApply.version).toBe(courseBeforeAnswer.version + 1)
@@ -347,8 +347,8 @@ test.describe('Knowledge Drill E2E', () => {
 
     await expect(page.getByText('このパッチは古くなっています。再分析が必要です。')).toBeVisible()
     await expect(page.getByText('要再分析')).toBeVisible()
-    await expect(page.getByRole('button', { name: '修正を適用する' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: '却下する' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: '教材に反映する' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: '今回は見送る' })).toBeDisabled()
   })
 })
 

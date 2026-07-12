@@ -74,8 +74,8 @@ test.describe('LLM Agent E2E', () => {
     await page.getByRole('button', { name: '回答を分析する' }).click()
 
     await expect(page).toHaveURL(/\/analysis\?patchId=[0-9a-f]+$/, { timeout: 120_000 })
-    await expect(page.getByRole('heading', { name: '資料修正案のレビュー' })).toBeVisible()
-    await expect(page.getByText('提案中')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '教材改善案のレビュー' })).toBeVisible()
+    await expect(page.getByText('人の確認待ち')).toBeVisible()
 
     const patchId = new URL(page.url()).searchParams.get('patchId')
     expect(patchId).toMatch(/^[0-9a-f]+$/)

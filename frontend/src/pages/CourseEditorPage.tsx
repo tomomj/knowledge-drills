@@ -268,12 +268,32 @@ export function CourseEditorPage() {
                       )}
                     </dd>
                   </div>
-                  <div>
-                    <dt>最新パッチ</dt>
+                  <div
+                    className={
+                      course?.latestPatchStatus === 'proposed' ? 'side-list__review' : undefined
+                    }
+                  >
+                    <dt>
+                      {course?.latestPatchStatus === 'proposed' ? (
+                        <span className="side-list__label-stack">
+                          <span>✦ AIの改善案</span>
+                          <small>人の承認後に教材へ反映</small>
+                        </span>
+                      ) : (
+                        '改善履歴'
+                      )}
+                    </dt>
                     <dd>
                       {course?.latestPatchId ? (
-                        <Link className="side-link" to={`/patches/${course.latestPatchId}`}>
-                          レビュー →
+                        <Link
+                          className={`side-link${
+                            course.latestPatchStatus === 'proposed' ? ' side-link--review' : ''
+                          }`}
+                          to={`/patches/${course.latestPatchId}`}
+                        >
+                          {course.latestPatchStatus === 'proposed'
+                            ? '人が確認する →'
+                            : '内容を見る →'}
                         </Link>
                       ) : (
                         '-'
