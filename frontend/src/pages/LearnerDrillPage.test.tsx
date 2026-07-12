@@ -54,6 +54,8 @@ function renderLearner(path = '/drills/share-token') {
 }
 
 async function proceedToAnswering(user: ReturnType<typeof userEvent.setup>) {
+  await screen.findByRole('button', { name: '教材を読んで始める' })
+  await user.click(screen.getByRole('button', { name: '教材を読んで始める' }))
   await screen.findByRole('button', { name: '回答に進む' })
   await user.click(screen.getByRole('button', { name: '回答に進む' }))
 }
@@ -83,15 +85,28 @@ describe('LearnerDrillPage', () => {
     expect(screen.queryByText('idealAnswer')).toBeNull()
   })
 
-  it('starts with the reading step: full course material and no questions', async () => {
+  it('starts with a one-page guide before showing the course material', async () => {
+    const user = userEvent.setup()
     mocks.getLearnerDrill.mockResolvedValueOnce(learnerDrill)
 
     renderLearner()
 
-    await screen.findByRole('button', { name: '回答に進む' })
+    await screen.findByRole('button', { name: '教材を読んで始める' })
+    expect(screen.getByRole('heading', { name: '経費精算の判断基準' })).toBeTruthy()
+    expect(screen.getByText('約5分')).toBeTruthy()
+    expect(screen.getByText('3問')).toBeTruthy()
+    expect(screen.getByText('教材を読む')).toBeTruthy()
+    expect(screen.getByText('3問に回答する')).toBeTruthy()
+    expect(screen.getByText('回答を提出する')).toBeTruthy()
     expect(
-      screen.getByText('教材を読んでから回答してください。回答は教材改善の分析に匿名で利用されます。'),
+      screen.getByText('お名前と回答内容は講座の管理者が確認し、教材改善のために利用します。'),
     ).toBeTruthy()
+    expect(screen.queryByText('業務に直接関係する支出を申請できます。')).toBeNull()
+    expect(screen.queryByLabelText('お名前')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: '教材を読んで始める' }))
+
+    await screen.findByRole('button', { name: '回答に進む' })
     expect(screen.getByRole('heading', { name: '経費精算の判断基準' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: '基本方針' })).toBeTruthy()
     expect(screen.getByText('業務に直接関係する支出を申請できます。')).toBeTruthy()
@@ -134,9 +149,14 @@ describe('LearnerDrillPage', () => {
   })
 
   it('skips the reading step when courseMarkdown is empty', async () => {
+    const user = userEvent.setup()
     mocks.getLearnerDrill.mockResolvedValueOnce({ ...learnerDrill, courseMarkdown: '' })
 
     renderLearner()
+
+    await screen.findByRole('button', { name: '回答を始める' })
+    expect(screen.queryByText('教材を読む')).toBeNull()
+    await user.click(screen.getByRole('button', { name: '回答を始める' }))
 
     await screen.findByLabelText(/判断理由を書いてください。/)
     expect(screen.getByLabelText('お名前')).toBeTruthy()

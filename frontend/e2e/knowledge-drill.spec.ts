@@ -104,10 +104,16 @@ test.describe('Knowledge Drill E2E', () => {
 
     await page.goto(seed.shareUrl)
 
+    await expect(page.getByText('確認ドリルのご案内')).toBeVisible()
+    await expect(page.getByText('約5分')).toBeVisible()
+    await expect(page.getByText('3問', { exact: true })).toBeVisible()
+    await expect(page.getByText('教材を読む', { exact: true })).toBeVisible()
+    await expect(page.getByText('3問に回答する')).toBeVisible()
+    await expect(page.getByText('回答を提出する', { exact: true })).toBeVisible()
+    await expect(page.getByText('教材バージョン v1')).toHaveCount(0)
+    await page.getByRole('button', { name: '教材を読んで始める' }).click()
+
     await expect(page.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
-    await expect(
-      page.getByText('教材を読んでから回答してください。回答は教材改善の分析に匿名で利用されます。'),
-    ).toBeVisible()
     await expect(page.getByText('教材バージョン v1')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'A事業部' })).toBeVisible()
     await expect(
@@ -210,7 +216,8 @@ test.describe('Knowledge Drill E2E', () => {
 
     // 3件目だけは learner UI から提出する。admin の手動分析ボタンは操作しない。
     await page.goto(drillBeforeAnswer.shareUrl ?? '')
-    await expect(page.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '教材を読んで始める' })).toBeVisible()
+    await page.getByRole('button', { name: '教材を読んで始める' }).click()
     await page.getByRole('button', { name: '回答に進む' }).click()
     await page.getByRole('textbox', { name: 'お名前', exact: true }).fill('E2E Auto Learner')
     const drill = await getLearnerDrill(request, shareTokenFromUrl(drillBeforeAnswer.shareUrl))
@@ -306,7 +313,9 @@ test.describe('Knowledge Drill E2E', () => {
     expect(reopened.ok()).toBeTruthy()
     const reopenedPage = await page.context().newPage()
     await reopenedPage.goto(first.shareUrl)
-    await expect(reopenedPage.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
+    await expect(
+      reopenedPage.getByRole('button', { name: '教材を読んで始める' }),
+    ).toBeVisible()
     await reopenedPage.close()
   })
 
@@ -321,6 +330,8 @@ test.describe('Knowledge Drill E2E', () => {
 
     await page.goto(adminDrill.shareUrl ?? '')
 
+    await expect(page.getByRole('button', { name: '教材を読んで始める' })).toBeVisible()
+    await page.getByRole('button', { name: '教材を読んで始める' }).click()
     await expect(page.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
     await expect(page.getByText('教材バージョン v1')).toBeVisible()
     await expect(page.getByText('ルーブリック')).toHaveCount(0)
