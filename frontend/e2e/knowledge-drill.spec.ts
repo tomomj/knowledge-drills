@@ -47,6 +47,7 @@ type CourseSummary = {
   title: string
   latestDrillRunId: string | null
   isDemo: boolean
+  answerCount: number
 }
 
 type CourseListResponse = {
@@ -56,9 +57,16 @@ type CourseListResponse = {
 type AdminDrill = {
   shareUrl: string | null
   shareStatus: 'open' | 'closed' | 'superseded' | 'unavailable'
+  analysisOrigin: 'manual' | 'automatic'
+  latestPatchId: string | null
 }
 
 test.describe('Knowledge Drill E2E', () => {
+  test.beforeAll(async ({ request }) => {
+    const seeded = await request.get(`${apiBaseUrl}/api/courses`)
+    expect(seeded.ok()).toBeTruthy()
+  })
+
   test('講座作成からドリル生成まで UI で実行できる', async ({ page }) => {
     await page.goto('/courses')
 
@@ -139,13 +147,20 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(page.getByText('採点済み', { exact: true })).toBeVisible()
   })
 
-  test('回答分析から patch proposed を確認し、Apply で applied にできる', async ({
+  test('1回答の manual 分析は自動表示なしで patch を提案し、Apply まで完走できる', async ({
     page,
     request,
   }) => {
     const seed = await createAnsweredDrillRun(request)
+    const courseBeforeAnalysis = await getCourse(request, seed.courseId)
+    const drillBeforeAnalysis = await getAdminDrill(request, seed.courseId, seed.drillRunId)
+    expect(courseBeforeAnalysis.version).toBe(1)
+    expect(courseBeforeAnalysis.markdown).toBe(courseMarkdown)
+    expect(drillBeforeAnalysis.analysisOrigin).toBe('manual')
+    expect(drillBeforeAnalysis.latestPatchId).toBeNull()
 
     await page.goto(`/courses/${seed.courseId}/drill-runs/${seed.drillRunId}`)
+    await expect(page.getByText('AI 自動分析')).toHaveCount(0)
     await page.getByRole('button', { name: '回答を分析する' }).click()
 
     await expect(page).toHaveURL(/\/analysis\?patchId=[0-9a-f]+$/)
@@ -155,6 +170,15 @@ test.describe('Knowledge Drill E2E', () => {
     await expect(page.getByRole('heading', { name: '例外条件の説明不足' })).toBeVisible()
     await expect(page.getByText('リスクと注意点')).toBeVisible()
     await expect(page.getByLabel('Diff')).toContainText('### 例外条件')
+    await expect(page.getByText('AI 自動分析')).toHaveCount(0)
+
+    const courseWhileProposed = await getCourse(request, seed.courseId)
+    expect(courseWhileProposed.version).toBe(courseBeforeAnalysis.version)
+    expect(courseWhileProposed.markdown).toBe(courseBeforeAnalysis.markdown)
+    await page.screenshot({
+      path: '/tmp/knowledge-drills-manual-patch-review.png',
+      fullPage: true,
+    })
 
     await page.getByLabel(/オーナーコメント/).fill('E2E で適用確認')
     await page.getByRole('button', { name: '修正を適用する' }).click()
@@ -168,6 +192,66 @@ test.describe('Knowledge Drill E2E', () => {
     expect(course.version).toBe(2)
     expect(course.markdown).toContain('### 例外条件')
     expect(course.latestPatchId).toMatch(/^[0-9a-f]+$/)
+  })
+
+  test('4回答済みデモへの5件目投稿で自動分析し、owner Apply まで教材を変更しない', async ({
+    page,
+    request,
+  }) => {
+    const demo = await getDemoCourse(request, 'DevOps x AI Agent Hackathon 2026 参加ガイド')
+    expect(demo.answerCount).toBe(4)
+    expect(demo.latestDrillRunId).toBeTruthy()
+
+    const drillRunId = demo.latestDrillRunId ?? ''
+    const drillBeforeAnswer = await getAdminDrill(request, demo.id, drillRunId)
+    expect(drillBeforeAnswer.shareUrl).toBeTruthy()
+    expect(drillBeforeAnswer.latestPatchId).toBeNull()
+    const courseBeforeAnswer = await getCourse(request, demo.id)
+
+    // 5件目だけは learner UI から提出する。admin の手動分析ボタンは操作しない。
+    await page.goto(drillBeforeAnswer.shareUrl ?? '')
+    await expect(page.getByRole('heading', { name: '確認ドリル' })).toBeVisible()
+    await page.getByRole('button', { name: '回答に進む' }).click()
+    await page.getByRole('textbox', { name: 'お名前', exact: true }).fill('E2E Auto Learner')
+    const drill = await getLearnerDrill(request, shareTokenFromUrl(drillBeforeAnswer.shareUrl))
+    for (const question of drill.questions) {
+      await page
+        .getByLabel(question.question)
+        .fill(`${question.id} の回答。agent と人間の役割分担を説明します。`)
+    }
+    await page.getByRole('button', { name: '回答を提出する' }).click()
+    await expect(page.getByText('提出が完了しました。')).toBeVisible()
+
+    await page.goto(`/courses/${demo.id}/drill-runs/${drillRunId}`)
+    await expect(page).toHaveURL(/\/patches\/[0-9a-f-]+$/, { timeout: 30_000 })
+    await expect(page.getByRole('heading', { name: '資料修正案のレビュー' })).toBeVisible()
+    await expect(page.getByText('AI 自動分析')).toBeVisible()
+    await expect(page.getByText('提案中')).toBeVisible()
+    await expect(page.getByRole('button', { name: '修正を適用する' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: '却下する' })).toBeEnabled()
+
+    const analyzedDrill = await getAdminDrill(request, demo.id, drillRunId)
+    expect(analyzedDrill.analysisOrigin).toBe('automatic')
+    expect(analyzedDrill.latestPatchId).toBeTruthy()
+    expect(page.url()).toContain(`/patches/${analyzedDrill.latestPatchId}`)
+
+    const courseWhileProposed = await getCourse(request, demo.id)
+    expect(courseWhileProposed.version).toBe(courseBeforeAnswer.version)
+    expect(courseWhileProposed.markdown).toBe(courseBeforeAnswer.markdown)
+    await page.screenshot({
+      path: '/tmp/knowledge-drills-auto-patch-review.png',
+      fullPage: true,
+    })
+
+    await page.getByLabel(/オーナーコメント/).fill('E2E 自動提案を確認して適用')
+    await page.getByRole('button', { name: '修正を適用する' }).click()
+
+    await expect(page.getByText('パッチを適用しました。')).toBeVisible()
+    await expect(page.getByText('適用済み')).toBeVisible()
+    const courseAfterApply = await getCourse(request, demo.id)
+    expect(courseAfterApply.version).toBe(courseBeforeAnswer.version + 1)
+    expect(courseAfterApply.markdown).not.toBe(courseBeforeAnswer.markdown)
+    expect(courseAfterApply.markdown).toContain('### 例外条件')
   })
 
   test('無効な share token ではドリル内容を表示しない', async ({ page }) => {
@@ -372,4 +456,9 @@ async function updateCourse(
   })
   expect(response.ok()).toBeTruthy()
   return (await response.json()) as CourseDetail
+}
+
+function shareTokenFromUrl(shareUrl: string | null): string {
+  expect(shareUrl).toBeTruthy()
+  return shareUrl?.split('/').at(-1) ?? ''
 }
