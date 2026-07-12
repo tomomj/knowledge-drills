@@ -17,7 +17,7 @@ type PageState =
 type Decision = 'apply' | 'reject'
 
 const PATCH_STATUS_CHIPS: Record<PatchStatus, { label: string; tone: string }> = {
-  proposed: { label: '提案中', tone: 'warning' },
+  proposed: { label: '人の確認待ち', tone: 'review' },
   applied: { label: '適用済み', tone: 'success' },
   rejected: { label: '却下', tone: 'muted' },
   stale: { label: '要再分析', tone: 'error' },
@@ -105,7 +105,7 @@ export function PatchReviewPage() {
     return (
       <AppShell>
         <main className="page">
-          <StatusBanner tone="info">Patch を読み込んでいます。</StatusBanner>
+          <StatusBanner tone="info">改善案を読み込んでいます。</StatusBanner>
         </main>
       </AppShell>
     )
@@ -129,10 +129,14 @@ export function PatchReviewPage() {
                 { label: '講座一覧', to: '/courses' },
                 { label: '講座管理', to: courseUrl },
                 { label: 'ドリル確認', to: drillUrl },
-                { label: '資料修正案' },
+                { label: '教材改善案' },
               ]}
             />
-            <h1 id="patch-title">資料修正案のレビュー</h1>
+            <h1 id="patch-title">
+              {patch?.analysisOrigin === 'automatic'
+                ? 'AIによる教材改善案'
+                : '教材改善案のレビュー'}
+            </h1>
             {patch ? (
               <div className="meta-chips" style={{ marginTop: 8 }}>
                 {statusChip ? (
@@ -149,7 +153,7 @@ export function PatchReviewPage() {
               disabled={!canDecide}
               onClick={() => void decide('reject')}
             >
-              却下する
+              今回は見送る
             </button>
             <button
               type="button"
@@ -157,7 +161,7 @@ export function PatchReviewPage() {
               disabled={!canDecide}
               onClick={() => void decide('apply')}
             >
-              修正を適用する
+              教材に反映する
             </button>
           </div>
         </section>
@@ -230,13 +234,22 @@ export function PatchReviewPage() {
 }
 
 function PatchStatusBanner({ patch }: { patch: DocumentPatch }) {
+  if (patch.status === 'proposed') {
+    return (
+      <StatusBanner tone={patch.analysisOrigin === 'automatic' ? 'review' : 'info'}>
+        {patch.analysisOrigin === 'automatic'
+          ? 'AIが回答を分析して作成した改善案です。教材にはまだ反映されていません。人が内容を確認してから反映します。'
+          : 'この改善案は教材にはまだ反映されていません。内容を確認してから反映してください。'}
+      </StatusBanner>
+    )
+  }
   if (patch.status === 'stale') {
-    return <StatusBanner tone="warning">このパッチは古くなっています。再分析が必要です。</StatusBanner>
+    return <StatusBanner tone="warning">この改善案は古くなっています。再分析が必要です。</StatusBanner>
   }
   if (patch.status === 'applied') {
     return (
       <StatusBanner tone="success">
-        パッチを適用しました。教材は新しいバージョンに更新されています。{' '}
+        改善案を反映しました。教材は新しいバージョンに更新されています。{' '}
         <Link className="side-link" to={`/courses/${patch.courseId}`}>
           講座管理でスコアの推移を確認 →
         </Link>
@@ -246,7 +259,7 @@ function PatchStatusBanner({ patch }: { patch: DocumentPatch }) {
   if (patch.status === 'rejected') {
     return (
       <StatusBanner tone="info">
-        パッチを却下しました。却下理由は次回の分析で考慮されます。{' '}
+        改善案を見送りました。理由は次回の分析で考慮されます。{' '}
         <Link className="side-link" to={`/courses/${patch.courseId}/drill-runs/${patch.drillRunId}`}>
           ドリル確認へ戻る →
         </Link>

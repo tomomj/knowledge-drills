@@ -706,6 +706,7 @@ def test_create_get_and_update_course(client: TestClient) -> None:
     assert course["version"] == 1
     assert course["latestDrillRunId"] is None
     assert course["latestPatchId"] is None
+    assert course["latestPatchStatus"] is None
 
     update_response = client.put(
         f"/api/courses/{course_id}",

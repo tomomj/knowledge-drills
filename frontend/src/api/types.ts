@@ -13,6 +13,7 @@ export type CourseDetail = {
   version: number
   latestDrillRunId: string | null
   latestPatchId: string | null
+  latestPatchStatus: PatchStatus | null
 }
 
 export type CourseScoreTrendPoint = {
