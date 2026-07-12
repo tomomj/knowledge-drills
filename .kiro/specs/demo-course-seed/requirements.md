@@ -46,7 +46,7 @@ Demo Course Seed は、新規オーナー(ハッカソン審査員を含む)の�
 2. The Knowledge Drills backend shall デモ講座①の教材を公式ページの文章の転載ではなく、独自の要約・言い換えとして収録する
 3. The Knowledge Drills backend shall デモ講座①の教材に意図的な記載不足を 1 箇所含める
 4. The Knowledge Drills backend shall デモ講座①に生成済みドリル 1 件を投入し、各設問に設問文・出題意図・模範解答・ルーブリック・教材本文に実在する根拠引用を含める
-5. The Knowledge Drills backend shall デモ講座①に採点済み回答 4 件(スコアとフィードバック付き)を投入し、誤答の過半数が教材の記載不足箇所に関連するつまずきになるようにする
+5. The Knowledge Drills backend shall デモ講座①に採点済み回答 2 件(スコアとフィードバック付き)を投入し、次の回答で自動分析の3件閾値へ到達でき、かつ誤答の過半数が教材の記載不足箇所に関連するつまずきになるようにする
 6. When オーナーがデモ講座①のドリル確認を開く, the Knowledge Drills frontend shall 「回答を分析する」ボタンを活性状態で表示する
 7. When オーナーがデモ講座①の分析を実行する, the Knowledge Drills backend shall 既存の実 agent 機構で分析を実行する(デモ用のモック応答を使わない)
 

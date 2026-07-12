@@ -200,7 +200,7 @@ class DemoSeedService:
                 drill_run_id=drill_run_id,
                 learner_name=definition.learner_name,
                 status=AnswerStatus.GRADED,
-                answers={question.id: definition.answer_text for question in drill.questions},
+                answers=dict(definition.answers_by_question),
                 grading_results=list(definition.grading_results),
                 total_score=definition.total_score,
                 max_score=max_score,

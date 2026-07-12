@@ -1,5 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
+from knowledge_drill_agent.schemas import (
+    FailureAnalysisInput as AgentFailureAnalysisInput,
+)
+from knowledge_drill_agent.schemas import GradingInput as AgentGradingInput
+from knowledge_drill_agent.schemas import GradingOutput as AgentGradingOutput
 
 from app.services.demo_seed_data import demo_course_definitions
 
@@ -11,9 +16,54 @@ def test_demo_seed_data_excerpts_and_score_trends_are_consistent() -> None:
         }
         for drill in course.drills:
             markdown = markdown_by_version[drill.course_version]
+            assert len(drill.questions) == 3
             for question in drill.questions:
+                assert question.max_score == 4
+                assert sum(item.points for item in question.rubric) == 4
                 for evidence in question.source_evidence:
                     assert evidence.excerpt in markdown
+
+                AgentGradingInput.model_validate(
+                    {
+                        "question": question.model_dump(mode="json", by_alias=True),
+                        "learnerAnswer": "確認回答",
+                    }
+                )
+
+            max_score = sum(question.max_score for question in drill.questions)
+            question_ids = {question.id for question in drill.questions}
+            for answer in drill.answers:
+                seeded_answers = dict(answer.answers_by_question)
+                assert set(seeded_answers) == question_ids
+                assert len(set(seeded_answers.values())) == len(question_ids)
+                assert {result.question_id for result in answer.grading_results} == question_ids
+                assert answer.total_score == sum(result.score for result in answer.grading_results)
+            analysis_payload = {
+                "courseMarkdown": markdown,
+                "questions": [
+                    question.model_dump(mode="json", by_alias=True) for question in drill.questions
+                ],
+                "answers": [
+                    {
+                        "learnerName": answer.learner_name,
+                        "totalScore": answer.total_score,
+                        "maxScore": max_score,
+                        "gradingResults": [
+                            result.model_dump(mode="json", by_alias=True)
+                            for result in answer.grading_results
+                        ],
+                    }
+                    for answer in drill.answers
+                ],
+                "gradingResults": [
+                    result.model_dump(mode="json", by_alias=True)
+                    for answer in drill.answers
+                    for result in answer.grading_results
+                ],
+            }
+            AgentFailureAnalysisInput.model_validate(analysis_payload)
+            for result in analysis_payload["gradingResults"]:
+                AgentGradingOutput.model_validate(result)
 
         actual_scores = []
         for drill in course.drills:
@@ -32,6 +82,75 @@ def test_demo_seed_data_excerpts_and_score_trends_are_consistent() -> None:
         ]
 
 
+def test_latest_demo_share_urls_accept_answers_through_normal_runtime_contract(
+    client: TestClient,
+) -> None:
+    courses = client.get("/api/courses").json()["courses"]
+
+    for course in courses:
+        drill = client.get(
+            f"/api/courses/{course['id']}/drill-runs/{course['latestDrillRunId']}"
+        ).json()
+        share_token = drill["shareUrl"].rsplit("/", maxsplit=1)[-1]
+        learner = client.get(f"/api/drills/{share_token}").json()
+
+        response = client.post(
+            f"/api/drills/{share_token}/answers",
+            json={
+                "learnerName": "seed契約確認",
+                "answers": [
+                    {
+                        "questionId": question["id"],
+                        "answerText": "教材の根拠に基づいて判断します。",
+                    }
+                    for question in learner["questions"]
+                ],
+            },
+        )
+
+        assert response.status_code == 201
+        assert response.json()["status"] == "graded"
+        assert len(response.json()["feedback"]) == 3
+
+
+def test_hackathon_third_answer_triggers_automatic_analysis_and_patch(
+    client: TestClient,
+) -> None:
+    courses = client.get("/api/courses").json()["courses"]
+    course = next(
+        item
+        for item in courses
+        if item["title"] == "DevOps x AI Agent Hackathon 2026 参加ガイド(デモ)"
+    )
+    drill_url = f"/api/courses/{course['id']}/drill-runs/{course['latestDrillRunId']}"
+    drill = client.get(drill_url).json()
+    share_token = drill["shareUrl"].rsplit("/", maxsplit=1)[-1]
+    learner = client.get(f"/api/drills/{share_token}").json()
+
+    response = client.post(
+        f"/api/drills/{share_token}/answers",
+        json={
+            "learnerName": "自動分析契約確認",
+            "answers": [
+                {
+                    "questionId": question["id"],
+                    "answerText": "教材の根拠に基づいて判断します。",
+                }
+                for question in learner["questions"]
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    analyzed = client.get(drill_url).json()
+    assert analyzed["status"] == "analyzed"
+    assert analyzed["analysisOrigin"] == "automatic"
+    assert analyzed["latestPatchId"] is not None
+    patch = client.get(f"/api/patches/{analyzed['latestPatchId']}")
+    assert patch.status_code == 200
+    assert patch.json()["analysisOrigin"] == "automatic"
+
+
 def test_demo_seed_inserts_two_owned_courses_and_content(client: TestClient) -> None:
     response = client.get("/api/courses")
 
@@ -41,12 +160,12 @@ def test_demo_seed_inserts_two_owned_courses_and_content(client: TestClient) -> 
     expense = courses["経費精算の判断基準(デモ・改善 3 周済み)"]
     assert hackathon["isDemo"] is True
     assert hackathon["scoreTrend"] == [
-        {"courseVersion": 1, "averageScore": 2.0, "maxScore": 4},
+        {"courseVersion": 1, "averageScore": 6.0, "maxScore": 12},
     ]
     assert expense["scoreTrend"] == [
-        {"courseVersion": 1, "averageScore": 1.8, "maxScore": 4},
-        {"courseVersion": 2, "averageScore": 2.9, "maxScore": 4},
-        {"courseVersion": 3, "averageScore": 3.6, "maxScore": 4},
+        {"courseVersion": 1, "averageScore": 5.4, "maxScore": 12},
+        {"courseVersion": 2, "averageScore": 8.7, "maxScore": 12},
+        {"courseVersion": 3, "averageScore": 10.8, "maxScore": 12},
     ]
 
     hackathon_detail = client.get(f"/api/courses/{hackathon['id']}")
@@ -65,7 +184,7 @@ def test_demo_seed_inserts_two_owned_courses_and_content(client: TestClient) -> 
     assert metrics.status_code == 200
     assert [
         run["averageScore"] for run in metrics.json()["runs"] if run["averageScore"] is not None
-    ] == [1.8, 2.9, 3.6]
+    ] == [5.4, 8.7, 10.8]
     patch = client.get(f"/api/patches/{expense['latestPatchId']}")
     assert patch.status_code == 200
     assert patch.json()["status"] == "applied"
@@ -86,8 +205,9 @@ def test_demo_seed_drill_runs_snapshot_version_matched_course(client: TestClient
         for drill in definition.drills:
             drill_run = drill_runs[drill.course_version]
             assert drill_run.course_title == definition.title
-            assert drill_run.course_markdown == (
-                definition.markdown_versions[drill.course_version - 1]
+            assert (
+                drill_run.course_markdown
+                == (definition.markdown_versions[drill.course_version - 1])
             )
 
             learner = client.get(f"/api/drills/{drill_run.share_token}")
@@ -98,8 +218,9 @@ def test_demo_seed_drill_runs_snapshot_version_matched_course(client: TestClient
                 continue
             payload = learner.json()
             assert payload["courseTitle"] == definition.title
-            assert payload["courseMarkdown"] == (
-                definition.markdown_versions[drill.course_version - 1]
+            assert (
+                payload["courseMarkdown"]
+                == (definition.markdown_versions[drill.course_version - 1])
             )
             assert payload["courseVersion"] == drill.course_version
 
