@@ -160,12 +160,14 @@ function DrillAdminTestRoutes({
 function renderDrillAdmin({
   withRouteSwitch = false,
   withUnmountControl = false,
+  initialEntry = '/courses/course-1/drill-runs/drill-1',
 }: {
   withRouteSwitch?: boolean
   withUnmountControl?: boolean
+  initialEntry?: string
 } = {}) {
   return render(
-    <MemoryRouter initialEntries={['/courses/course-1/drill-runs/drill-1']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <DrillAdminTestRoutes
         withRouteSwitch={withRouteSwitch}
         withUnmountControl={withUnmountControl}
@@ -496,6 +498,20 @@ describe('DrillAdminPage', () => {
       await vi.advanceTimersByTimeAsync(2000)
     })
     expect(mocks.getDrill).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps an analyzed automatic drill visible when drill view is explicitly requested', async () => {
+    mocks.getDrill.mockResolvedValue({
+      ...automaticRunningDrill(),
+      status: 'analyzed',
+      latestPatchId: 'patch-auto',
+    })
+
+    renderDrillAdmin({ initialEntry: '/courses/course-1/drill-runs/drill-1?view=drill' })
+
+    expect(await screen.findByRole('heading', { name: 'ドリル確認' })).toBeTruthy()
+    expect(screen.getByText('/drills/share-token')).toBeTruthy()
+    expect(screen.queryByText('Automatic Patch Review')).toBeNull()
   })
 
   it('stops automatic polling and navigates with the drill latest patch id', async () => {

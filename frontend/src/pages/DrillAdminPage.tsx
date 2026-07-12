@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, ApiClientError } from '../api/client'
 import type { DrillAdmin, DrillAnswer, DrillStatus } from '../api/types'
@@ -49,6 +49,8 @@ const DRILL_STATUS_CHIPS: Record<DrillStatus, { label: string; tone: string }> =
 export function DrillAdminPage() {
   const { courseId, drillRunId } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const shouldStayOnDrill = searchParams.get('view') === 'drill'
   const [state, setState] = useState<PageState>({ status: 'loading' })
   const [analysisState, setAnalysisState] = useState<AnalysisState | null>(null)
   const [automaticAnalysisState, setAutomaticAnalysisState] =
@@ -66,7 +68,7 @@ export function DrillAdminPage() {
   const reloadInFlightRef = useRef(false)
 
   const acceptDrill = useCallback(
-    (drill: DrillAdmin) => {
+    (drill: DrillAdmin, navigateToLatestPatch = false) => {
       setState({ status: 'ready', drill })
 
       if (drill.analysisOrigin !== 'automatic') {
@@ -80,7 +82,11 @@ export function DrillAdminPage() {
         return
       }
       if (drill.status === 'analyzed' && drill.latestPatchId) {
-        navigate(`/patches/${drill.latestPatchId}`)
+        if (navigateToLatestPatch) {
+          navigate(`/patches/${drill.latestPatchId}`)
+        } else {
+          setAutomaticAnalysisState({ status: 'idle' })
+        }
         return
       }
       if (drill.status === 'analyzed') {
@@ -121,7 +127,7 @@ export function DrillAdminPage() {
       try {
         const drill = await api.getDrill(courseId, drillRunId)
         if (active) {
-          acceptDrill(drill)
+          acceptDrill(drill, !shouldStayOnDrill)
         }
       } catch (error) {
         if (active) {
@@ -144,7 +150,7 @@ export function DrillAdminPage() {
     return () => {
       active = false
     }
-  }, [acceptDrill, courseId, drillRunId])
+  }, [acceptDrill, courseId, drillRunId, shouldStayOnDrill])
 
   useEffect(() => {
     if (automaticAnalysisState.status !== 'polling' || !courseId || !drillRunId) {
@@ -157,7 +163,7 @@ export function DrillAdminPage() {
         .getDrill(courseId, drillRunId)
         .then((drill) => {
           if (active) {
-            acceptDrill(drill)
+            acceptDrill(drill, true)
           }
         })
         .catch(() => {
@@ -290,7 +296,7 @@ export function DrillAdminPage() {
         return
       }
       reloadInFlightRef.current = false
-      acceptDrill(refreshed)
+      acceptDrill(refreshed, true)
     } catch {
       if (!isCurrentRequest()) {
         return

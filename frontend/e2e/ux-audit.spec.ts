@@ -119,6 +119,10 @@ test.describe('デモ導線: 審査員の改善ループ一周', () => {
 
     await scoreLink.click()
     await expect(page.getByRole('heading', { name: '講座管理' })).toBeVisible()
+    const latestDrillRow = page.locator('.side-list > div').filter({ hasText: '最新ドリル' })
+    await expect(latestDrillRow).toHaveCount(1)
+    await expect(latestDrillRow.getByText('未生成', { exact: true })).toBeVisible()
+    await expect(latestDrillRow.getByRole('link')).toHaveCount(0)
     await shot(page, '08-course-editor-after-apply')
 
     // 6. デモ講座②で改善の証拠(スコアの推移・バージョン別平均点)が見える
@@ -131,7 +135,13 @@ test.describe('デモ導線: 審査員の改善ループ一周', () => {
     await shot(page, '10-course-history-demo2')
 
     if (finished!.latestDrillRunId) {
-      await page.goto(`/courses/${finished!.id}/drill-runs/${finished!.latestDrillRunId}`)
+      await page.goto(`/courses/${finished!.id}`)
+      const latestDrillLink = page.getByRole('link', { name: '確認する →' })
+      await expect(latestDrillLink).toHaveAttribute(
+        'href',
+        `/courses/${finished!.id}/drill-runs/${finished!.latestDrillRunId}?view=drill`,
+      )
+      await latestDrillLink.click()
       await expect(page.getByRole('heading', { name: 'ドリル確認' })).toBeVisible()
       await shot(page, '11-drill-admin-demo2')
     }
