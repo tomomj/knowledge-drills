@@ -169,7 +169,7 @@
   - _Boundary: Auto and manual browser integration_
   - _Depends: 3.2, 3.3, 4.3, 4.4_
 
-- [ ] 6.6 (P) Backendの回帰・lint・型検査を完了する
+- [x] 6.6 (P) Backendの回帰・lint・型検査を完了する
   - manual分析、Failure Signalなし、patch作成、owner認可、current/legacy採点routeの既存testを含むBackend testを実行する。
   - Backend lintと型検査を実行し、新しいtransaction・background処理による回帰を解消する。
   - Backendの全自動検証が成功するか、外部環境依存の未実行項目と理由が明示された状態にする。
