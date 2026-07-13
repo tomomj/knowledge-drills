@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1050" viewBox="0 0 1800 1050">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="14" stdDeviation="20" flood-color="#050807" flood-opacity="0.45"/>
+    </filter>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1512"/>
+      <stop offset="1" stop-color="#111c18"/>
+    </linearGradient>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif; }
+      .title { fill: #eef4f1; font-size: 50px; font-weight: 700; }
+      .subtitle { fill: #8fa09a; font-size: 25px; font-weight: 500; }
+      .round { fill: #eef4f1; font-size: 33px; font-weight: 700; }
+      .badge { font-size: 20px; font-weight: 700; }
+      .label { fill: #7f918a; font-size: 21px; font-weight: 700; }
+      .signal { fill: #f2f6f4; font-size: 30px; font-weight: 700; }
+      .body { fill: #c6d1cc; font-size: 23px; font-weight: 500; }
+      .metric { fill: #e7b34d; font-size: 22px; font-weight: 700; }
+      .takeaway-title { fill: #42c7af; font-size: 23px; font-weight: 700; }
+      .takeaway { fill: #eef4f1; font-size: 31px; font-weight: 700; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1050" fill="url(#background)"/>
+  <circle cx="1650" cy="80" r="250" fill="#15382f" opacity="0.22"/>
+  <circle cx="120" cy="980" r="300" fill="#22362f" opacity="0.22"/>
+
+  <text x="90" y="92" class="title">実回答で、AIの診断が変わった</text>
+  <text x="92" y="138" class="subtitle">本番Firestoreに保存された2回のFailure Signalを比較</text>
+
+  <g filter="url(#shadow)">
+    <rect x="90" y="190" width="760" height="680" rx="28" fill="#16211d" stroke="#31433d" stroke-width="2"/>
+    <rect x="950" y="190" width="760" height="680" rx="28" fill="#16211d" stroke="#31433d" stroke-width="2"/>
+  </g>
+
+  <rect x="90" y="190" width="10" height="680" rx="5" fill="#e7b34d"/>
+  <rect x="950" y="190" width="10" height="680" rx="5" fill="#42c7af"/>
+
+  <text x="135" y="253" class="round">1周目｜教材 v1</text>
+  <rect x="620" y="215" width="175" height="49" rx="24" fill="#153a2a"/>
+  <text x="665" y="247" class="badge" fill="#70d79a">✓ 適用済み</text>
+
+  <text x="135" y="315" class="label">検出したつまずき</text>
+  <text x="135" y="366" class="signal">設問の抽象度と</text>
+  <text x="135" y="408" class="signal">Rubricの厳密性の乖離</text>
+  <rect x="135" y="433" width="285" height="43" rx="21" fill="#49391c"/>
+  <text x="277.5" y="462" class="metric" text-anchor="middle">3 / 3件・重大度 高</text>
+
+  <line x1="135" y1="516" x2="805" y2="516" stroke="#30403b" stroke-width="2"/>
+  <text x="135" y="559" class="label">AIの見立て</text>
+  <text x="135" y="602" class="body">内容は理解している。しかしRubricが求める</text>
+  <text x="135" y="638" class="body">キーワードの再現不足で、形式的な減点が発生。</text>
+
+  <text x="135" y="704" class="label">改善したこと</text>
+  <text x="135" y="747" class="body">分類プロセスを箇条書きに変更。</text>
+  <text x="135" y="783" class="body">評価ポイントを構造化してv2へ更新。</text>
+
+  <text x="995" y="253" class="round">2周目｜教材 v2</text>
+  <rect x="1450" y="215" width="205" height="49" rx="24" fill="#342a4e"/>
+  <text x="1483" y="247" class="badge" fill="#c8adff">人の確認待ち</text>
+
+  <text x="995" y="315" class="label">検出したつまずき</text>
+  <text x="995" y="365" class="signal">根拠提示・詳細情報・</text>
+  <text x="995" y="407" class="signal">設問要件の具体性が不足</text>
+  <rect x="995" y="433" width="285" height="43" rx="21" fill="#49391c"/>
+  <text x="1137.5" y="462" class="metric" text-anchor="middle">各3 / 3件・重大度 中</text>
+
+  <line x1="995" y1="516" x2="1665" y2="516" stroke="#30403b" stroke-width="2"/>
+  <text x="995" y="559" class="label">AIの見立て</text>
+  <text x="995" y="602" class="body">結論には到達できている。しかし回答時に</text>
+  <text x="995" y="638" class="body">判断理由・根拠・細かな手順が抜けている。</text>
+
+  <text x="995" y="704" class="label">次の改善案</text>
+  <text x="995" y="747" class="body">根拠提示ルールを末尾から冒頭へ。</text>
+  <text x="995" y="783" class="body">AIと人間の判断プロセスをさらに具体化。</text>
+
+  <path d="M845 530 L920 530" stroke="#42c7af" stroke-width="5" stroke-linecap="round"/>
+  <path d="M903 512 L922 530 L903 548" fill="none" stroke="#42c7af" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <rect x="90" y="915" width="1620" height="92" rx="24" fill="#173c33" stroke="#276052" stroke-width="2"/>
+  <text x="135" y="951" class="takeaway-title">2回の実測で分かったこと</text>
+  <text x="440" y="976" class="takeaway">「内容を知っている」から「回答時に再現できる構造」へ</text>
+</svg>
