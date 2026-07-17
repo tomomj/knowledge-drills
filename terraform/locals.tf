@@ -54,7 +54,7 @@ locals {
   firestore_database_id   = "${local.project_name}-${local.environment}"
   firestore_location      = local.region
 
-  # Uptime monitoring keeps the hackathon demo URLs observable through judging.
+  # Frontend uptime monitoring keeps the public entry point observable through judging.
   alert_email = var.alert_email
 
   # 無料枠に収める控えめな設定: 15 分間隔 + 最小構成の 3 リージョン。
